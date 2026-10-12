@@ -195,7 +195,7 @@ function shell(r, body) {
     ${tab('matches', 'Матчи', 'matches', ['h2h'])}
     ${tab('tournaments', 'Турниры', 'cup', ['tournament'])}
     ${tab('me', 'Профиль', 'user', ['admin', 'rules'])}
-  </nav>`;
+  </nav>${iosInstallHint()}`;
 }
 
 function gateView(emoji, title, text, refreshBtn = false) {
@@ -248,7 +248,7 @@ function authView(r) {
         <button class="btn" data-act="demo-as" data-id="demo-9">⏳ Новичок</button>
       </div>
     </div>` : '';
-  return `<div class="auth-wrap">${head}<div class="auth-card">${form}</div>${demoBox}</div>`;
+  return `<div class="auth-wrap">${head}<div class="auth-card">${form}</div>${demoBox}</div>${iosInstallHint(true)}`;
 }
 
 function recoveryView() {
@@ -694,6 +694,25 @@ function viewRules() {
     <h3>Лиги</h3>
     <div class="chips">${LEAGUES.map((l, i) => `<span class="league ${l.cls}">${l.name} ${l.min === -Infinity ? `< ${LEAGUES[1].min}` : `${l.min}${LEAGUES[i + 1] ? '–' + LEAGUES[i + 1].min : '+'}`}</span>`).join('')}</div>
   </section>`;
+}
+
+// ───────────── Подсказка установки для iPhone ─────────────
+/** Видна только на iPhone/iPad, когда приложение открыто в браузере, а не с иконки. */
+function iosInstallHint(onAuth = false) {
+  if (!isIOS() || isStandalone()) return '';
+  if (Date.now() < +(lsGet('ponghub_ios_hint_until') || 0)) return '';
+  const ua = navigator.userAgent;
+  const chrome = /CriOS/.test(ua);
+  const steps = chrome
+    ? 'Нажмите <b>«Поделиться» ⬆︎</b> справа в адресной строке → <b>«На экран „Домой“»</b>.'
+    : 'Нажмите <b>«Поделиться» ⬆︎</b> внизу экрана (на новых iOS — сначала <b>«•••»</b>) → <b>«На экран „Домой“»</b>.';
+  return `<div class="ios-hint ${onAuth ? 'auth' : ''} ${chrome ? 'top' : ''}" role="note">
+    <img src="${logo()}" alt="" width="44" height="44">
+    <div class="ios-hint-body"><b>Установите PongHub на iPhone</b><p>${steps}</p>
+      <small>Откроется на весь экран — без строки браузера, и будут приходить уведомления. Открыли из WhatsApp или Telegram? Сначала «Открыть в Safari».</small></div>
+    <button class="ios-hint-x" data-act="ios-hint-later" aria-label="Напомнить позже">✕</button>
+    ${chrome ? '' : '<i class="ios-hint-arrow">⬇︎</i>'}
+  </div>`;
 }
 
 // ───────────── Справка ─────────────
@@ -1171,6 +1190,7 @@ const ACT = {
   close: () => closeModal(),
   go: el => go(el.dataset.href),
   refresh: el => busy(el, refresh),
+  'ios-hint-later': () => { lsSet('ponghub_ios_hint_until', String(Date.now() + 3 * DAY)); document.querySelector('.ios-hint')?.remove(); },
   'push-on': el => busy(el, async () => { await enablePush(); toast('Уведомления включены 🔔'); renderPushBox(); }),
   'push-off': el => busy(el, async () => { await disablePush(); toast('Уведомления выключены'); renderPushBox(); }),
   'push-test': el => busy(el, async () => { await S.store.testPush(); toast('Отправлено — уведомление придёт через пару секунд'); }),
@@ -1346,7 +1366,7 @@ document.addEventListener('submit', async e => {
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && $modal.classList.contains('open')) closeModal(); });
 
 // ───────────── Push-уведомления ─────────────
-const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone;
 function b64ToBytes(b64) {
   const raw = atob((b64 + '='.repeat((4 - b64.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/'));
