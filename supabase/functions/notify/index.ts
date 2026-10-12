@@ -3,8 +3,8 @@
 // Ключи VAPID создаются автоматически при первом запуске и хранятся в таблице app_secrets.
 import webpush from 'npm:web-push@3.6.7';
 import { createClient } from 'npm:@supabase/supabase-js@2.50.0';
-// Тот же движок рейтинга, что и в приложении (подтягивается при развёртывании функции)
-import { analyze, analyzeDoubles, weekSummary, seasonTable, monthKey, monthName } from 'https://ponghub-club.vercel.app/js/engine.js';
+// Тот же движок рейтинга, что и в приложении: engine.js — копия js/engine.js (обновлять вместе)
+import { analyze, analyzeDoubles, weekSummary, seasonTable, monthKey, monthName } from './engine.js';
 
 const SB_URL = Deno.env.get('SUPABASE_URL')!;
 const sb = createClient(SB_URL, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
