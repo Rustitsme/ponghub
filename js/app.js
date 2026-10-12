@@ -146,7 +146,7 @@ function render() {
   else if (S.me.status === 'rejected') html = gateView('🚫', 'Заявка отклонена', 'Администратор отклонил регистрацию. Если это ошибка — свяжитесь с ним лично.');
   else if (S.me.status === 'archived') html = gateView('📦', 'Профиль в архиве', 'Ваш профиль перенесён в архив. Свяжитесь с администратором.');
   else {
-    const views = { home: viewHome, rating: viewRating, matches: viewMatches, player: viewPlayer, h2h: viewH2H, tournaments: viewTournaments, tournament: viewTournament, calendar: viewCalendar, admin: viewAdmin, rules: viewRules, me: viewMe };
+    const views = { home: viewHome, rating: viewRating, matches: viewMatches, player: viewPlayer, h2h: viewH2H, tournaments: viewTournaments, tournament: viewTournament, calendar: viewCalendar, admin: viewAdmin, rules: viewRules, me: viewMe, help: viewHelp };
     const v = views[r.name] || viewHome;
     html = shell(r, v(r));
   }
@@ -696,6 +696,39 @@ function viewRules() {
   </section>`;
 }
 
+// ───────────── Справка ─────────────
+const FORMAT_HELP = {
+  ko: 'Проиграл — выбыл. Пары первого круга строятся по рейтингу: сильнейшие встретятся только в конце. Быстро, подходит для 8–16 человек.',
+  rr: 'Каждый играет с каждым, побеждает набравший больше очков (победа — 2, поражение — 1). Честнее всего, но долго: для 6 человек это 15 матчей.',
+  groups: 'Сначала маленькие круговые турниры в группах, затем лучшие из каждой группы играют на выбывание. Золотая середина для 8+ человек.',
+};
+function viewHelp() {
+  const sec = (title, body) => `<section class="card prose"><h3>${title}</h3>${body}</section>`;
+  return `<div class="page-h"><a href="#/me" class="back">← Профиль</a></div>
+  <h1>Как пользоваться</h1>
+  ${sec('🏓 Свободная игра', `<p>Обычная игра в перерыв. Нажмите <b>«+»</b>, выберите игроков, формат и счёт по партиям.</p>
+    <ul><li>Вы и помощники вносите результат сразу.</li><li>Игрок может отправить результат сам — он попадёт в рейтинг после подтверждения владельцем или помощником.</li><li>Свободная игра весит в рейтинге вдвое меньше турнирной.</li></ul>`)}
+  ${sec('🏆 Турнир по шагам', `<ol>
+    <li><b>Турниры → «Создать».</b> Название, дата, где проходит (необязательно), формат, до скольких побед и до скольких очков партия.</li>
+    <li><b>Отметьте участников.</b> Приложение само составит пары и сетку по текущему рейтингу.</li>
+    <li><b>После каждой игры</b> откройте страницу турнира и нажмите на нужную пару — внесите счёт.</li>
+    <li>В олимпийской системе победитель <b>сам переходит</b> в следующий раунд. В группах таблица пересчитывается сразу.</li>
+    <li>Когда определится победитель — <b>«Завершить турнир»</b>. Медали появятся в профилях, всем придёт уведомление.</li></ol>`)}
+  ${sec('📋 Форматы турниров', `
+    <p><b>Олимпийская система (на выбывание).</b> ${FORMAT_HELP.ko} Если участников не 4, 8 или 16, сильнейшие получают «свободный проход» в следующий круг. Можно включить матч за 3-е место.</p>
+    <p><b>Круговой (каждый с каждым).</b> ${FORMAT_HELP.rr} При равенстве очков решает личная встреча, затем соотношение партий.</p>
+    <p><b>Группы + плей-офф.</b> ${FORMAT_HELP.groups} Игроки раскладываются по группам «змейкой» по рейтингу, чтобы группы были равными. Когда группы доиграны, нажмите «Сформировать» — первые места сыграют со вторыми из других групп.</p>`)}
+  ${sec('🎯 Формат матча', `<ul><li><b>До 2 или 3 побед</b> — сколько партий нужно выиграть, чтобы выиграть матч (2:0, 2:1 или 3:0, 3:1, 3:2).</li>
+    <li><b>Партия до 11 или 21</b> — до скольких очков идёт партия. При 10:10 (или 20:20) играют до разницы в 2 очка.</li>
+    <li>Если счёт партий не записали, включите <b>«Знаю только итоговый счёт»</b>.</li></ul>`)}
+  ${sec('❓ «Турнирный матч» в кнопке «+»', `<p>Это разовый важный матч, который не входит в турнир, созданный в приложении, — например, вы сыграли в городской лиге или договорились о «матче на интерес». Он весит в рейтинге как турнирный.</p>
+    <p>Матчи турниров из приложения вносите <b>на странице самого турнира</b> — тогда они попадут в сетку и таблицу.</p>`)}
+  ${sec('👥 Роли', `<ul><li><b>👑 Владелец</b> — принимает заявки, назначает помощников, меняет настройки рейтинга.</li>
+    <li><b>✍️ Помощник</b> — вносит результаты, ведёт турниры, подтверждает матчи. Назначается в «Управление → Игроки».</li>
+    <li><b>Игрок</b> — смотрит статистику и может отправить свой результат на подтверждение.</li></ul>`)}
+  <a href="#/rules" class="card menu-item">📐 <span>Как считается рейтинг</span><span>→</span></a>`;
+}
+
 // ───────────── Профиль / настройки ─────────────
 function viewMe() {
   const me = S.me;
@@ -708,6 +741,7 @@ function viewMe() {
   ${isEditor() ? `<a href="#/admin" class="card menu-item">🛠️ <span>${isAdmin() ? 'Управление клубом' : 'Подтверждение результатов'}</span>${pendingCounts().total ? `<i class="dot inline">${pendingCounts().total}</i>` : ''}<span>→</span></a>` : ''}
   <section class="card menu">
     <button class="menu-item" data-act="edit-profile">✏️ <span>Редактировать профиль</span></button>
+    <a class="menu-item" href="#/help">❓ <span>Как пользоваться</span></a>
     <a class="menu-item" href="#/rules">📐 <span>Как считается рейтинг</span></a>
     <a class="menu-item" href="#/calendar">📅 <span>Календарь игр</span></a>
     <a class="menu-item" href="#/h2h/${me.id}">⚔️ <span>Личные встречи</span></a>
@@ -863,7 +897,8 @@ function openMatchForm(opts = {}) {
         <span>vs</span>
         <select name="p2" ${lockPlayers ? 'disabled' : ''}><option value="">Игрок 2</option>${playerOptions(st.p2, st.p1)}</select>
       </div>
-      ${editor && !lockFormat ? `<div class="seg"><button type="button" data-k="type" data-v="free" class="${st.type === 'free' ? 'on' : ''}">Свободная игра</button><button type="button" data-k="type" data-v="tournament" class="${st.type === 'tournament' ? 'on' : ''}">Турнирный матч</button></div>` : ''}
+      ${editor && !lockFormat ? `<div class="seg"><button type="button" data-k="type" data-v="free" class="${st.type === 'free' ? 'on' : ''}">Свободная игра</button><button type="button" data-k="type" data-v="tournament" class="${st.type === 'tournament' ? 'on' : ''}">Турнирный матч</button></div>
+        ${st.type === 'tournament' ? '<p class="hint">Для турнира, созданного в приложении, счёт вносится на странице турнира. Здесь — разовый важный матч или матч турнира вне приложения: он просто весит в рейтинге больше.</p>' : ''}` : ''}
       <div class="fmt-row">
         <div><small class="muted">Играем до</small><div class="seg sm">${[[1, '1'], [3, '2'], [5, '3'], [7, '4']].map(([v, l]) => `<button type="button" data-k="bestOf" data-v="${v}" class="${st.bestOf === v ? 'on' : ''}" ${lockFormat ? 'disabled' : ''}>${l}</button>`).join('')}</div><small class="muted">побед в партиях</small></div>
         <div><small class="muted">Партия до</small><div class="seg sm">${[11, 21].map(v => `<button type="button" data-k="pointsTo" data-v="${v}" class="${st.pointsTo === v ? 'on' : ''}" ${lockFormat ? 'disabled' : ''}>${v}</button>`).join('')}<input type="number" class="pts-custom" min="5" max="50" value="${[11, 21].includes(st.pointsTo) ? '' : st.pointsTo}" placeholder="др." ${lockFormat ? 'disabled' : ''}></div><small class="muted">очков</small></div>
@@ -1097,8 +1132,9 @@ function openTournamentForm() {
   openModal(`<form data-form="tournament" class="stack">
     <h3>Новый турнир</h3>
     <label>Название<input name="name" required maxlength="60" placeholder="Например: Кубок офиса"></label>
-    <div class="two"><label>Дата<input type="date" name="date" value="${new Date().toISOString().slice(0, 10)}"></label><label>Место<input name="place" maxlength="60"></label></div>
+    <div class="two"><label>Дата<input type="date" name="date" value="${new Date().toISOString().slice(0, 10)}"></label><label>Где проходит<input name="place" maxlength="60" placeholder="Необязательно"></label></div>
     <label>Формат<select name="format">${Object.entries(FORMATS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></label>
+    <p class="hint" id="fmt-hint"></p>
     <div class="two"><label>До скольких побед<select name="best_of"><option value="3">до 2 побед</option><option value="5" selected>до 3 побед</option><option value="7">до 4 побед</option><option value="1">1 партия</option></select></label>
     <label>Партия до<select name="points_to"><option>11</option><option>21</option></select></label></div>
     <div class="two only-groups"><label>Групп<input type="number" name="groups" value="2" min="1" max="8"></label><label>Выходят из группы<select name="advance"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select></label></div>
@@ -1112,6 +1148,7 @@ function openTournamentForm() {
       const fmt = f.format.value;
       sh.querySelectorAll('.only-groups').forEach(x => x.style.display = fmt === 'groups' ? '' : 'none');
       sh.querySelectorAll('.only-ko').forEach(x => x.style.display = fmt === 'rr' ? 'none' : '');
+      sh.querySelector('#fmt-hint').innerHTML = `${FORMAT_HELP[fmt]} <a href="#/help" class="link" data-act="close">Подробнее</a>`;
       sh.querySelector('#t-cnt').textContent = f.querySelectorAll('[name=participants]:checked').length;
     };
     f.addEventListener('change', sync); sync();

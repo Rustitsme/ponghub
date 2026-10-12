@@ -530,3 +530,8 @@ select:disabled, input:disabled { opacity: .7; }
 .crop-zoom { display: flex; align-items: center; gap: 10px; width: min(300px, 100%); margin: 0 auto; }
 .crop-zoom input { flex: 1; padding: 0; accent-color: var(--red); }
 .crop-zoom .btn { width: 40px; font-size: 18px; padding: 4px 0; }
+
+/* ── Подсказки ── */
+.hint { margin: 0; padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, var(--table-c, #2563b8) 10%, var(--surface)); font-size: 13px; color: var(--text); line-height: 1.45; }
+.prose ol { padding-left: 20px; }
+.prose ol li { margin: 6px 0; }
