@@ -105,7 +105,7 @@ function derive() {
   const d = S.data;
   // Тестовые данные (их получает только владелец) показываем лишь в тестовом режиме
   S.testMode = lsGet('ponghub_testmode') === '1' && (d.profiles.find(p => p.id === S.user?.id)?.role === 'admin');
-  if (!S.testMode) for (const k of ['profiles', 'matches', 'tournaments', 'live', 'challenges']) if (d[k]) d[k] = d[k].filter(x => !x.is_test);
+  if (!S.testMode) for (const k of ['profiles', 'matches', 'tournaments', 'live', 'challenges', 'announcements']) if (d[k]) d[k] = d[k].filter(x => !x.is_test);
   S.byId = new Map(d.profiles.map(p => [p.id, p]));
   S.me = S.user ? S.byId.get(S.user.id) || null : null;
   S.A = analyze(d.profiles.filter(p => ['approved', 'archived', 'deleted'].includes(p.status)), d.matches, d.settings);
@@ -113,6 +113,7 @@ function derive() {
   S.D = analyzeDoubles(d.profiles.filter(p => ['approved', 'archived', 'deleted'].includes(p.status)), d.matches, d.settings);
   S.data.challenges = S.data.challenges || [];
   S.data.live = S.data.live || [];
+  S.data.announcements = S.data.announcements || [];
   S.seasons = seasons(S.A, d.profiles);
   document.title = settings().clubName || 'PongHub';
   if (S.data.settings && S.data.settings.icon) applyIcon();
@@ -155,7 +156,7 @@ function render() {
   else if (S.me.status === 'rejected') html = gateView('🚫', 'Заявка отклонена', 'Администратор отклонил регистрацию. Если это ошибка — свяжитесь с ним лично.');
   else if (S.me.status === 'archived') html = gateView('📦', 'Профиль в архиве', 'Ваш профиль перенесён в архив. Свяжитесь с администратором.');
   else {
-    const views = { home: viewHome, rating: viewRating, matches: viewMatches, player: viewPlayer, h2h: viewH2H, tournaments: viewTournaments, tournament: viewTournament, calendar: viewCalendar, admin: viewAdmin, rules: viewRules, me: viewMe, help: viewHelp, seasons: viewSeasons, live: viewLive };
+    const views = { home: viewHome, rating: viewRating, matches: viewMatches, player: viewPlayer, h2h: viewH2H, tournaments: viewTournaments, tournament: viewTournament, calendar: viewCalendar, admin: viewAdmin, rules: viewRules, me: viewMe, help: viewHelp, seasons: viewSeasons, live: viewLive, inbox: viewInbox };
     const v = views[r.name] || viewHome;
     html = shell(r, v(r));
   }
@@ -193,7 +194,7 @@ function shell(r, body) {
     <div class="top-actions">
       ${S.store.mode === 'demo' ? '<span class="demo-pill" title="Данные хранятся только в этом браузере">ДЕМО</span>' : ''}
       <a href="#/calendar" class="icon-btn" aria-label="Календарь">${icon('cal')}</a>
-      ${isEditor() ? `<a href="#/admin" class="icon-btn" aria-label="Управление">${icon('bell')}${pc.total ? `<i class="dot">${pc.total}</i>` : ''}</a>` : ''}
+      <a href="#/inbox" class="icon-btn" aria-label="Уведомления">${icon('bell')}${pc.total + unreadCount() ? `<i class="dot">${pc.total + unreadCount()}</i>` : ''}</a>
     </div>
   </header>
   ${S.testMode ? `<div class="test-banner">🧪 <span><b>Тестовый режим.</b> Тестовых игроков и их матчи видите только вы.</span><a href="#/admin/players" class="link">Управлять</a></div>` : ''}
@@ -752,6 +753,33 @@ function viewRules() {
     <h3>Лиги</h3>
     <div class="chips">${LEAGUES.map((l, i) => `<span class="league ${l.cls}">${l.name} ${l.min === -Infinity ? `< ${LEAGUES[1].min}` : `${l.min}${LEAGUES[i + 1] ? '–' + LEAGUES[i + 1].min : '+'}`}</span>`).join('')}</div>
   </section>`;
+}
+
+// ───────────── Объявления ─────────────
+const seenAt = () => +(lsGet('ponghub_seen_ann') || 0);
+const unreadCount = () => (S.data?.announcements || []).filter(a => Date.parse(a.created_at) > seenAt() && a.created_by !== S.me?.id).length;
+
+function viewInbox() {
+  const pc = pendingCounts();
+  const last = seenAt();
+  const list = S.data.announcements;
+  setTimeout(() => { lsSet('ponghub_seen_ann', String(Date.now())); if (!pc.total) document.querySelector('.top .dot')?.remove(); }, 0);
+  return `<div class="page-h"><h1>Уведомления</h1>${isAdmin() ? '<button class="btn primary sm" data-act="new-ann">📢 Написать</button>' : ''}</div>
+    ${pc.total ? `<a href="#/admin" class="alert">🔔 Ждут вашего решения: ${pc.users ? `${pc.users} ${plural(pc.users, 'заявка', 'заявки', 'заявок')}` : ''}${pc.users && pc.matches ? ', ' : ''}${pc.matches ? `${pc.matches} ${plural(pc.matches, 'матч', 'матча', 'матчей')} на подтверждение` : ''} →</a>` : ''}
+    ${isAdmin() ? '<p class="muted small">Объявления видят все участники клуба, и каждому приходит push-уведомление. Писать и удалять их можете только вы.</p>' : ''}
+    ${list.map(a => `<article class="card ann ${Date.parse(a.created_at) > last && a.created_by !== S.me.id ? 'new' : ''}">
+      <div class="ann-h">${ava(P(a.created_by), 'sm')}<div class="rn"><b>${esc(a.title || 'Объявление клуба')}</b><small class="muted">${esc(P(a.created_by).nickname)} · ${fmtDT(a.created_at)}</small></div>
+        ${isAdmin() ? `<button class="btn xs ghost danger" data-act="del-ann" data-id="${a.id}">Удалить</button>` : ''}</div>
+      <p class="ann-body">${esc(a.body).replace(/\n/g, '<br>')}</p>
+    </article>`).join('') || '<div class="empty">Объявлений пока нет</div>'}`;
+}
+
+function openAnnForm() {
+  openModal(`<form data-form="ann" class="stack"><h3>📢 Объявление для всех</h3>
+    <label>Заголовок<input name="title" maxlength="60" placeholder="Например: Турнир в пятницу"></label>
+    <label>Текст<textarea name="body" rows="5" maxlength="1000" required placeholder="Что хотите сообщить клубу"></textarea></label>
+    <p class="muted small">Получат все участники клуба: push-уведомлением и в ленте под колокольчиком.</p>
+    <button class="btn primary">Отправить всем</button></form>`);
 }
 
 // ───────────── Живой счёт ─────────────
@@ -1680,6 +1708,8 @@ const ACT = {
     const other = c.from_id === S.me.id ? c.to_id : c.from_id;
     openMatchForm({ fixed: { player1_id: S.me.id, player2_id: other, type: 'free', challengeId: c.id } });
   },
+  'new-ann': () => openAnnForm(),
+  'del-ann': async el => { if (await confirmDialog('Удалить объявление? Оно пропадёт из ленты у всех.', 'Удалить', true)) await busy(el, async () => { await S.store.remove('announcements', el.dataset.id); await refresh(); }); },
   'test-create': el => busy(el, async () => { const n = await S.store.createTestPlayers(4); await refresh(); toast(`Создано тестовых игроков: ${n}`); }),
   'test-purge': async el => {
     if (!(await confirmDialog('Удалить всех тестовых игроков, их матчи, турниры, живые игры и записи о них в журнале? Настоящие данные не пострадают.', 'Удалить всё тестовое', true))) return;
@@ -1846,6 +1876,12 @@ const FORMS = {
       best_of: +fd.get('best_of'), points_to: +fd.get('points_to'), status: 'active', participants: sorted, config, results: null, created_by: S.me.id, ...testFlag(),
     });
     closeModal(); await refresh(); go(`#/tournament/${t.id}`); toast('Турнир создан!');
+  },
+  ann: async (f, fd) => {
+    const body = fd.get('body').trim();
+    if (!body) throw new Error('Напишите текст объявления');
+    await S.store.insert('announcements', { title: fd.get('title').trim() || null, body, created_by: S.me.id, ...testFlag() });
+    closeModal(); await refresh(); toast('Объявление отправлено всем 📢');
   },
   challenge: async (f, fd) => {
     await S.store.insert('challenges', { from_id: S.me.id, to_id: fd.get('to'), status: 'pending', message: fd.get('message').trim() || null, ...testFlag() });

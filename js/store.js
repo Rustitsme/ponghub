@@ -1,7 +1,7 @@
 // Слой данных: Supabase (боевой режим) или localStorage (демо-режим, если база не настроена).
 import { CONFIG } from './config.js';
 
-const TABLES = ['profiles', 'matches', 'tournaments', 'events', 'challenges', 'live_matches'];
+const TABLES = ['profiles', 'matches', 'tournaments', 'events', 'challenges', 'live_matches', 'announcements'];
 
 export async function createStore() {
   if (CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY) {
@@ -84,14 +84,15 @@ class SupaStore {
 
   async loadAll() {
     const q = t => this.sb.from(t).select('*');
-    const [p, m, t, e, c, s, l] = await Promise.all([
+    const [p, m, t, e, c, s, l, a] = await Promise.all([
       q('profiles'), q('matches'), q('tournaments'), q('events'), q('challenges'),
       this.sb.from('settings').select('data').eq('id', 1).maybeSingle(),
       this.sb.from('live_matches').select('*').eq('status', 'live'),
+      this.sb.from('announcements').select('*').order('created_at', { ascending: false }).limit(100),
     ]);
     for (const r of [p, m, t, e, s]) if (r.error) throw translateError(r.error);
     // вызовы появятся после обновления базы — без таблицы приложение тоже работает
-    return { profiles: p.data, matches: m.data, tournaments: t.data, events: e.data, challenges: c.error ? [] : c.data, live: l.error ? [] : l.data, settings: s.data?.data || {} };
+    return { profiles: p.data, matches: m.data, tournaments: t.data, events: e.data, challenges: c.error ? [] : c.data, live: l.error ? [] : l.data, announcements: a.error ? [] : a.data, settings: s.data?.data || {} };
   }
 
   async insert(table, row) {
@@ -285,7 +286,7 @@ class LocalStore {
 
   async loadAll() {
     const c = JSON.parse(JSON.stringify(this.db));
-    return { profiles: c.profiles, matches: c.matches, tournaments: c.tournaments, events: c.events, challenges: c.challenges || [], live: (c.live_matches || []).filter(x => x.status === 'live'), settings: c.settings || {} };
+    return { profiles: c.profiles, matches: c.matches, tournaments: c.tournaments, events: c.events, challenges: c.challenges || [], live: (c.live_matches || []).filter(x => x.status === 'live'), announcements: [...(c.announcements || [])].sort((x, y) => Date.parse(y.created_at) - Date.parse(x.created_at)), settings: c.settings || {} };
   }
 
   async insert(table, row) {
@@ -331,7 +332,7 @@ class LocalStore {
   async purgeTest() {
     const ids = new Set(this.db.profiles.filter(p => p.is_test).map(p => p.id));
     const touches = r => r.is_test || [r.player1_id, r.player2_id, r.player3_id, r.player4_id, r.from_id, r.to_id].some(x => ids.has(x));
-    for (const t of ['matches', 'live_matches', 'challenges', 'tournaments']) this.db[t] = (this.db[t] || []).filter(r => !touches(r));
+    for (const t of ['matches', 'live_matches', 'challenges', 'tournaments', 'announcements']) this.db[t] = (this.db[t] || []).filter(r => !touches(r));
     this.db.profiles = this.db.profiles.filter(p => !p.is_test);
     this.db.audit = (this.db.audit || []).filter(e => !touches(e.old_data || {}) && !touches(e.new_data || {}));
     this.save();

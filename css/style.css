@@ -647,3 +647,9 @@ select:disabled, input:disabled { opacity: .7; }
 .test-banner { display: flex; align-items: center; gap: 8px; margin: 0 auto; max-width: 640px; padding: 8px 16px; background: color-mix(in srgb, #8ab4f8 25%, var(--surface)); border-bottom: 1px dashed #5b8fd8; font-size: 13px; }
 .test-banner span { flex: 1; }
 .test-card { border: 2px dashed #5b8fd8; }
+
+/* ── Объявления ── */
+.ann-h { display: flex; align-items: center; gap: 10px; }
+.ann-body { margin: 10px 0 0; font-size: 15px; line-height: 1.5; }
+.ann.new { border: 2px solid var(--red); }
+textarea { width: 100%; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg2); color: var(--text); font: 500 15px var(--font); resize: vertical; }

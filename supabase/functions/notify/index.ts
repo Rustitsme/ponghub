@@ -97,6 +97,11 @@ async function onChange(table: string, type: string, r: any, o: any, actor: stri
     return;
   }
 
+  if (table === 'announcements' && type === 'INSERT') {
+    const text = String(r.body ?? '');
+    return send(except(all, r.created_by), { title: r.title ? `📢 ${r.title}` : '📢 Объявление клуба', body: text.length > 180 ? text.slice(0, 177) + '…' : text, url: '#/inbox', tag: 'ann-' + r.id });
+  }
+
   if (table === 'challenges') {
     if (type === 'INSERT' && r.status === 'pending')
       return send([r.to_id], { title: '⚔️ Вызов на матч', body: `${nick(r.from_id)} вызывает вас на матч${r.message ? ': «' + r.message + '»' : ''}`, url: '#/home', tag: 'challenge' });
