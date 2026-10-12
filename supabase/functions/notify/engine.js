@@ -438,3 +438,32 @@ export function weekSummary(A, D, profiles, now = Date.now()) {
   }
   return { from, to, matches: singles.length + doubles.length, singles: singles.length, doubles: doubles.length, top, active, upset };
 }
+
+// ───────────── Живой счёт ─────────────
+/**
+ * Восстанавливает состояние матча по списку очков (0 — очко игроку/команде 1, 1 — игроку/команде 2).
+ * Считает партии, баланс и подачу: смена каждые 2 очка (в партии до 21 — каждые 5), на балансе — каждое очко.
+ */
+export function replayLive(log, bestOf, pointsTo, firstServer = 0) {
+  const need = winsNeeded(bestOf);
+  const sets = [];
+  let cur = [0, 0], won = [0, 0], winner = null;
+  for (const side of log) {
+    if (winner !== null) break;
+    cur[side]++;
+    const o = 1 - side;
+    if (cur[side] >= pointsTo && cur[side] - cur[o] >= 2) {
+      sets.push([...cur]); won[side]++; cur = [0, 0];
+      if (won[side] >= need) winner = side;
+    }
+  }
+  const n = cur[0] + cur[1];
+  const every = pointsTo >= 21 ? 5 : 2;
+  const base = (pointsTo - 1) * 2;
+  const turns = n >= base ? Math.floor(base / every) + (n - base) : Math.floor(n / every);
+  const server = (firstServer + sets.length + turns) % 2;
+  const deuce = cur[0] >= pointsTo - 1 && cur[1] >= pointsTo - 1;
+  const setPoint = [0, 1].map(s => winner === null && cur[s] >= pointsTo - 1 && cur[s] - cur[1 - s] >= 1);
+  const matchPoint = setPoint.map((sp, s) => sp && won[s] === need - 1);
+  return { sets, cur, won, winner, server, deuce, setPoint, matchPoint, need };
+}

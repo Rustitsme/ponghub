@@ -1,7 +1,7 @@
 // Слой данных: Supabase (боевой режим) или localStorage (демо-режим, если база не настроена).
 import { CONFIG } from './config.js';
 
-const TABLES = ['profiles', 'matches', 'tournaments', 'events', 'challenges'];
+const TABLES = ['profiles', 'matches', 'tournaments', 'events', 'challenges', 'live_matches'];
 
 export async function createStore() {
   if (CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY) {
@@ -84,13 +84,14 @@ class SupaStore {
 
   async loadAll() {
     const q = t => this.sb.from(t).select('*');
-    const [p, m, t, e, c, s] = await Promise.all([
+    const [p, m, t, e, c, s, l] = await Promise.all([
       q('profiles'), q('matches'), q('tournaments'), q('events'), q('challenges'),
       this.sb.from('settings').select('data').eq('id', 1).maybeSingle(),
+      this.sb.from('live_matches').select('*').eq('status', 'live'),
     ]);
     for (const r of [p, m, t, e, s]) if (r.error) throw translateError(r.error);
     // вызовы появятся после обновления базы — без таблицы приложение тоже работает
-    return { profiles: p.data, matches: m.data, tournaments: t.data, events: e.data, challenges: c.error ? [] : c.data, settings: s.data?.data || {} };
+    return { profiles: p.data, matches: m.data, tournaments: t.data, events: e.data, challenges: c.error ? [] : c.data, live: l.error ? [] : l.data, settings: s.data?.data || {} };
   }
 
   async insert(table, row) {
@@ -273,7 +274,7 @@ class LocalStore {
 
   async loadAll() {
     const c = JSON.parse(JSON.stringify(this.db));
-    return { profiles: c.profiles, matches: c.matches, tournaments: c.tournaments, events: c.events, challenges: c.challenges || [], settings: c.settings || {} };
+    return { profiles: c.profiles, matches: c.matches, tournaments: c.tournaments, events: c.events, challenges: c.challenges || [], live: (c.live_matches || []).filter(x => x.status === 'live'), settings: c.settings || {} };
   }
 
   async insert(table, row) {

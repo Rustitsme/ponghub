@@ -2,7 +2,7 @@ import { createStore } from './store.js';
 import {
   analyze, ranking, playerStats, ACHIEVEMENTS, insights, playerOfMonth, headToHead, validateSet,
   leagueOf, nextLeague, LEAGUES, DEFAULT_SETTINGS, ratingAt, setsFor, expected, marginFactor, winsNeeded, ts,
-  analyzeDoubles, rankingDoubles, isDoubles, seasons, seasonTable, monthKey, monthName, weekSummary,
+  analyzeDoubles, rankingDoubles, isDoubles, seasons, seasonTable, monthKey, monthName, weekSummary, replayLive,
 } from './engine.js';
 import {
   FORMATS, koBracket, koPlacings, roundName, pairings, standings, snakeGroups, playoffSlots, slotsFromSeeds, findPairMatch,
@@ -108,6 +108,7 @@ function derive() {
   S.rank = ranking(S.A, d.profiles);
   S.D = analyzeDoubles(d.profiles.filter(p => ['approved', 'archived', 'deleted'].includes(p.status)), d.matches, d.settings);
   S.data.challenges = S.data.challenges || [];
+  S.data.live = S.data.live || [];
   S.seasons = seasons(S.A, d.profiles);
   document.title = settings().clubName || 'PongHub';
   if (S.data.settings && S.data.settings.icon) applyIcon();
@@ -150,7 +151,7 @@ function render() {
   else if (S.me.status === 'rejected') html = gateView('🚫', 'Заявка отклонена', 'Администратор отклонил регистрацию. Если это ошибка — свяжитесь с ним лично.');
   else if (S.me.status === 'archived') html = gateView('📦', 'Профиль в архиве', 'Ваш профиль перенесён в архив. Свяжитесь с администратором.');
   else {
-    const views = { home: viewHome, rating: viewRating, matches: viewMatches, player: viewPlayer, h2h: viewH2H, tournaments: viewTournaments, tournament: viewTournament, calendar: viewCalendar, admin: viewAdmin, rules: viewRules, me: viewMe, help: viewHelp, seasons: viewSeasons };
+    const views = { home: viewHome, rating: viewRating, matches: viewMatches, player: viewPlayer, h2h: viewH2H, tournaments: viewTournaments, tournament: viewTournament, calendar: viewCalendar, admin: viewAdmin, rules: viewRules, me: viewMe, help: viewHelp, seasons: viewSeasons, live: viewLive };
     const v = views[r.name] || viewHome;
     html = shell(r, v(r));
   }
@@ -192,7 +193,7 @@ function shell(r, body) {
     </div>
   </header>
   <main class="page">${body}</main>
-  <button class="fab" data-act="add-match" aria-label="${isEditor() ? 'Внести матч' : 'Отправить результат'}">${icon('plus')}</button>
+  ${r.name === 'live' ? '' : `<button class="fab" data-act="add-match" aria-label="${isEditor() ? 'Внести матч' : 'Отправить результат'}">${icon('plus')}</button>`}
   <nav class="tabs">
     ${tab('home', 'Главная', 'home')}
     ${tab('rating', 'Рейтинг', 'rating')}
@@ -390,6 +391,7 @@ function viewHome() {
   ${pc.total ? `<a href="#/admin" class="alert">🔔 Ждут вашего решения: ${pc.users ? `${pc.users} ${plural(pc.users, 'заявка', 'заявки', 'заявок')} на регистрацию` : ''}${pc.users && pc.matches ? ', ' : ''}${pc.matches ? `${pc.matches} ${plural(pc.matches, 'матч', 'матча', 'матчей')}` : ''} →</a>` : ''}
   ${mine.length ? `<div class="alert info">⏳ ${mine.length} ${plural(mine.length, 'ваш результат ждёт', 'ваших результата ждут', 'ваших результатов ждут')} подтверждения администратором</div>` : ''}
 
+  ${liveBlock()}
   ${challengesBlock()}
   ${weekCard()}
 
@@ -744,6 +746,83 @@ function viewRules() {
     <h3>Лиги</h3>
     <div class="chips">${LEAGUES.map((l, i) => `<span class="league ${l.cls}">${l.name} ${l.min === -Infinity ? `< ${LEAGUES[1].min}` : `${l.min}${LEAGUES[i + 1] ? '–' + LEAGUES[i + 1].min : '+'}`}</span>`).join('')}</div>
   </section>`;
+}
+
+// ───────────── Живой счёт ─────────────
+S.liveLocal = {};
+let liveQueue = Promise.resolve();
+const liveLog = l => (l.scorer_id === S.me?.id && S.liveLocal[l.id]) || l.log || [];
+const sideIds = (l, side) => (l.kind === 'doubles' ? [side ? l.player2_id : l.player1_id, side ? l.player4_id : l.player3_id] : [side ? l.player2_id : l.player1_id]);
+const sideName = (l, side) => sideIds(l, side).map(id => P(id).nickname).join(' + ');
+
+function liveBlock() {
+  if (!S.data.live.length) return '';
+  return `<section class="card live-now"><div class="card-h"><h3><span class="live">●</span> Сейчас играют</h3></div>
+    ${S.data.live.map(l => { const g = replayLive(liveLog(l), l.best_of, l.points_to, l.first_server); return `<a href="#/live/${l.id}" class="live-row">
+      <span class="lr-name ${g.cur[0] > g.cur[1] ? 'lead' : ''}">${esc(sideName(l, 0))}</span>
+      <span class="lr-score"><small>${g.won[0]}:${g.won[1]}</small><b>${g.cur[0]}:${g.cur[1]}</b></span>
+      <span class="lr-name right ${g.cur[1] > g.cur[0] ? 'lead' : ''}">${esc(sideName(l, 1))}</span></a>`; }).join('')}
+  </section>`;
+}
+
+function viewLive(r) {
+  const l = S.data.live.find(x => x.id === r.args[0]);
+  if (!l) return `<div class="page-h"><a href="#/home" class="back">← Главная</a></div><div class="empty">Эта игра уже завершена или отменена.</div>`;
+  const log = liveLog(l);
+  const g = replayLive(log, l.best_of, l.points_to, l.first_server);
+  const scorer = l.scorer_id === S.me.id;
+  const t = l.tournament_id ? tById(l.tournament_id) : null;
+  const panel = side => {
+    const ids = sideIds(l, side);
+    const flag = g.matchPoint[side] ? 'Матчбол' : g.setPoint[side] ? 'Сетбол' : '';
+    return `<div class="lv-panel ${g.winner === side ? 'won' : ''}">
+      <div class="lv-who">${ids.map(id => ava(P(id), 'sm')).join('')}<b>${esc(sideName(l, side))}</b>${g.winner === null && g.server === side && log.length ? '<span class="lv-serve" title="Подаёт">🏓</span>' : ''}</div>
+      <div class="lv-pts">${g.cur[side]}</div>
+      <div class="lv-sub"><span>партии: <b>${g.won[side]}</b></span>${flag ? `<span class="lv-flag">${flag}</span>` : ''}</div>
+      ${scorer && g.winner === null ? `<div class="lv-btns"><button class="btn lv-minus" data-act="live-minus" data-id="${l.id}" data-side="${side}" aria-label="Минус очко">−</button><button class="btn lv-plus" data-act="live-pt" data-id="${l.id}" data-side="${side}">+1</button></div>` : ''}
+    </div>`;
+  };
+  const sets = g.sets.map((x, i) => `<span>П${i + 1} <b>${x[0]}:${x[1]}</b></span>`).join('');
+  return `<div class="page-h"><a href="#/home" class="back">← Главная</a><span class="live">● LIVE</span></div>
+    <div class="lv-meta">${l.kind === 'doubles' ? 'Пары 2×2' : t ? '🏆 ' + esc(t.name) : l.type === 'tournament' ? 'Турнирный матч' : 'Свободная игра'} · до ${g.need} ${plural(g.need, 'победы', 'побед', 'побед')} · партия до ${l.points_to}${g.deuce && g.winner === null ? ' · <b>баланс</b>' : ''}</div>
+    ${scorer && !log.length ? `<div class="card lv-first"><b>Кто подаёт первым?</b><div class="seg">${[0, 1].map(sd => `<button class="${l.first_server === sd ? 'on' : ''}" data-act="live-first" data-id="${l.id}" data-side="${sd}">${esc(sideName(l, sd))}</button>`).join('')}</div></div>` : ''}
+    <div class="lv-board">${panel(0)}<div class="lv-sets-score">${g.won[0]}<i>:</i>${g.won[1]}</div>${panel(1)}</div>
+    ${sets ? `<div class="lv-sets">${sets}</div>` : ''}
+    ${g.winner !== null ? `<div class="card lv-done"><h3>🏁 Матч окончен</h3><p>Победа: <b>${esc(sideName(l, g.winner))}</b> · ${g.won[0]}:${g.won[1]}</p>
+      ${scorer ? `<div class="row-btns"><button class="btn ghost" data-act="live-undo" data-id="${l.id}">↶ Вернуть последнее очко</button><button class="btn primary" data-act="live-save" data-id="${l.id}">Сохранить результат</button></div>` : '<p class="muted small">Счётчик сохранит результат.</p>'}</div>` : ''}
+    ${scorer ? `<div class="row-btns lv-tools">${g.winner === null && log.length ? `<button class="btn ghost" data-act="live-undo" data-id="${l.id}">↶ Отменить последнее</button>` : ''}<button class="btn ghost danger" data-act="live-cancel" data-id="${l.id}">Отменить игру</button></div>`
+      : `<div class="card lv-viewer"><span class="muted small">Счёт ведёт ${esc(P(l.scorer_id).nickname)}. Обновляется сам.</span><button class="btn sm" data-act="live-take" data-id="${l.id}">Вести счёт вместо него</button></div>`}`;
+}
+
+function pushLive(l, log) {
+  S.liveLocal[l.id] = log;
+  render();
+  if (navigator.vibrate) navigator.vibrate(15);
+  liveQueue = liveQueue.then(() => S.store.update('live_matches', l.id, { log, updated_at: new Date().toISOString() })).catch(e => toast(e.message, 'err'));
+}
+
+async function saveLive(l, btn) {
+  const log = liveLog(l);
+  const g = replayLive(log, l.best_of, l.points_to, l.first_server);
+  if (g.winner === null) return;
+  const editor = isEditor();
+  const row = {
+    kind: l.kind, type: l.type, player1_id: l.player1_id, player2_id: l.player2_id, player3_id: l.player3_id, player4_id: l.player4_id,
+    tournament_id: l.tournament_id, stage: l.stage, grp: l.grp, round: l.round, slot: l.slot,
+    sets: g.sets, sets1: g.won[0], sets2: g.won[1], winner_id: g.winner === 0 ? l.player1_id : l.player2_id,
+    best_of: l.best_of, points_to: l.points_to, rated: l.rated, played_at: new Date().toISOString(), note: '',
+    status: editor ? 'approved' : 'pending', submitted_by: S.me.id,
+  };
+  await busy(btn, async () => {
+    await liveQueue;
+    const m = await S.store.insert('matches', row);
+    await S.store.update('live_matches', l.id, { status: 'finished', match_id: m.id, log });
+    if (l.challenge_id) await S.store.update('challenges', l.challenge_id, { status: 'done', match_id: m.id }).catch(() => {});
+    delete S.liveLocal[l.id];
+    toast(editor ? 'Матч сохранён, рейтинг пересчитан' : 'Результат отправлен на подтверждение');
+    await refresh();
+    go(l.tournament_id ? `#/tournament/${l.tournament_id}` : '#/home');
+  });
 }
 
 // ───────────── Вызовы на матч ─────────────
@@ -1234,7 +1313,8 @@ function openMatchForm(opts = {}) {
       <label>Дата и время<input type="datetime-local" name="date" value="${st.date}"></label>
       <label>Комментарий<input name="note" value="${esc(st.note)}" maxlength="140" placeholder="необязательно"></label>
       <div class="mf-err"></div>
-      <div class="row-btns">${m0 && editor ? '<button type="button" class="btn danger ghost" data-mf="delete">Удалить</button>' : ''}<button type="button" class="btn primary" data-mf="save">${editor ? 'Сохранить' : 'Отправить'}</button></div>`;
+      <div class="row-btns">${m0 && editor ? '<button type="button" class="btn danger ghost" data-mf="delete">Удалить</button>' : ''}<button type="button" class="btn primary" data-mf="save">${editor ? 'Сохранить' : 'Отправить'}</button></div>
+      ${!m0 && (editor || !lockFormat) ? `<div class="live-start"><span class="muted small">Игра только начинается и есть кому считать?</span><button type="button" class="btn full live-btn" data-mf="live">▶ Игра началась — вести счёт</button></div>` : ''}`;
   };
 
   openModal('<div class="mf-body"></div>', sh => {
@@ -1244,6 +1324,7 @@ function openMatchForm(opts = {}) {
       if (b && !b.disabled) { const k = b.dataset.k; st[k] = k === 'type' || k === 'kind' ? b.dataset.v : +b.dataset.v; if (k === 'kind' && st.kind === 'doubles' && st.bestOf === 5) st.bestOf = 3; draw(sh); return; }
       const act = e.target.closest('[data-mf]')?.dataset.mf;
       if (act === 'save') saveMatch(e.target.closest('button'));
+      if (act === 'live') startLive(e.target.closest('button'));
       if (act === 'delete') {
         const reason = await askReason('Удалить матч?', 'Рейтинг будет пересчитан. Укажите причину.');
         if (reason) await busy(null, async () => { await S.store.deleteMatch(m0.id, reason); toast('Матч удалён'); await refresh(); });
@@ -1269,6 +1350,35 @@ function openMatchForm(opts = {}) {
       if (t.classList.contains('pts-custom') && +t.value >= 5) { st.pointsTo = +t.value; draw(sh); }
     });
   });
+
+  function checkPlayers(err) {
+    if (st.kind === 'doubles') {
+      const ids = [st.p1, st.p2, st.p3, st.p4];
+      if (ids.some(x => !x)) return err('Выберите всех четырёх игроков');
+      if (new Set(ids).size < 4) return err('Один игрок не может быть в двух местах сразу');
+    } else {
+      if (!st.p1 || !st.p2) return err('Выберите обоих игроков');
+      if (st.p1 === st.p2) return err('Игрок не может играть сам с собой');
+    }
+    return true;
+  }
+
+  async function startLive(btn) {
+    const err = msg => { $modal.querySelector('.mf-err').textContent = msg; return false; };
+    if (checkPlayers(err) !== true) return;
+    const dbl = st.kind === 'doubles';
+    const row = {
+      kind: st.kind, type: lockFormat ? 'tournament' : dbl ? 'free' : st.type,
+      player1_id: st.p1, player2_id: st.p2, player3_id: dbl ? st.p3 : null, player4_id: dbl ? st.p4 : null,
+      best_of: st.bestOf, points_to: st.pointsTo, rated: dbl ? st.rated : true,
+      tournament_id: fx.tournament_id ?? null, stage: fx.stage ?? null, grp: fx.grp ?? null, round: fx.round ?? null, slot: fx.slot ?? null,
+      challenge_id: fx.challengeId ?? null, first_server: 0, log: [], status: 'live', scorer_id: S.me.id, started_by: S.me.id,
+    };
+    await busy(btn, async () => {
+      const l = await S.store.insert('live_matches', row);
+      closeModal(); await refresh(); go(`#/live/${l.id}`);
+    });
+  }
 
   async function saveMatch(btn) {
     const err = msg => { $modal.querySelector('.mf-err').textContent = msg; };
@@ -1531,6 +1641,22 @@ const ACT = {
   close: () => closeModal(),
   go: el => go(el.dataset.href),
   refresh: el => busy(el, refresh),
+  'live-pt': el => { const l = S.data.live.find(x => x.id === el.dataset.id); const log = liveLog(l); if (replayLive(log, l.best_of, l.points_to, l.first_server).winner === null) pushLive(l, [...log, +el.dataset.side]); },
+  'live-minus': el => {
+    const l = S.data.live.find(x => x.id === el.dataset.id); const log = [...liveLog(l)]; const side = +el.dataset.side;
+    // убираем последнее очко этой стороны в текущей партии
+    const g = replayLive(log, l.best_of, l.points_to, l.first_server);
+    if (!g.cur[side]) return toast('В этой партии у игрока ещё нет очков', 'warn');
+    const i = log.lastIndexOf(side); log.splice(i, 1); pushLive(l, log);
+  },
+  'live-undo': el => { const l = S.data.live.find(x => x.id === el.dataset.id); const log = liveLog(l); if (log.length) pushLive(l, log.slice(0, -1)); },
+  'live-first': el => busy(el, async () => { await S.store.update('live_matches', el.dataset.id, { first_server: +el.dataset.side }); await refresh(); }),
+  'live-take': el => busy(el, async () => { await S.store.update('live_matches', el.dataset.id, { scorer_id: S.me.id }); await refresh(); toast('Теперь счёт ведёте вы'); }),
+  'live-cancel': async el => {
+    if (!(await confirmDialog('Отменить игру? Счёт не сохранится.', 'Отменить игру', true))) return;
+    await busy(el, async () => { await S.store.update('live_matches', el.dataset.id, { status: 'cancelled' }); delete S.liveLocal[el.dataset.id]; await refresh(); go('#/home'); });
+  },
+  'live-save': el => saveLive(S.data.live.find(x => x.id === el.dataset.id), el),
   challenge: el => openChallengeForm(el.dataset.id),
   'ch-accept': el => busy(el, async () => { await S.store.update('challenges', el.dataset.id, { status: 'accepted', responded_at: new Date().toISOString() }); await refresh(); toast('Вызов принят — к столу! 🏓'); }),
   'ch-decline': el => busy(el, async () => { await S.store.update('challenges', el.dataset.id, { status: 'declined', responded_at: new Date().toISOString() }); await refresh(); }),
