@@ -781,7 +781,7 @@ function viewLive(r) {
   const panel = side => {
     const ids = sideIds(l, side);
     const flag = g.matchPoint[side] ? 'Матчпоинт' : '';
-    return `<div class="lv-panel ${g.winner === side ? 'won' : ''}">
+    return `<div class="lv-panel p${side} ${g.winner === side ? 'won' : ''}">
       <div class="lv-who">${ids.map(id => ava(P(id), 'sm')).join('')}<b>${esc(sideName(l, side))}</b>${g.winner === null && g.server === side && log.length ? '<span class="lv-serve" title="Подаёт">🏓</span>' : ''}</div>
       <div class="lv-pts">${g.cur[side]}</div>
       <div class="lv-sub"><span>партии: <b>${g.won[side]}</b></span>${flag ? `<span class="lv-flag">${flag}</span>` : ''}</div>

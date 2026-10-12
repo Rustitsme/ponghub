@@ -615,7 +615,12 @@ select:disabled, input:disabled { opacity: .7; }
 .lv-meta { text-align: center; color: var(--muted); font-size: 13px; }
 .lv-board { display: flex; flex-direction: column; gap: 10px; }
 .lv-panel { background: var(--table); color: #fff; border: 3px solid #fff; border-radius: 20px; padding: 14px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 6px; }
-.lv-panel.won { background: linear-gradient(160deg, #e63946, #a4161a); }
+.lv-panel.p0 { background: linear-gradient(160deg, #ef4b58 0%, #d62839 55%, #a8152a 100%); }
+.lv-panel.p1 { background: var(--table); }
+.lv-panel.p0 .lv-plus { color: #b5162b; }
+.lv-panel.p1 .lv-plus { color: #1c4f9c; }
+.lv-panel.won { box-shadow: 0 0 0 4px var(--wood), var(--shadow); }
+.lv-panel.won .lv-pts::after { content: ' 🏆'; font-size: 40px; vertical-align: middle; }
 .lv-who { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .lv-who b { font: 800 22px var(--display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 .lv-serve { font-size: 22px; animation: nudge2 1.2s ease-in-out infinite; }
