@@ -50,7 +50,7 @@
 
 ### 3. Настройте вход
 1. **Authentication → Sign In / Providers → Email**: выключите **Confirm email**. Подтверждать людей будете вы сами в приложении, поэтому письма не нужны.
-2. **Authentication → URL Configuration → Site URL**: укажите адрес приложения, например `https://rustitsme.github.io/ponghub/`.
+2. **Authentication → URL Configuration → Site URL**: укажите адрес приложения, например `https://ponghub-club.vercel.app/`.
 
 ### 4. Пропишите ключи в приложении
 1. **Project Settings → API**: скопируйте **Project URL** и ключ **anon / public** (или **Publishable key**).
@@ -79,7 +79,7 @@
 
 ## Как раздать приложение
 
-Отправьте ссылку `https://rustitsme.github.io/ponghub/` в чат.
+Отправьте ссылку `https://ponghub-club.vercel.app/` в чат.
 
 - **iPhone:** откройте в Safari → «Поделиться» → «На экран „Домой“».
 - **Android:** откройте в Chrome → меню ⋮ → «Установить приложение».
