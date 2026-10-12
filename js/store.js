@@ -133,9 +133,40 @@ class SupaStore {
     return new Map((data || []).map(r => [r.id, r.email]));
   }
 
+  async uploadAvatar(blob) {
+    const { data: { user } } = await this.sb.auth.getUser();
+    const path = `${user.id}/${Date.now()}.jpg`;
+    const { error } = await this.sb.storage.from('avatars').upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+    if (error) throw translateError(error);
+    return this.sb.storage.from('avatars').getPublicUrl(path).data.publicUrl;
+  }
+
+  async pushPublicKey() {
+    const { data, error } = await this.sb.functions.invoke('notify', { body: { action: 'vapid' } });
+    if (error || !data?.publicKey) throw new Error('Сервис уведомлений ещё не настроен');
+    return data.publicKey;
+  }
+
+  async savePushSub(sub) {
+    const { data: { user } } = await this.sb.auth.getUser();
+    const row = { user_id: user.id, endpoint: sub.endpoint, p256dh: sub.keys.p256dh, auth: sub.keys.auth, ua: navigator.userAgent.slice(0, 200) };
+    const { error } = await this.sb.from('push_subscriptions').upsert(row, { onConflict: 'endpoint' });
+    if (error) throw translateError(error);
+  }
+
+  async deletePushSub(endpoint) {
+    await this.sb.from('push_subscriptions').delete().eq('endpoint', endpoint);
+  }
+
+  async testPush() {
+    const { data, error } = await this.sb.functions.invoke('notify', { body: { action: 'test' } });
+    if (error) throw new Error('Не удалось отправить тестовое уведомление');
+    if (!data?.sent) throw new Error('Подписка не найдена — выключите и снова включите уведомления');
+  }
+
   subscribe(cb) {
     let timer;
-    const ch = this.sb.channel('topspin-all');
+    const ch = this.sb.channel('ponghub-all');
     for (const t of [...TABLES, 'settings'])
       ch.on('postgres_changes', { event: '*', schema: 'public', table: t }, () => {
         clearTimeout(timer); timer = setTimeout(cb, 400);
@@ -146,7 +177,7 @@ class SupaStore {
 
 // ───────────────────────── Демо-режим ─────────────────────────
 
-const LS_KEY = 'topspin_demo_v1';
+const LS_KEY = 'ponghub_demo_v1';
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Math.random().toString(36).slice(2) + Date.now().toString(36));
 
 class LocalStore {
@@ -229,6 +260,13 @@ class LocalStore {
   }
 
   async adminEmails() { return new Map(this.db.users.map(u => [u.id, u.email])); }
+  async uploadAvatar(blob) {
+    return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob); });
+  }
+  async pushPublicKey() { throw new Error('Уведомления работают только после подключения базы'); }
+  async savePushSub() {}
+  async deletePushSub() {}
+  async testPush() {}
   subscribe() {}
 }
 
@@ -254,7 +292,7 @@ function seedDemo() {
     created_at: new Date(now - 75 * day).toISOString(),
   }));
   profiles.push({ id: 'demo-9', nickname: 'NewGuy', full_name: 'Олег Новиков', avatar: '🏓', color: '#adb5bd', role: 'player', status: 'pending', initial_rating: null, created_at: new Date(now - day).toISOString() });
-  const users = profiles.map((p, i) => ({ id: p.id, email: `demo${i + 1}@topspin.app`, password: 'demo123' }));
+  const users = profiles.map((p, i) => ({ id: p.id, email: `demo${i + 1}@ponghub.app`, password: 'demo123' }));
   const skill = Object.fromEntries(people.map((x, i) => ['demo-' + (i + 1), x[4]]));
 
   const playSet = (pa, pb, to = 11) => {

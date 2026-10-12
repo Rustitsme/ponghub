@@ -29,7 +29,8 @@ const settings = () => ({ ...DEFAULT_SETTINGS, ...(S.data?.settings || {}) });
 const tById = id => S.data.tournaments.find(t => t.id === id);
 
 function ava(p, cls = '') {
-  return `<span class="ava ${cls}" style="--c:${esc(p.color || '#e63946')}">${esc(p.avatar || (p.nickname || '?')[0])}</span>`;
+  const inner = p.photo_url ? `<img src="${esc(p.photo_url)}" alt="" loading="lazy">` : esc(p.avatar || (p.nickname || '?')[0]);
+  return `<span class="ava ${cls}" style="--c:${esc(p.color || '#e63946')}">${inner}</span>`;
 }
 function leagueBadge(r) { const l = leagueOf(r); return `<span class="league ${l.cls}">${l.name}</span>`; }
 function delta(d, cls = '') { if (d == null || Math.abs(d) < 0.005) return `<span class="delta zero ${cls}">0.00</span>`; return `<span class="delta ${d > 0 ? 'up' : 'down'} ${cls}">${fmtD(d)}</span>`; }
@@ -71,10 +72,25 @@ function download(name, content, type) {
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
+// ───────────── Иконка приложения ─────────────
+const ICON_VARIANTS = { hub: 'Хаб', table: 'Стол' };
+const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* */ } };
+function iconChoice() { const v = S.data?.settings?.icon || lsGet('ponghub_icon'); return ICON_VARIANTS[v] ? v : 'hub'; }
+const logo = () => `icons/${iconChoice()}.svg`;
+function applyIcon() {
+  const v = iconChoice();
+  lsSet('ponghub_icon', v);
+  const set = (id, href) => { const el = document.getElementById(id); if (el && !el.href.endsWith(href)) el.href = href; };
+  set('l-manifest', `manifest-${v}.webmanifest`);
+  set('l-icon', `icons/${v}.svg`);
+  set('l-apple', `icons/${v}-apple.png`);
+}
+
 // ───────────── Тема ─────────────
 function applyTheme() {
   let t = 'light';
-  try { t = localStorage.getItem('topspin_theme') || 'light'; } catch { /* */ }
+  try { t = localStorage.getItem('ponghub_theme') || 'light'; } catch { /* */ }
   const real = t === 'auto' ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark') : t;
   document.documentElement.dataset.theme = real;
   document.querySelector('meta[name=theme-color]')?.setAttribute('content', real === 'light' ? '#e9effa' : '#0f2540');
@@ -88,7 +104,8 @@ function derive() {
   S.me = S.user ? S.byId.get(S.user.id) || null : null;
   S.A = analyze(d.profiles.filter(p => p.status === 'approved' || p.status === 'archived'), d.matches, d.settings);
   S.rank = ranking(S.A, d.profiles);
-  document.title = settings().clubName || 'TopSpin';
+  document.title = settings().clubName || 'PongHub';
+  if (S.data.settings && S.data.settings.icon) applyIcon();
 }
 async function reload() {
   if (!S.user) { S.data = { profiles: [], matches: [], tournaments: [], events: [], settings: {} }; derive(); return; }
@@ -159,10 +176,10 @@ function pendingCounts() {
 function shell(r, body) {
   const pc = pendingCounts();
   const tab = (name, label, ic, also = []) => `<a href="#/${name}" class="tab ${r.name === name || also.includes(r.name) ? 'on' : ''}">${icon(ic)}<span>${label}</span></a>`;
-  const club = settings().clubName || 'TopSpin';
+  const club = settings().clubName || 'PongHub';
   return `
   <header class="top">
-    <a href="#/home" class="brand"><img src="icons/icon.svg" alt="" width="30" height="30"><span>${esc(club)}</span></a>
+    <a href="#/home" class="brand"><img src="${logo()}" alt="" width="30" height="30"><span>${esc(club)}</span></a>
     <div class="top-actions">
       ${S.store.mode === 'demo' ? '<span class="demo-pill" title="Данные хранятся только в этом браузере">ДЕМО</span>' : ''}
       <a href="#/calendar" class="icon-btn" aria-label="Календарь">${icon('cal')}</a>
@@ -191,7 +208,7 @@ function gateView(emoji, title, text, refreshBtn = false) {
 function authView(r) {
   const mode = ['register', 'forgot'].includes(r.name) ? r.name : 'login';
   const demo = S.store.mode === 'demo';
-  const head = `<div class="auth-hero"><img src="icons/icon.svg" alt="" width="84" height="84"><h1>TopSpin</h1><p>Клубный рейтинг по настольному теннису</p></div>`;
+  const head = `<div class="auth-hero"><img src="${logo()}" alt="" width="84" height="84"><h1>PongHub</h1><p>Пинг-понг в нашем коворкинге: рейтинг, матчи, турниры</p></div>`;
   let form;
   if (mode === 'register') form = `
     <form data-form="register" class="stack">
@@ -682,7 +699,7 @@ function viewRules() {
 function viewMe() {
   const me = S.me;
   let theme = 'light';
-  try { theme = localStorage.getItem('topspin_theme') || 'light'; } catch { /* */ }
+  try { theme = localStorage.getItem('ponghub_theme') || 'light'; } catch { /* */ }
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
   return `<div class="page-h"><h1>Профиль</h1></div>
@@ -698,6 +715,7 @@ function viewMe() {
   <section class="card"><div class="card-h"><h3>Оформление</h3></div>
     <div class="seg">${[['dark', '🌙 Тёмная'], ['light', '☀️ Светлая'], ['auto', '⚙️ Авто']].map(([k, l]) => `<button class="${theme === k ? 'on' : ''}" data-act="theme" data-v="${k}">${l}</button>`).join('')}</div>
   </section>
+  <section class="card" id="push-box"><div class="card-h"><h3>🔔 Уведомления</h3></div><div class="muted small">Проверяю…</div></section>
   ${standalone ? '' : `<section class="card"><div class="card-h"><h3>📲 Установить на телефон</h3></div>
     ${S.installEvt ? '<button class="btn primary full" data-act="install">Установить приложение</button>' : ios
       ? '<p class="small">В Safari нажмите <b>«Поделиться»</b> <span class="kbd">⬆︎</span>, затем <b>«На экран „Домой“»</b>.</p>'
@@ -706,7 +724,7 @@ function viewMe() {
     <p class="muted small">Сейчас вы вошли как демо-пользователь. Данные хранятся только в этом браузере.</p>
     <div class="row-btns"><button class="btn" data-act="logout">Сменить роль</button><button class="btn ghost" data-act="demo-reset">Сбросить демо-данные</button></div></section>` : ''}
   <button class="btn ghost full danger-text" data-act="logout">Выйти из аккаунта</button>
-  <p class="muted small center ver">TopSpin · v1.0</p>`;
+  <p class="muted small center ver">PongHub · v1.1</p>`;
 }
 
 // ───────────── Админка ─────────────
@@ -750,6 +768,8 @@ function viewAdmin(r) {
       ${f('newcomerGames', 'Матчей «новичка»', 'Сколько первых матчей рейтинг меняется быстрее', 1)}
       ${f('newcomerMult', 'Ускорение для новичков', 'Множитель для первых матчей', 0.1)}
       <label class="switch"><input type="checkbox" name="marginBonus" ${s.marginBonus ? 'checked' : ''}><i></i><span>Учитывать счёт (3:0 весит больше, чем 3:2)</span></label>
+      <div><b class="small">Иконка приложения</b><div class="icon-pick">${Object.entries(ICON_VARIANTS).map(([k, l]) => `<label><input type="radio" name="icon" value="${k}" ${iconChoice() === k ? 'checked' : ''}><img src="icons/${k}.svg" alt="" width="64" height="64"><span>${l}</span></label>`).join('')}</div>
+        <small class="muted">Меняется в приложении сразу. На главном экране телефона иконка обновится после переустановки.</small></div>
       <div class="calc" id="calc"></div>
       <div class="row-btns"><button type="button" class="btn ghost" data-act="settings-default">По умолчанию</button><button class="btn primary">Сохранить и пересчитать</button></div>
     </form>`;
@@ -963,6 +983,11 @@ function openProfileForm() {
   openModal(`<form data-form="profile" class="stack">
     <h3>Мой профиль</h3>
     <div class="ava-preview">${ava(me, 'xl')}</div>
+    <div class="photo-btns">
+      <label class="btn sm"><input type="file" accept="image/*" id="photo-in" hidden>📷 ${me.photo_url ? 'Сменить фото' : 'Загрузить фото'}</label>
+      ${me.photo_url ? '<button type="button" class="btn sm ghost" id="photo-rm">Убрать фото</button>' : ''}
+    </div>
+    <p class="muted small center">Без фото будет показан эмодзи:</p>
     <div class="emoji-grid">${emojis.map(e => `<label><input type="radio" name="avatar" value="${e}" ${me.avatar === e ? 'checked' : ''}><span>${e}</span></label>`).join('')}</div>
     <div class="color-grid">${colors.map(c => `<label><input type="radio" name="color" value="${c}" ${me.color === c ? 'checked' : ''}><span style="background:${c}"></span></label>`).join('')}</div>
     <label>Ник<input name="nickname" value="${esc(me.nickname)}" required minlength="2" maxlength="20"></label>
@@ -970,11 +995,36 @@ function openProfileForm() {
     <label>Игровая рука<select name="hand"><option value="">—</option><option value="right" ${me.hand === 'right' ? 'selected' : ''}>Правша</option><option value="left" ${me.hand === 'left' ? 'selected' : ''}>Левша</option></select></label>
     <label>О себе<input name="bio" value="${esc(me.bio || '')}" maxlength="120" placeholder="Например: атакующий стиль, накладки Tenergy"></label>
     <button class="btn primary">Сохранить</button></form>`, sh => {
-    sh.addEventListener('change', () => {
+    const preview = () => {
       const fd = new FormData(sh.querySelector('form'));
-      sh.querySelector('.ava-preview').innerHTML = ava({ ...me, avatar: fd.get('avatar'), color: fd.get('color') }, 'xl');
+      const photo = sh.dataset.photo !== undefined ? sh.dataset.photo : me.photo_url;
+      sh.querySelector('.ava-preview').innerHTML = ava({ ...me, photo_url: photo || null, avatar: fd.get('avatar'), color: fd.get('color') }, 'xl');
+    };
+    sh.addEventListener('change', async e => {
+      if (e.target.id === 'photo-in' && e.target.files[0]) {
+        const lbl = e.target.closest('label');
+        await busy(lbl, async () => {
+          const blob = await squareImage(e.target.files[0], 320);
+          sh.dataset.photo = await S.store.uploadAvatar(blob);
+        });
+      }
+      preview();
     });
+    sh.querySelector('#photo-rm')?.addEventListener('click', () => { sh.dataset.photo = ''; preview(); });
   });
+}
+
+/** Обрезает фото до квадрата и уменьшает, чтобы не грузить базу. */
+async function squareImage(file, size) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('Не удалось открыть изображение')); i.src = url; });
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const k = Math.min(img.naturalWidth, img.naturalHeight);
+    c.getContext('2d').drawImage(img, (img.naturalWidth - k) / 2, (img.naturalHeight - k) / 2, k, k, 0, 0, size, size);
+    return await new Promise(res => c.toBlob(res, 'image/jpeg', 0.85));
+  } finally { URL.revokeObjectURL(url); }
 }
 
 function openTournamentForm() {
@@ -1019,7 +1069,10 @@ const ACT = {
   close: () => closeModal(),
   go: el => go(el.dataset.href),
   refresh: el => busy(el, refresh),
-  logout: async () => { closeModal(); await S.store.signOut(); S.user = null; S.me = null; await reload(); location.hash = '#/login'; render(); },
+  'push-on': el => busy(el, async () => { await enablePush(); toast('Уведомления включены 🔔'); renderPushBox(); }),
+  'push-off': el => busy(el, async () => { await disablePush(); toast('Уведомления выключены'); renderPushBox(); }),
+  'push-test': el => busy(el, async () => { await S.store.testPush(); toast('Отправлено — уведомление придёт через пару секунд'); }),
+  logout: async () => { closeModal(); await disablePush().catch(() => {}); await S.store.signOut(); S.user = null; S.me = null; await reload(); location.hash = '#/login'; render(); },
   'demo-as': async el => { await S.store.signInAs(el.dataset.id); },
   'demo-reset': async () => { if (await confirmDialog('Вернуть демо-данные к исходным?')) { S.store.reset(); await refresh(); toast('Демо-данные сброшены'); } },
   'add-match': () => openMatchForm(),
@@ -1034,7 +1087,7 @@ const ACT = {
   'restore-user': el => busy(el, async () => { await S.store.update('profiles', el.dataset.id, { status: 'approved' }); await refresh(); }),
   'edit-profile': () => openProfileForm(),
   'change-pass': () => openModal(`<form data-form="newpass" class="stack"><h3>Новый пароль</h3><label>Пароль<input name="password" type="password" minlength="6" required autocomplete="new-password"></label><button class="btn primary">Сохранить</button></form>`),
-  theme: el => { try { localStorage.setItem('topspin_theme', el.dataset.v); } catch { /* */ } applyTheme(); render(); },
+  theme: el => { try { localStorage.setItem('ponghub_theme', el.dataset.v); } catch { /* */ } applyTheme(); render(); },
   install: async () => { if (!S.installEvt) return; S.installEvt.prompt(); await S.installEvt.userChoice; S.installEvt = null; render(); },
   'h2h-pick': () => go(`#/h2h/${S.me.id}`),
   'new-tournament': () => openTournamentForm(),
@@ -1095,7 +1148,7 @@ const ACT = {
     }
     download(`matches-${new Date().toISOString().slice(0, 10)}.csv`, csv(rows), 'text/csv;charset=utf-8');
   },
-  'export-json': () => download(`topspin-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(S.data, null, 2), 'application/json'),
+  'export-json': () => download(`ponghub-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(S.data, null, 2), 'application/json'),
 };
 const csv = rows => '﻿' + rows.map(r => r.map(v => { const s = String(v ?? ''); return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }).join(';')).join('\r\n');
 
@@ -1127,7 +1180,8 @@ const FORMS = {
   profile: async (f, fd) => {
     const nickname = fd.get('nickname').trim();
     if (nickname.toLowerCase() !== S.me.nickname.toLowerCase() && !(await S.store.nicknameAvailable(nickname))) throw new Error('Такой ник уже занят');
-    await S.store.update('profiles', S.me.id, { nickname, full_name: fd.get('full_name').trim(), avatar: fd.get('avatar') || S.me.avatar, color: fd.get('color') || S.me.color, hand: fd.get('hand') || null, bio: fd.get('bio').trim() });
+    await S.store.update('profiles', S.me.id, { nickname, full_name: fd.get('full_name').trim(), avatar: fd.get('avatar') || S.me.avatar, color: fd.get('color') || S.me.color, hand: fd.get('hand') || null, bio: fd.get('bio').trim(),
+      ...(f.closest('.sheet').dataset.photo !== undefined ? { photo_url: f.closest('.sheet').dataset.photo || null } : {}) });
     closeModal(); await refresh(); toast('Профиль сохранён');
   },
   settings: async (f, fd) => {
@@ -1135,8 +1189,10 @@ const FORMS = {
     for (const k of ['initialRating', 'kTournament', 'kFree', 'spread', 'newcomerGames', 'newcomerMult']) s[k] = +fd.get(k);
     if (!(s.spread > 0)) throw new Error('Масштаб должен быть больше нуля');
     s.marginBonus = !!fd.get('marginBonus');
-    s.clubName = fd.get('clubName').trim() || 'TopSpin';
-    await S.store.saveSettings(s); await refresh(); toast('Настройки сохранены, рейтинг пересчитан');
+    s.clubName = fd.get('clubName').trim() || 'PongHub';
+    s.icon = fd.get('icon') || 'hub';
+    try { s.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { /* */ }
+    await S.store.saveSettings(s); await refresh(); applyIcon(); toast('Настройки сохранены, рейтинг пересчитан');
   },
   tournament: async (f, fd) => {
     const ids = fd.getAll('participants');
@@ -1187,7 +1243,52 @@ document.addEventListener('submit', async e => {
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && $modal.classList.contains('open')) closeModal(); });
 
+// ───────────── Push-уведомления ─────────────
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+function b64ToBytes(b64) {
+  const raw = atob((b64 + '='.repeat((4 - b64.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from(raw, c => c.charCodeAt(0));
+}
+async function pushState() {
+  if (S.store.mode === 'demo') return 'demo';
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return isIOS() && !isStandalone() ? 'ios-install' : 'unsupported';
+  if (Notification.permission === 'denied') return 'denied';
+  const reg = await navigator.serviceWorker.getRegistration();
+  const sub = reg && await reg.pushManager.getSubscription();
+  return sub ? 'on' : 'off';
+}
+async function enablePush() {
+  if ((await Notification.requestPermission()) !== 'granted') throw new Error('Вы не разрешили уведомления');
+  const reg = await navigator.serviceWorker.ready;
+  const key = await S.store.pushPublicKey();
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(key) });
+  await S.store.savePushSub(sub.toJSON());
+}
+async function disablePush() {
+  const reg = await navigator.serviceWorker?.getRegistration();
+  const sub = reg && await reg.pushManager.getSubscription();
+  if (sub) { await S.store.deletePushSub(sub.endpoint); await sub.unsubscribe(); }
+}
+async function renderPushBox() {
+  const box = document.getElementById('push-box');
+  if (!box) return;
+  const st = await pushState();
+  const what = '<p class="muted small">Новые матчи и изменения рейтинга, заявки, турниры и события календаря.</p>';
+  const body = {
+    demo: '<p class="muted small">Заработают после подключения базы.</p>',
+    'ios-install': '<p class="small">На iPhone уведомления работают только в установленном приложении: Safari → «Поделиться» → «На экран „Домой“», затем откройте PongHub с главного экрана.</p>',
+    unsupported: '<p class="muted small">Этот браузер не поддерживает уведомления.</p>',
+    denied: '<p class="small">Уведомления запрещены в настройках браузера или телефона. Разрешите их для этого сайта и обновите страницу.</p>',
+    off: `${what}<button class="btn primary full" data-act="push-on">Включить уведомления</button>`,
+    on: `${what}<div class="row-btns"><span class="muted small">✅ Включены на этом устройстве</span><button class="btn sm ghost" data-act="push-test">Проверить</button><button class="btn sm ghost" data-act="push-off">Выключить</button></div>`,
+  }[st];
+  if (document.getElementById('push-box') === box) box.innerHTML = `<div class="card-h"><h3>🔔 Уведомления</h3></div>${body}`;
+}
+
 function afterRender(r) {
+  if (r.name === 'me') renderPushBox();
   const f = document.querySelector('[data-form=settings]');
   if (f) updateCalc(f);
 }
@@ -1228,5 +1329,5 @@ async function boot() {
   document.getElementById('splash')?.remove();
 }
 
-if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js').catch(() => {});
 boot();

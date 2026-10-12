@@ -3,23 +3,37 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>TopSpin</title>
-  <meta name="description" content="Клубный рейтинг по настольному теннису">
+  <title>PongHub</title>
+  <meta name="description" content="Пинг-понг в коворкинге: рейтинг, матчи и турниры">
   <meta name="theme-color" content="#e9effa">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="TopSpin">
-  <link rel="manifest" href="manifest.webmanifest">
-  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-title" content="PongHub">
+  <link rel="manifest" id="l-manifest" href="manifest-hub.webmanifest">
+  <link rel="icon" id="l-icon" href="icons/hub.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" id="l-apple" href="icons/hub-apple.png">
+  <script>
+    // Иконка, выбранная админом, — подставляем до загрузки приложения (важно для «На экран Домой»)
+    try {
+      var v = localStorage.getItem('ponghub_icon');
+      if (v === 'table') {
+        document.getElementById('l-manifest').href = 'manifest-table.webmanifest';
+        document.getElementById('l-icon').href = 'icons/table.svg';
+        document.getElementById('l-apple').href = 'icons/table-apple.png';
+      }
+      var t = localStorage.getItem('ponghub_theme');
+      if (t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark';
+    } catch (e) {}
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <div id="splash"><img src="icons/icon.svg" alt="" width="96" height="96"></div>
+  <div id="splash"><img id="splash-img" src="icons/hub.svg" alt="" width="96" height="96"></div>
+  <script>try { if (localStorage.getItem('ponghub_icon') === 'table') document.getElementById('splash-img').src = 'icons/table.svg'; } catch (e) {}</script>
   <div id="app"></div>
   <div id="modal"></div>
   <script type="module" src="js/app.js"></script>

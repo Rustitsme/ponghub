@@ -1,5 +1,4 @@
-/* TopSpin — «Классика пинг-понга»: синий стол, белая разметка, красная и чёрная накладки */
-/* TopSpin — «Классика пинг-понга»: голубой стол, белая разметка, красная и чёрная накладки, деревянная ручка */
+/* PongHub — «Классика пинг-понга»: голубой стол, белая разметка, красная и чёрная накладки, деревянная ручка */
 :root {
   --bg: #e9effa;
   --bg2: #dbe5f5;
@@ -502,3 +501,14 @@ select:disabled, input:disabled { opacity: .7; }
   .ach-grid { grid-template-columns: repeat(2, 1fr); }
   .hero-stats b { font-size: 17px; }
 }
+
+/* ── Фото, выбор иконки ── */
+.ava { overflow: hidden; }
+.ava img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo-btns { display: flex; gap: 8px; justify-content: center; }
+.photo-btns label.btn { flex-direction: row; color: var(--text); font-weight: 600; }
+.icon-pick { display: flex; gap: 12px; margin: 8px 0 6px; }
+.icon-pick label { flex-direction: column; align-items: center; gap: 4px; cursor: pointer; color: var(--text); }
+.icon-pick input { display: none; }
+.icon-pick img { border-radius: 16px; border: 3px solid transparent; }
+.icon-pick input:checked + img { border-color: var(--red); }

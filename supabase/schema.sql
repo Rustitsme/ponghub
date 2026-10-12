@@ -242,3 +242,86 @@ begin
     end if;
   end loop;
 end $$;
+
+-- ═══════════════════════════════════════════════════════════════
+--  Фото профиля
+-- ═══════════════════════════════════════════════════════════════
+alter table public.profiles add column if not exists photo_url text;
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('avatars', 'avatars', true, 2097152, array['image/jpeg', 'image/png', 'image/webp'])
+on conflict (id) do nothing;
+
+-- каждый загружает файлы только в свою папку avatars/<свой id>/
+drop policy if exists avatars_read on storage.objects;
+create policy avatars_read on storage.objects for select using (bucket_id = 'avatars');
+drop policy if exists avatars_insert on storage.objects;
+create policy avatars_insert on storage.objects for insert to authenticated
+  with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+drop policy if exists avatars_update on storage.objects;
+create policy avatars_update on storage.objects for update to authenticated
+  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+drop policy if exists avatars_delete on storage.objects;
+create policy avatars_delete on storage.objects for delete to authenticated
+  using (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- ═══════════════════════════════════════════════════════════════
+--  Push-уведомления
+-- ═══════════════════════════════════════════════════════════════
+create table if not exists public.push_subscriptions (
+  endpoint text primary key,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  p256dh text not null,
+  auth text not null,
+  ua text,
+  created_at timestamptz not null default now()
+);
+alter table public.push_subscriptions enable row level security;
+drop policy if exists push_own on public.push_subscriptions;
+create policy push_own on public.push_subscriptions for all
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- Служебные секреты. Политик нет → читать может только сервер (функция notify).
+-- Ключи уведомлений функция создаёт сама при первом запуске.
+create table if not exists public.app_secrets (
+  key text primary key,
+  value text not null
+);
+alter table public.app_secrets enable row level security;
+revoke all on public.app_secrets from anon, authenticated;
+insert into public.app_secrets (key, value)
+values ('webhook_secret', encode(gen_random_bytes(24), 'hex'))
+on conflict (key) do nothing;
+
+create extension if not exists pg_net;
+
+-- При изменениях в таблицах база сообщает функции notify, а та рассылает уведомления
+create or replace function public.notify_change() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  fn_url text;
+  secret text;
+begin
+  select value into fn_url from app_secrets where key = 'functions_url';
+  select value into secret from app_secrets where key = 'webhook_secret';
+  if fn_url is null then return coalesce(new, old); end if;  -- функция ещё не запускалась
+  perform net.http_post(
+    url := fn_url || '/notify',
+    body := jsonb_build_object(
+      'secret', secret, 'table', tg_table_name, 'type', tg_op,
+      'record', to_jsonb(new),
+      'old_record', case when tg_op = 'UPDATE' then to_jsonb(old) else null end
+    ),
+    headers := '{"Content-Type": "application/json"}'::jsonb
+  );
+  return coalesce(new, old);
+end $$;
+
+do $$
+declare t text;
+begin
+  foreach t in array array['profiles', 'matches', 'tournaments', 'events'] loop
+    execute format('drop trigger if exists %I on public.%I', t || '_notify', t);
+    execute format('create trigger %I after insert or update on public.%I for each row execute function public.notify_change()', t || '_notify', t);
+  end loop;
+end $$;
