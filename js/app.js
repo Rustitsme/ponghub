@@ -77,7 +77,7 @@ function applyTheme() {
   try { t = localStorage.getItem('topspin_theme') || 'light'; } catch { /* */ }
   const real = t === 'auto' ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark') : t;
   document.documentElement.dataset.theme = real;
-  document.querySelector('meta[name=theme-color]')?.setAttribute('content', real === 'light' ? '#eaf5ff' : '#0f2540');
+  document.querySelector('meta[name=theme-color]')?.setAttribute('content', real === 'light' ? '#e9effa' : '#0f2540');
   return t;
 }
 

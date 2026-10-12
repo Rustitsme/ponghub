@@ -1,6 +1,6 @@
 // Service worker: приложение открывается быстро и работает как установленное.
 // Стратегия «сначала сеть»: всегда берём свежую версию, кэш — только если нет интернета.
-const CACHE = 'topspin-v2';
+const CACHE = 'topspin-v3';
 const SHELL = ['./', './index.html', './css/style.css', './js/app.js', './js/engine.js', './js/tourney.js', './js/store.js', './js/config.js', './icons/icon.svg', './manifest.webmanifest'];
 
 self.addEventListener('install', e => {

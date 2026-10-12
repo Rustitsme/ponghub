@@ -1,11 +1,11 @@
 /* TopSpin — «Классика пинг-понга»: синий стол, белая разметка, красная и чёрная накладки */
 /* TopSpin — «Классика пинг-понга»: голубой стол, белая разметка, красная и чёрная накладки, деревянная ручка */
 :root {
-  --bg: #eaf5ff;
-  --bg2: #dcecfb;
+  --bg: #e9effa;
+  --bg2: #dbe5f5;
   --surface: #ffffff;
-  --surface2: #f2f8fe;
-  --line: rgba(24, 74, 130, .12);
+  --surface2: #f1f5fc;
+  --line: rgba(22, 60, 120, .12);
   --line-strong: #ffffff;
   --text: #0f2742;
   --muted: #5b7493;
@@ -17,8 +17,8 @@
   --up: #12a061;
   --down: #e0313f;
   --warn: #c98a12;
-  --table: linear-gradient(160deg, #56b3f4 0%, #3492e3 55%, #2479cc 100%);
-  --shadow: 0 6px 20px rgba(36, 121, 204, .12);
+  --table: linear-gradient(160deg, #3b7fd4 0%, #2563b8 55%, #1c4f9c 100%);
+  --shadow: 0 6px 20px rgba(28, 79, 156, .12);
   --radius: 16px;
   --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --display: 'Barlow Condensed', 'Inter', system-ui, sans-serif;
