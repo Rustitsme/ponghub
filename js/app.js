@@ -103,7 +103,7 @@ function derive() {
   const d = S.data;
   S.byId = new Map(d.profiles.map(p => [p.id, p]));
   S.me = S.user ? S.byId.get(S.user.id) || null : null;
-  S.A = analyze(d.profiles.filter(p => p.status === 'approved' || p.status === 'archived'), d.matches, d.settings);
+  S.A = analyze(d.profiles.filter(p => ['approved', 'archived', 'deleted'].includes(p.status)), d.matches, d.settings);
   S.rank = ranking(S.A, d.profiles);
   document.title = settings().clubName || 'PongHub';
   if (S.data.settings && S.data.settings.icon) applyIcon();
@@ -443,6 +443,7 @@ function viewPlayer(r) {
   const id = r.args[0] || S.me.id;
   const p = S.byId.get(id);
   if (!p) return '<div class="empty">Игрок не найден</div>';
+  if (p.status === 'deleted') return `<div class="empty">👤 Этот игрок удалён из клуба.<br>Его матчи сохранены в истории соперников.</div>`;
   const st = playerStats(id, S.A, S.data.tournaments);
   const rt = ratingOf(id);
   const pos = S.rank.findIndex(x => x.p.id === id) + 1;
@@ -794,7 +795,7 @@ function viewAdmin(r) {
     const rej = S.data.profiles.filter(p => p.status === 'rejected');
     body = `<section class="card">${pend.map(p => `<div class="req">${ava(p, 'md')}<div class="rn"><b>${esc(p.nickname)}</b><small>${esc(p.full_name || '')}</small><small class="muted">${esc(S.emails.get(p.id) || '')} · ${fmtDate(p.created_at)}</small></div>
       <div class="req-btns"><button class="btn primary sm" data-act="approve-user" data-id="${p.id}">Принять</button><button class="btn ghost sm" data-act="reject-user" data-id="${p.id}">Отклонить</button></div></div>`).join('') || '<div class="empty">Новых заявок нет 👌</div>'}</section>
-      ${rej.length ? `<details class="card"><summary>Отклонённые (${rej.length})</summary>${rej.map(p => `<div class="req">${ava(p, 'sm')}<div class="rn"><b>${esc(p.nickname)}</b><small class="muted">${esc(S.emails.get(p.id) || '')}</small></div><button class="btn sm" data-act="approve-user" data-id="${p.id}">Всё-таки принять</button></div>`).join('')}</details>` : ''}`;
+      ${rej.length ? `<details class="card"><summary>Отклонённые (${rej.length})</summary>${rej.map(p => `<div class="req">${ava(p, 'sm')}<div class="rn"><b>${esc(p.nickname)}</b><small class="muted">${esc(S.emails.get(p.id) || '')}</small></div><div class="req-btns"><button class="btn sm" data-act="approve-user" data-id="${p.id}">Принять</button><button class="btn sm ghost danger" data-act="delete-user" data-id="${p.id}">Удалить</button></div></div>`).join('')}</details>` : ''}`;
   } else if (tab === 'matches') {
     const pend = S.data.matches.filter(m => m.status === 'pending').sort((a, b) => ts(b) - ts(a));
     body = `<p class="muted small">Результаты, которые игроки отправили сами. В рейтинг они попадут только после подтверждения.</p>
@@ -808,6 +809,7 @@ function viewAdmin(r) {
           <label class="switch"><input type="checkbox" data-act-change="toggle-editor" data-id="${p.id}" ${p.role === 'editor' ? 'checked' : ''} ${p.status === 'archived' ? 'disabled' : ''}><i></i><span>Помощник</span></label>
           <label class="init">Старт<input type="number" step="0.5" min="0" value="${p.initial_rating ?? ''}" placeholder="${settings().initialRating}" data-act-change="set-initial" data-id="${p.id}"></label>
           <button class="btn xs ghost" data-act="${p.status === 'archived' ? 'restore-user' : 'archive-user'}" data-id="${p.id}">${p.status === 'archived' ? 'Вернуть' : 'В архив'}</button>
+          <button class="btn xs ghost danger" data-act="delete-user" data-id="${p.id}">Удалить</button>
         </div>`}</div>`).join('')}</section>
       <p class="muted small">«В архив» скрывает игрока из рейтинга, но сохраняет историю его матчей.</p>`;
   } else if (tab === 'rating') {
@@ -1206,6 +1208,13 @@ const ACT = {
   'approve-user': el => busy(el, async () => { await S.store.update('profiles', el.dataset.id, { status: 'approved' }); await refresh(); toast('Игрок принят в клуб 🎉'); }),
   'reject-user': async el => { if (await confirmDialog('Отклонить заявку?', 'Отклонить', true)) await busy(el, async () => { await S.store.update('profiles', el.dataset.id, { status: 'rejected' }); await refresh(); }); },
   'archive-user': async el => { if (await confirmDialog('Перенести игрока в архив? Его матчи сохранятся, но он пропадёт из рейтинга.')) await busy(el, async () => { await S.store.update('profiles', el.dataset.id, { status: 'archived', role: 'player' }); await refresh(); }); },
+  'delete-user': async el => {
+    const p = P(el.dataset.id);
+    const games = S.A.games.get(p.id) || 0;
+    const ok = await confirmDialog(`Удалить «${p.nickname}» из клуба навсегда? Аккаунт, фото и имя будут удалены, войти он больше не сможет. ${games ? `Его ${games} ${plural(games, 'матч', 'матча', 'матчей')} останутся в истории под именем «Бывший игрок» — рейтинг соперников не изменится.` : ''} Отменить это нельзя.`, 'Удалить', true);
+    if (!ok) return;
+    await busy(el, async () => { await S.store.adminDeletePlayer(p.id); await refresh(); toast('Игрок удалён'); });
+  },
   'restore-user': el => busy(el, async () => { await S.store.update('profiles', el.dataset.id, { status: 'approved' }); await refresh(); }),
   'edit-profile': () => openProfileForm(),
   'change-pass': () => openModal(`<form data-form="newpass" class="stack"><h3>Новый пароль</h3><label>Пароль<input name="password" type="password" minlength="6" required autocomplete="new-password"></label><button class="btn primary">Сохранить</button></form>`),

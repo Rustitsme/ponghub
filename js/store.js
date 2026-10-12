@@ -127,6 +127,13 @@ class SupaStore {
     if (error) throw translateError(error);
   }
 
+  async adminDeletePlayer(id) {
+    const { data: files } = await this.sb.storage.from('avatars').list(id);
+    if (files?.length) await this.sb.storage.from('avatars').remove(files.map(f => `${id}/${f.name}`));
+    const { error } = await this.sb.rpc('admin_delete_player', { target: id });
+    if (error) throw translateError(error);
+  }
+
   async adminEmails() {
     const { data, error } = await this.sb.rpc('admin_emails');
     if (error) return new Map();
@@ -259,6 +266,12 @@ class LocalStore {
     this.save();
   }
 
+  async adminDeletePlayer(id) {
+    const p = this.db.profiles.find(x => x.id === id);
+    Object.assign(p, { nickname: 'Бывший игрок ' + id.slice(-4), full_name: null, photo_url: null, bio: null, hand: null, avatar: '👤', color: '#adb5bd', role: 'player', status: 'deleted' });
+    this.db.users = this.db.users.filter(u => u.id !== id);
+    this.save();
+  }
   async adminEmails() { return new Map(this.db.users.map(u => [u.id, u.email])); }
   async uploadAvatar(blob) {
     return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob); });
