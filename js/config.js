@@ -1,7 +1,7 @@
-// Настройки подключения к базе Supabase.
-// Пока поля пустые — приложение работает в ДЕМО-режиме (данные только в этом браузере).
-// Как заполнить — см. README.md, раздел «Подключение базы».
+// Подключение к базе Supabase (проект ponghub).
+// Ключ публичный по задумке Supabase: доступ к данным защищён правилами в самой базе.
+// Если очистить оба поля — приложение запустится в ДЕМО-режиме.
 export const CONFIG = {
-  SUPABASE_URL: '',
-  SUPABASE_ANON_KEY: '',
+  SUPABASE_URL: 'https://iprhrrmejvhkkyqogiyn.supabase.co',
+  SUPABASE_ANON_KEY: 'sb_publishable_Qh-4DSD8azE69_LERTRSqQ_MvFKVgrY',
 };
