@@ -33,6 +33,7 @@ function ava(p, cls = '') {
   return `<span class="ava ${cls}" style="--c:${esc(p.color || '#e63946')}">${inner}</span>`;
 }
 function leagueBadge(r) { const l = leagueOf(r); return `<span class="league ${l.cls}">${l.name}</span>`; }
+function roleBadge(p) { return p.role === 'admin' ? '<span class="role-badge owner">👑 Владелец</span>' : p.role === 'editor' ? '<span class="role-badge">✍️ Помощник</span>' : ''; }
 function delta(d, cls = '') { if (d == null || Math.abs(d) < 0.005) return `<span class="delta zero ${cls}">0.00</span>`; return `<span class="delta ${d > 0 ? 'up' : 'down'} ${cls}">${fmtD(d)}</span>`; }
 
 function toast(msg, type = 'ok') {
@@ -343,7 +344,7 @@ function viewHome() {
   <section class="hero table-card">
     <div class="hero-top">
       ${ava(me, 'lg')}
-      <div class="hero-id"><div class="hello">Привет,</div><div class="hero-nick">${esc(me.nickname)}</div>${leagueBadge(r)}</div>
+      <div class="hero-id"><div class="hello">Привет,</div><div class="hero-nick">${esc(me.nickname)}</div><div class="badges">${leagueBadge(r)}${roleBadge(me)}</div></div>
       <div class="hero-rank"><small>место</small><b>${st.matches ? pos : '—'}</b><small>из ${total}</small></div>
     </div>
     <div class="hero-mid">
@@ -458,7 +459,7 @@ function viewPlayer(r) {
   <section class="hero table-card">
     <div class="hero-top">
       ${ava(p, 'lg')}
-      <div class="hero-id"><div class="hero-nick">${esc(p.nickname)}</div><div class="muted small">${esc(p.full_name || '')}${hand ? ' · ' + hand : ''}${p.role === 'admin' ? ' · 👑 админ' : p.role === 'editor' ? ' · ✍️ помощник' : ''}</div>${leagueBadge(rt)}</div>
+      <div class="hero-id"><div class="hero-nick">${esc(p.nickname)}</div><div class="muted small">${esc(p.full_name || '')}${hand ? ' · ' + hand : ''}</div><div class="badges">${leagueBadge(rt)}${roleBadge(p)}</div></div>
       <div class="hero-rank"><small>место</small><b>${st.matches ? pos : '—'}</b><small>из ${S.rank.length}</small></div>
     </div>
     ${p.bio ? `<p class="bio">${esc(p.bio)}</p>` : ''}
@@ -703,7 +704,7 @@ function viewMe() {
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
   return `<div class="page-h"><h1>Профиль</h1></div>
-  <a href="#/player/${me.id}" class="card me-card">${ava(me, 'md')}<div><b>${esc(me.nickname)}</b><div class="muted small">${esc(me.full_name || '')}</div></div><span>→</span></a>
+  <a href="#/player/${me.id}" class="card me-card">${ava(me, 'md')}<div><b>${esc(me.nickname)}</b> ${roleBadge(me)}<div class="muted small">${esc(me.full_name || '')}</div></div><span>→</span></a>
   ${isEditor() ? `<a href="#/admin" class="card menu-item">🛠️ <span>${isAdmin() ? 'Управление клубом' : 'Подтверждение результатов'}</span>${pendingCounts().total ? `<i class="dot inline">${pendingCounts().total}</i>` : ''}<span>→</span></a>` : ''}
   <section class="card menu">
     <button class="menu-item" data-act="edit-profile">✏️ <span>Редактировать профиль</span></button>
@@ -1287,7 +1288,20 @@ async function renderPushBox() {
   if (document.getElementById('push-box') === box) box.innerHTML = `<div class="card-h"><h3>🔔 Уведомления</h3></div>${body}`;
 }
 
+/** Уменьшает шрифт ника, пока он не поместится; если совсем длинный — переносит на две строки. */
+function fitNicks() {
+  document.querySelectorAll('.hero-nick').forEach(el => {
+    el.style.fontSize = ''; el.classList.remove('wrap');
+    let size = parseFloat(getComputedStyle(el).fontSize);
+    while (el.scrollWidth > el.clientWidth && size > 18) { size -= 1; el.style.fontSize = size + 'px'; }
+    if (el.scrollWidth > el.clientWidth) el.classList.add('wrap');
+  });
+}
+addEventListener('resize', () => fitNicks());
+
 function afterRender(r) {
+  fitNicks();
+  document.fonts?.ready.then(fitNicks);
   if (r.name === 'me') renderPushBox();
   const f = document.querySelector('[data-form=settings]');
   if (f) updateCalc(f);
