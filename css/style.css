@@ -520,3 +520,13 @@ select:disabled, input:disabled { opacity: .7; }
 .me-card .role-badge { margin: 0 0 0 4px; vertical-align: 1px; }
 .me-card .role-badge:not(.owner) { background: var(--surface2); color: var(--text); }
 .hero-nick.wrap { white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+
+/* ── Редактор фото ── */
+.cropper { position: absolute; inset: 0; min-height: 100%; z-index: 5; display: flex; flex-direction: column; gap: 14px; padding: 22px 18px; background: var(--surface); border-radius: inherit; }
+.crop-view { position: relative; width: min(300px, 100%); aspect-ratio: 1; margin: 0 auto; overflow: hidden; border-radius: 16px; background: #000; touch-action: none; cursor: grab; }
+.crop-view:active { cursor: grabbing; }
+.crop-view img { position: absolute; left: 0; top: 0; max-width: none; user-select: none; -webkit-user-select: none; pointer-events: none; }
+.crop-ring { position: absolute; inset: 0; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 999px rgba(0, 0, 0, .55); pointer-events: none; }
+.crop-zoom { display: flex; align-items: center; gap: 10px; width: min(300px, 100%); margin: 0 auto; }
+.crop-zoom input { flex: 1; padding: 0; accent-color: var(--red); }
+.crop-zoom .btn { width: 40px; font-size: 18px; padding: 4px 0; }

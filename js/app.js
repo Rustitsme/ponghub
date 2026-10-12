@@ -1003,11 +1003,12 @@ function openProfileForm() {
     };
     sh.addEventListener('change', async e => {
       if (e.target.id === 'photo-in' && e.target.files[0]) {
-        const lbl = e.target.closest('label');
-        await busy(lbl, async () => {
-          const blob = await squareImage(e.target.files[0], 320);
-          sh.dataset.photo = await S.store.uploadAvatar(blob);
-        });
+        const file = e.target.files[0];
+        e.target.value = '';  // чтобы можно было выбрать тот же файл ещё раз
+        let blob;
+        try { blob = await cropImage(file, sh, 400); } catch (err) { toast(err.message, 'err'); return; }
+        if (!blob) return;
+        await busy(e.target.closest('label'), async () => { sh.dataset.photo = await S.store.uploadAvatar(blob); });
       }
       preview();
     });
@@ -1015,17 +1016,80 @@ function openProfileForm() {
   });
 }
 
-/** Обрезает фото до квадрата и уменьшает, чтобы не грузить базу. */
-async function squareImage(file, size) {
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('Не удалось открыть изображение')); i.src = url; });
-    const c = document.createElement('canvas');
-    c.width = c.height = size;
-    const k = Math.min(img.naturalWidth, img.naturalHeight);
-    c.getContext('2d').drawImage(img, (img.naturalWidth - k) / 2, (img.naturalHeight - k) / 2, k, k, 0, 0, size, size);
-    return await new Promise(res => c.toBlob(res, 'image/jpeg', 0.85));
-  } finally { URL.revokeObjectURL(url); }
+/**
+ * Редактор фото: двигать пальцем или мышью, приближать ползунком, двумя пальцами или колёсиком.
+ * Возвращает квадратный JPEG size×size или null, если нажали «Отмена».
+ */
+function cropImage(file, host, size) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Не удалось открыть изображение')); };
+    img.onload = () => {
+      host.scrollTop = 0;
+      const box = document.createElement('div');
+      box.className = 'cropper';
+      box.innerHTML = `<h3>Выберите область</h3>
+        <div class="crop-view"><img src="${url}" alt="" draggable="false"><div class="crop-ring"></div></div>
+        <div class="crop-zoom"><button type="button" class="btn sm ghost" data-z="-1">−</button><input type="range" min="1" max="5" step="0.01" value="1" aria-label="Масштаб"><button type="button" class="btn sm ghost" data-z="1">+</button></div>
+        <p class="muted small center">Двигайте фото пальцем. Приблизить — ползунком или двумя пальцами.</p>
+        <div class="row-btns"><button type="button" class="btn ghost" data-c="cancel">Отмена</button><button type="button" class="btn primary" data-c="ok">Готово</button></div>`;
+      host.appendChild(box);
+      const view = box.querySelector('.crop-view'), im = box.querySelector('img'), range = box.querySelector('input');
+      const V = view.clientWidth;
+      const W = img.naturalWidth, H = img.naturalHeight;
+      const base = V / Math.min(W, H);  // при масштабе 1 фото целиком закрывает круг
+      let zoom = 1, x = 0, y = 0;       // смещение центра фото от центра окна, px
+      const draw = () => {
+        const w = W * base * zoom, h = H * base * zoom;
+        const mx = (w - V) / 2, my = (h - V) / 2;
+        x = Math.max(-mx, Math.min(mx, x)); y = Math.max(-my, Math.min(my, y));
+        im.style.width = w + 'px'; im.style.height = h + 'px';
+        im.style.transform = `translate(${(V - w) / 2 + x}px, ${(V - h) / 2 + y}px)`;
+        range.value = zoom;
+      };
+      const setZoom = z => { const k = Math.max(1, Math.min(5, z)); x *= k / zoom; y *= k / zoom; zoom = k; draw(); };
+      draw();
+
+      const pts = new Map();
+      let pinch = null;
+      view.addEventListener('pointerdown', e => { view.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); pinch = null; });
+      view.addEventListener('pointermove', e => {
+        if (!pts.has(e.pointerId)) return;
+        const prev = pts.get(e.pointerId);
+        pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (pts.size === 1) { x += e.clientX - prev.x; y += e.clientY - prev.y; draw(); }
+        else if (pts.size === 2) {
+          const [a, b] = [...pts.values()];
+          const d = Math.hypot(a.x - b.x, a.y - b.y);
+          if (!pinch) pinch = { d, z: zoom }; else setZoom(pinch.z * d / pinch.d);
+        }
+      });
+      const up = e => { pts.delete(e.pointerId); pinch = null; };
+      view.addEventListener('pointerup', up);
+      view.addEventListener('pointercancel', up);
+      view.addEventListener('wheel', e => { e.preventDefault(); setZoom(zoom * (e.deltaY < 0 ? 1.1 : 0.9)); }, { passive: false });
+      range.addEventListener('input', () => setZoom(+range.value));
+
+      const finish = result => { box.remove(); URL.revokeObjectURL(url); resolve(result); };
+      box.addEventListener('click', e => {
+        const z = e.target.closest('[data-z]');
+        if (z) return setZoom(zoom + 0.25 * +z.dataset.z);
+        const c = e.target.closest('[data-c]')?.dataset.c;
+        if (c === 'cancel') finish(null);
+        if (c === 'ok') {
+          const s = base * zoom;  // экранных px на 1 px исходного фото
+          const w = W * s, h = H * s;
+          const left = ((w - V) / 2 - x) / s, top = ((h - V) / 2 - y) / s, side = V / s;
+          const cv = document.createElement('canvas');
+          cv.width = cv.height = size;
+          cv.getContext('2d').drawImage(img, left, top, side, side, 0, 0, size, size);
+          cv.toBlob(b => finish(b), 'image/jpeg', 0.88);
+        }
+      });
+    };
+    img.src = url;
+  });
 }
 
 function openTournamentForm() {
