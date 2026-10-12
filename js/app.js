@@ -757,29 +757,46 @@ function viewRules() {
 
 // ───────────── Объявления ─────────────
 const seenAt = () => +(lsGet('ponghub_seen_ann') || 0);
-const unreadCount = () => (S.data?.announcements || []).filter(a => Date.parse(a.created_at) > seenAt() && a.created_by !== S.me?.id).length;
+const annForMe = a => !a.recipients?.length || a.recipients.includes(S.me?.id) || isAdmin();
+const unreadCount = () => (S.data?.announcements || []).filter(a => annForMe(a) && Date.parse(a.created_at) > seenAt() && a.created_by !== S.me?.id).length;
 
 function viewInbox() {
   const pc = pendingCounts();
   const last = seenAt();
-  const list = S.data.announcements;
+  const list = S.data.announcements.filter(annForMe);
   setTimeout(() => { lsSet('ponghub_seen_ann', String(Date.now())); if (!pc.total) document.querySelector('.top .dot')?.remove(); }, 0);
   return `<div class="page-h"><h1>Уведомления</h1>${isAdmin() ? '<button class="btn primary sm" data-act="new-ann">📢 Написать</button>' : ''}</div>
     ${pc.total ? `<a href="#/admin" class="alert">🔔 Ждут вашего решения: ${pc.users ? `${pc.users} ${plural(pc.users, 'заявка', 'заявки', 'заявок')}` : ''}${pc.users && pc.matches ? ', ' : ''}${pc.matches ? `${pc.matches} ${plural(pc.matches, 'матч', 'матча', 'матчей')} на подтверждение` : ''} →</a>` : ''}
-    ${isAdmin() ? '<p class="muted small">Объявления видят все участники клуба, и каждому приходит push-уведомление. Писать и удалять их можете только вы.</p>' : ''}
+    ${isAdmin() ? '<p class="muted small">Объявление можно отправить всем или выбранным игрокам — его увидят и получат push-уведомлением только они. Писать и удалять можете только вы.</p>' : ''}
     ${list.map(a => `<article class="card ann ${Date.parse(a.created_at) > last && a.created_by !== S.me.id ? 'new' : ''}">
-      <div class="ann-h">${ava(P(a.created_by), 'sm')}<div class="rn"><b>${esc(a.title || 'Объявление клуба')}</b><small class="muted">${esc(P(a.created_by).nickname)} · ${fmtDT(a.created_at)}</small></div>
+      <div class="ann-h">${ava(P(a.created_by), 'sm')}<div class="rn"><b>${esc(a.title || (a.recipients?.length ? 'Личное сообщение' : 'Объявление клуба'))}</b><small class="muted">${esc(P(a.created_by).nickname)} · ${fmtDT(a.created_at)}</small>
+        ${a.recipients?.length ? `<small class="ann-to">${isAdmin() ? '✉️ Для: ' + a.recipients.map(id => esc(P(id).nickname)).join(', ') : '✉️ Лично вам'}</small>` : ''}</div>
         ${isAdmin() ? `<button class="btn xs ghost danger" data-act="del-ann" data-id="${a.id}">Удалить</button>` : ''}</div>
       <p class="ann-body">${esc(a.body).replace(/\n/g, '<br>')}</p>
     </article>`).join('') || '<div class="empty">Объявлений пока нет</div>'}`;
 }
 
 function openAnnForm() {
-  openModal(`<form data-form="ann" class="stack"><h3>📢 Объявление для всех</h3>
+  const people = S.data.profiles.filter(p => p.status === 'approved' && p.id !== S.me.id).sort((a, b) => a.nickname.localeCompare(b.nickname));
+  openModal(`<form data-form="ann" class="stack"><h3>📢 Новое объявление</h3>
+    <div class="seg"><button type="button" class="on" data-to="all">👥 Всем</button><button type="button" data-to="some">✉️ Выбрать игроков</button></div>
+    <div class="pick-list ann-pick" hidden>${people.map(p => `<label class="pick"><input type="checkbox" name="to" value="${p.id}"><span>${ava(p, 'xs')} ${esc(p.nickname)}</span></label>`).join('') || '<p class="muted small">Других участников пока нет</p>'}</div>
     <label>Заголовок<input name="title" maxlength="60" placeholder="Например: Турнир в пятницу"></label>
-    <label>Текст<textarea name="body" rows="5" maxlength="1000" required placeholder="Что хотите сообщить клубу"></textarea></label>
-    <p class="muted small">Получат все участники клуба: push-уведомлением и в ленте под колокольчиком.</p>
-    <button class="btn primary">Отправить всем</button></form>`);
+    <label>Текст<textarea name="body" rows="5" maxlength="1000" required placeholder="Что хотите сообщить"></textarea></label>
+    <p class="muted small" id="ann-hint">Получат все участники клуба: push-уведомлением и в ленте под колокольчиком.</p>
+    <button class="btn primary" id="ann-send">Отправить всем</button></form>`, sh => {
+    const f = sh.querySelector('form');
+    const sync = () => {
+      const some = f.dataset.to === 'some', n = f.querySelectorAll('[name=to]:checked').length;
+      sh.querySelector('.ann-pick').hidden = !some;
+      sh.querySelectorAll('[data-to]').forEach(b => b.classList.toggle('on', b.dataset.to === (some ? 'some' : 'all')));
+      sh.querySelector('#ann-hint').textContent = some ? 'Увидят и получат уведомление только выбранные игроки.' : 'Получат все участники клуба: push-уведомлением и в ленте под колокольчиком.';
+      sh.querySelector('#ann-send').textContent = some ? (n ? `Отправить выбранным (${n})` : 'Выберите получателей') : 'Отправить всем';
+    };
+    f.dataset.to = 'all';
+    sh.addEventListener('click', e => { const b = e.target.closest('[data-to]'); if (b) { f.dataset.to = b.dataset.to; sync(); } });
+    f.addEventListener('change', sync);
+  });
 }
 
 // ───────────── Живой счёт ─────────────
@@ -1880,8 +1897,11 @@ const FORMS = {
   ann: async (f, fd) => {
     const body = fd.get('body').trim();
     if (!body) throw new Error('Напишите текст объявления');
-    await S.store.insert('announcements', { title: fd.get('title').trim() || null, body, created_by: S.me.id, ...testFlag() });
-    closeModal(); await refresh(); toast('Объявление отправлено всем 📢');
+    const some = f.dataset.to === 'some';
+    const to = fd.getAll('to');
+    if (some && !to.length) throw new Error('Выберите хотя бы одного игрока');
+    await S.store.insert('announcements', { title: fd.get('title').trim() || null, body, created_by: S.me.id, recipients: some ? to : null, ...testFlag() });
+    closeModal(); await refresh(); toast(some ? `Отправлено: ${to.length} ${plural(to.length, 'игроку', 'игрокам', 'игрокам')} ✉️` : 'Объявление отправлено всем 📢');
   },
   challenge: async (f, fd) => {
     await S.store.insert('challenges', { from_id: S.me.id, to_id: fd.get('to'), status: 'pending', message: fd.get('message').trim() || null, ...testFlag() });

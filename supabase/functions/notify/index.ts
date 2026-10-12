@@ -99,7 +99,8 @@ async function onChange(table: string, type: string, r: any, o: any, actor: stri
 
   if (table === 'announcements' && type === 'INSERT') {
     const text = String(r.body ?? '');
-    return send(except(all, r.created_by), { title: r.title ? `📢 ${r.title}` : '📢 Объявление клуба', body: text.length > 180 ? text.slice(0, 177) + '…' : text, url: '#/inbox', tag: 'ann-' + r.id });
+    const to = Array.isArray(r.recipients) && r.recipients.length ? r.recipients : all;
+    return send(except(to, r.created_by), { title: r.title ? `📢 ${r.title}` : to === all ? '📢 Объявление клуба' : '✉️ Сообщение от владельца', body: text.length > 180 ? text.slice(0, 177) + '…' : text, url: '#/inbox', tag: 'ann-' + r.id });
   }
 
   if (table === 'challenges') {
