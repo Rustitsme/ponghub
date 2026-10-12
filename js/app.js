@@ -100,8 +100,12 @@ function applyTheme() {
 }
 
 // ───────────── Данные ─────────────
+const testFlag = () => (S.testMode ? { is_test: true } : {});
 function derive() {
   const d = S.data;
+  // Тестовые данные (их получает только владелец) показываем лишь в тестовом режиме
+  S.testMode = lsGet('ponghub_testmode') === '1' && (d.profiles.find(p => p.id === S.user?.id)?.role === 'admin');
+  if (!S.testMode) for (const k of ['profiles', 'matches', 'tournaments', 'live', 'challenges']) if (d[k]) d[k] = d[k].filter(x => !x.is_test);
   S.byId = new Map(d.profiles.map(p => [p.id, p]));
   S.me = S.user ? S.byId.get(S.user.id) || null : null;
   S.A = analyze(d.profiles.filter(p => ['approved', 'archived', 'deleted'].includes(p.status)), d.matches, d.settings);
@@ -192,6 +196,7 @@ function shell(r, body) {
       ${isEditor() ? `<a href="#/admin" class="icon-btn" aria-label="Управление">${icon('bell')}${pc.total ? `<i class="dot">${pc.total}</i>` : ''}</a>` : ''}
     </div>
   </header>
+  ${S.testMode ? `<div class="test-banner">🧪 <span><b>Тестовый режим.</b> Тестовых игроков и их матчи видите только вы.</span><a href="#/admin/players" class="link">Управлять</a></div>` : ''}
   <main class="page">${body}</main>
   ${r.name === 'live' ? '' : `<button class="fab" data-act="add-match" aria-label="${isEditor() ? 'Внести матч' : 'Отправить результат'}">${icon('plus')}</button>`}
   <nav class="tabs">
@@ -363,7 +368,7 @@ function viewHome() {
   const nl = nextLeague(r);
   const pom = playerOfMonth(S.A, S.data.profiles);
   const pc = pendingCounts();
-  const recent = S.data.matches.filter(m => m.status === 'approved').sort((a, b) => ts(b) - ts(a)).slice(0, 6);
+  const recent = S.data.matches.filter(m => m.status === 'approved' && (isEditor() || players(m).includes(me.id))).sort((a, b) => ts(b) - ts(a)).slice(0, 6);
   const upcoming = upcomingItems().slice(0, 3);
   const active = S.data.tournaments.filter(t => t.status === 'active');
   const mine = S.data.matches.filter(m => m.status === 'pending' && m.submitted_by === me.id);
@@ -410,7 +415,7 @@ function viewHome() {
   ${upcoming.length ? `<section class="card"><div class="card-h"><h3>Ближайшие события</h3><a href="#/calendar" class="link">Календарь →</a></div>${upcoming.map(eventRow).join('')}</section>` : ''}
 
   <section>
-    <div class="sec-h"><h3>Последние матчи</h3><a href="#/matches" class="link">Все →</a></div>
+    <div class="sec-h"><h3>${isEditor() ? 'Последние матчи' : 'Мои последние матчи'}</h3><a href="#/matches" class="link">Все →</a></div>
     ${recent.map(m => matchCard(m)).join('') || '<div class="empty">Матчей пока нет. Нажмите «+», чтобы внести первый.</div>'}
   </section>`;
 }
@@ -461,6 +466,7 @@ function viewMatches(r) {
   const type = r.q.get('type') || 'all';
   const pl = r.q.get('p') || '';
   let list = S.data.matches.filter(visibleMatch);
+  if (!isEditor()) list = list.filter(m => players(m).includes(S.me.id));
   if (type === 'doubles') list = list.filter(isDoubles);
   else if (type !== 'all') list = list.filter(m => !isDoubles(m) && m.type === type);
   if (pl) list = list.filter(m => players(m).includes(pl));
@@ -468,18 +474,18 @@ function viewMatches(r) {
   const groups = new Map();
   for (const m of list) { const k = fmtDate(m.played_at, { day: 'numeric', month: 'long', year: 'numeric' }); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(m); }
   const qs = (t, p) => `#/matches?type=${t}${p ? '&p=' + p : ''}`;
-  const players = S.data.profiles.filter(p => p.status === 'approved').sort((a, b) => a.nickname.localeCompare(b.nickname));
+  const plist = S.data.profiles.filter(p => p.status === 'approved').sort((a, b) => a.nickname.localeCompare(b.nickname));
   return `
-  <div class="page-h"><h1>Матчи</h1><button class="btn sm" data-act="h2h-pick">⚔️ Личные встречи</button></div>
+  <div class="page-h"><h1>${isEditor() ? 'Матчи' : 'Мои матчи'}</h1><button class="btn sm" data-act="h2h-pick">⚔️ Личные встречи</button></div>
   <div class="seg">
     <a href="${qs('all', pl)}" class="${type === 'all' ? 'on' : ''}">Все</a>
     <a href="${qs('free', pl)}" class="${type === 'free' ? 'on' : ''}">Свободные</a>
     <a href="${qs('tournament', pl)}" class="${type === 'tournament' ? 'on' : ''}">Турнирные</a>
     <a href="${qs('doubles', pl)}" class="${type === 'doubles' ? 'on' : ''}">Пары</a>
   </div>
-  <select class="filter" data-act-change="filter-player" data-type="${type}">
-    <option value="">Все игроки</option>${players.map(p => `<option value="${p.id}" ${p.id === pl ? 'selected' : ''}>${esc(p.nickname)}</option>`).join('')}
-  </select>
+  ${isEditor() ? `<select class="filter" data-act-change="filter-player" data-type="${type}">
+    <option value="">Все игроки</option>${plist.map(p => `<option value="${p.id}" ${p.id === pl ? 'selected' : ''}>${esc(p.nickname)}</option>`).join('')}
+  </select>` : ''}
   ${[...groups].map(([k, ms]) => `<div class="day-h">${k}</div>${ms.map(m => matchCard(m, pl || null)).join('')}`).join('') || '<div class="empty">Матчей не найдено</div>'}`;
 }
 
@@ -774,7 +780,7 @@ function viewLive(r) {
   const t = l.tournament_id ? tById(l.tournament_id) : null;
   const panel = side => {
     const ids = sideIds(l, side);
-    const flag = g.matchPoint[side] ? 'Матчбол' : g.setPoint[side] ? 'Сетбол' : '';
+    const flag = g.matchPoint[side] ? 'Матчпоинт' : '';
     return `<div class="lv-panel ${g.winner === side ? 'won' : ''}">
       <div class="lv-who">${ids.map(id => ava(P(id), 'sm')).join('')}<b>${esc(sideName(l, side))}</b>${g.winner === null && g.server === side && log.length ? '<span class="lv-serve" title="Подаёт">🏓</span>' : ''}</div>
       <div class="lv-pts">${g.cur[side]}</div>
@@ -811,7 +817,7 @@ async function saveLive(l, btn) {
     tournament_id: l.tournament_id, stage: l.stage, grp: l.grp, round: l.round, slot: l.slot,
     sets: g.sets, sets1: g.won[0], sets2: g.won[1], winner_id: g.winner === 0 ? l.player1_id : l.player2_id,
     best_of: l.best_of, points_to: l.points_to, rated: l.rated, played_at: new Date().toISOString(), note: '',
-    status: editor ? 'approved' : 'pending', submitted_by: S.me.id,
+    status: editor ? 'approved' : 'pending', submitted_by: S.me.id, ...(l.is_test ? { is_test: true } : {}),
   };
   await busy(btn, async () => {
     await liveQueue;
@@ -1148,7 +1154,14 @@ function viewAdmin(r) {
       ${pend.map(m => `<div class="pend">${matchCard(m)}<div class="row-btns"><span class="muted small">Отправил: ${esc(P(m.submitted_by).nickname)}</span><button class="btn ghost sm" data-act="reject-match" data-id="${m.id}">Отклонить</button><button class="btn primary sm" data-act="approve-match" data-id="${m.id}">Подтвердить</button></div></div>`).join('') || '<div class="empty">Нечего подтверждать 👌</div>'}`;
   } else if (tab === 'players') {
     const list = S.data.profiles.filter(p => p.status === 'approved' || p.status === 'archived').sort((a, b) => (a.status > b.status) - (a.status < b.status) || a.nickname.localeCompare(b.nickname));
-    body = `<p class="muted small">«Помощник» может вносить результаты, вести турниры и подтверждать матчи — например, когда вас нет. Права можно включить и выключить в любой момент.</p>
+    const testCount = S.data.profiles.filter(p => p.is_test).length;
+    body = `<section class="card test-card"><div class="card-h"><h3>🧪 Тестовый режим</h3>
+        <label class="switch"><input type="checkbox" data-act-change="test-mode" ${S.testMode ? 'checked' : ''}><i></i><span>${S.testMode ? 'Включён' : 'Выключен'}</span></label></div>
+      <p class="muted small">Попробуйте всё в деле: создайте тестовых игроков, сыграйте ими матчи, турнир, живой счёт. Это видите только вы, в общий рейтинг не идёт, уведомления никому не приходят.</p>
+      ${S.testMode ? `<div class="row-btns"><button class="btn sm" data-act="test-create">+ Создать 4 тестовых игроков</button>${testCount ? `<button class="btn sm danger" data-act="test-purge">🗑️ Удалить все тестовые данные</button>` : ''}</div>
+        ${testCount ? `<p class="muted small">Тестовых игроков: ${testCount}. Удаление сотрёт их, их матчи и турниры и записи о них в журнале — бесследно.</p>` : ''}` : ''}
+    </section>
+    <p class="muted small">«Помощник» может вносить результаты, вести турниры и подтверждать матчи — например, когда вас нет. Права можно включить и выключить в любой момент.</p>
       <section class="card">${list.map(p => `<div class="pl-row ${p.status === 'archived' ? 'arch' : ''}">
         <div class="pl-top">${ava(p, 'sm')}<div class="rn"><b>${esc(p.nickname)}</b><small class="muted">${esc(p.full_name || '')} · ${esc(S.emails.get(p.id) || '')}</small></div><span class="pl-r">${fmtR(ratingOf(p.id))}</span></div>
         ${p.role === 'admin' ? '<div class="muted small">👑 Владелец клуба</div>' : `<div class="pl-ctl">
@@ -1373,6 +1386,7 @@ function openMatchForm(opts = {}) {
       best_of: st.bestOf, points_to: st.pointsTo, rated: dbl ? st.rated : true,
       tournament_id: fx.tournament_id ?? null, stage: fx.stage ?? null, grp: fx.grp ?? null, round: fx.round ?? null, slot: fx.slot ?? null,
       challenge_id: fx.challengeId ?? null, first_server: 0, log: [], status: 'live', scorer_id: S.me.id, started_by: S.me.id,
+      ...testFlag(),
     };
     await busy(btn, async () => {
       const l = await S.store.insert('live_matches', row);
@@ -1423,7 +1437,7 @@ function openMatchForm(opts = {}) {
     await busy(btn, async () => {
       if (m0) await S.store.update('matches', m0.id, row);
       else {
-        const saved = await S.store.insert('matches', { ...row, submitted_by: S.me.id });
+        const saved = await S.store.insert('matches', { ...row, submitted_by: S.me.id, ...testFlag() });
         if (fx.challengeId) await S.store.update('challenges', fx.challengeId, { status: 'done', match_id: saved.id }).catch(() => {});
       }
       closeModal();
@@ -1666,6 +1680,11 @@ const ACT = {
     const other = c.from_id === S.me.id ? c.to_id : c.from_id;
     openMatchForm({ fixed: { player1_id: S.me.id, player2_id: other, type: 'free', challengeId: c.id } });
   },
+  'test-create': el => busy(el, async () => { const n = await S.store.createTestPlayers(4); await refresh(); toast(`Создано тестовых игроков: ${n}`); }),
+  'test-purge': async el => {
+    if (!(await confirmDialog('Удалить всех тестовых игроков, их матчи, турниры, живые игры и записи о них в журнале? Настоящие данные не пострадают.', 'Удалить всё тестовое', true))) return;
+    await busy(el, async () => { await S.store.purgeTest(); await refresh(); toast('Тестовые данные удалены без следа'); });
+  },
   'restore-match': el => busy(el, async () => { await S.store.restoreMatch(+el.dataset.id); await refresh(); toast('Матч восстановлен'); }),
   'backup-now': el => busy(el, async () => { await S.store.backupNow(); toast('Резервная копия сохранена'); renderBackups(); }),
   'get-backup': el => busy(el, async () => { location.href = await S.store.backupUrl(el.dataset.name); }),
@@ -1765,6 +1784,11 @@ const csv = rows => '﻿' + rows.map(r => r.map(v => { const s = String(v ?? '')
 const CHANGE = {
   'filter-player': el => go(`#/matches?type=${el.dataset.type}${el.value ? '&p=' + el.value : ''}`),
   'h2h-sel': el => { const r = route(); const a = el.dataset.side === 'a' ? el.value : (r.args[0] || ''); const b = el.dataset.side === 'b' ? el.value : (r.args[1] || ''); go(`#/h2h/${a || S.me.id}/${b}`); },
+  'test-mode': async el => {
+    lsSet('ponghub_testmode', el.checked ? '1' : '0');
+    await refresh();
+    toast(el.checked ? 'Тестовый режим включён' : 'Тестовый режим выключен — тестовые данные скрыты');
+  },
   'toggle-editor': async el => {
     const p = P(el.dataset.id);
     await busy(null, async () => { await S.store.update('profiles', p.id, { role: el.checked ? 'editor' : 'player' }); await refresh(); toast(el.checked ? `${p.nickname} теперь может вносить результаты` : `У ${p.nickname} больше нет прав помощника`); });
@@ -1819,12 +1843,12 @@ const FORMS = {
     }
     const t = await S.store.insert('tournaments', {
       name: fd.get('name').trim(), date: fd.get('date') || null, place: fd.get('place').trim(), format,
-      best_of: +fd.get('best_of'), points_to: +fd.get('points_to'), status: 'active', participants: sorted, config, results: null, created_by: S.me.id,
+      best_of: +fd.get('best_of'), points_to: +fd.get('points_to'), status: 'active', participants: sorted, config, results: null, created_by: S.me.id, ...testFlag(),
     });
     closeModal(); await refresh(); go(`#/tournament/${t.id}`); toast('Турнир создан!');
   },
   challenge: async (f, fd) => {
-    await S.store.insert('challenges', { from_id: S.me.id, to_id: fd.get('to'), status: 'pending', message: fd.get('message').trim() || null });
+    await S.store.insert('challenges', { from_id: S.me.id, to_id: fd.get('to'), status: 'pending', message: fd.get('message').trim() || null, ...testFlag() });
     closeModal(); await refresh(); toast('Вызов отправлен ⚔️');
   },
   event: async (f, fd) => {

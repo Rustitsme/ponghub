@@ -637,3 +637,8 @@ select:disabled, input:disabled { opacity: .7; }
 .lv-tools { justify-content: center; }
 .lv-viewer { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 @media (min-width: 640px) { .lv-board { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; } }
+
+/* ── Тестовый режим ── */
+.test-banner { display: flex; align-items: center; gap: 8px; margin: 0 auto; max-width: 640px; padding: 8px 16px; background: color-mix(in srgb, #8ab4f8 25%, var(--surface)); border-bottom: 1px dashed #5b8fd8; font-size: 13px; }
+.test-banner span { flex: 1; }
+.test-card { border: 2px dashed #5b8fd8; }

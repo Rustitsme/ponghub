@@ -68,8 +68,8 @@ async function send(userIds: (string | null | undefined)[], msg: Msg): Promise<n
 }
 
 async function profiles() {
-  const { data } = await sb.from('profiles').select('id, nickname, role, status');
-  return data ?? [];
+  const { data } = await sb.from('profiles').select('id, nickname, role, status, is_test');
+  return (data ?? []).filter((p) => !p.is_test);
 }
 
 async function timezone(): Promise<string> {
@@ -156,7 +156,8 @@ async function loadAll() {
   const [p, m, s] = await Promise.all([
     sb.from('profiles').select('*'), sb.from('matches').select('*'), sb.from('settings').select('data').eq('id', 1).maybeSingle(),
   ]);
-  return { profiles: p.data ?? [], matches: m.data ?? [], settings: s.data?.data ?? {} };
+  // тестовые данные владельца в итоги не попадают
+  return { profiles: (p.data ?? []).filter((x) => !x.is_test), matches: (m.data ?? []).filter((x) => !x.is_test), settings: s.data?.data ?? {} };
 }
 
 async function weeklyDigest() {

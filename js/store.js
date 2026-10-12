@@ -129,6 +129,17 @@ class SupaStore {
     if (error) throw translateError(error);
   }
 
+  async createTestPlayers(n) {
+    const { data, error } = await this.sb.rpc('admin_create_test_players', { n });
+    if (error) throw translateError(error);
+    return data;
+  }
+
+  async purgeTest() {
+    const { error } = await this.sb.rpc('admin_purge_test');
+    if (error) throw translateError(error);
+  }
+
   async deleteMatch(id, reason) {
     const { error } = await this.sb.rpc('delete_match', { mid: id, reason });
     if (error) throw translateError(error);
@@ -307,6 +318,24 @@ class LocalStore {
     this.save();
   }
 
+  async createTestPlayers(n) {
+    let k = 0, made = 0;
+    while (made < n) {
+      k++;
+      if (this.db.profiles.some(p => p.nickname === 'Тест ' + k)) continue;
+      this.db.profiles.push({ id: uid(), nickname: 'Тест ' + k, full_name: 'Тестовый игрок', avatar: '🧪', color: '#8ab4f8', role: 'player', status: 'approved', is_test: true, created_at: new Date().toISOString() });
+      made++;
+    }
+    this.save(); return made;
+  }
+  async purgeTest() {
+    const ids = new Set(this.db.profiles.filter(p => p.is_test).map(p => p.id));
+    const touches = r => r.is_test || [r.player1_id, r.player2_id, r.player3_id, r.player4_id, r.from_id, r.to_id].some(x => ids.has(x));
+    for (const t of ['matches', 'live_matches', 'challenges', 'tournaments']) this.db[t] = (this.db[t] || []).filter(r => !touches(r));
+    this.db.profiles = this.db.profiles.filter(p => !p.is_test);
+    this.db.audit = (this.db.audit || []).filter(e => !touches(e.old_data || {}) && !touches(e.new_data || {}));
+    this.save();
+  }
   log(action, table, old, neu, reason) {
     (this.db.audit = this.db.audit || []).unshift({ id: (this.db.audit[0]?.id || 0) + 1, at: new Date().toISOString(), actor_id: this.db.session, action, table_name: table, record_id: (neu || old).id, old_data: old, new_data: neu, reason });
   }
