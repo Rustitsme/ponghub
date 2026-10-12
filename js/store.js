@@ -1,7 +1,7 @@
 // Слой данных: Supabase (боевой режим) или localStorage (демо-режим, если база не настроена).
 import { CONFIG } from './config.js';
 
-const TABLES = ['profiles', 'matches', 'tournaments', 'events'];
+const TABLES = ['profiles', 'matches', 'tournaments', 'events', 'challenges'];
 
 export async function createStore() {
   if (CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY) {
@@ -84,12 +84,13 @@ class SupaStore {
 
   async loadAll() {
     const q = t => this.sb.from(t).select('*');
-    const [p, m, t, e, s] = await Promise.all([
-      q('profiles'), q('matches'), q('tournaments'), q('events'),
+    const [p, m, t, e, c, s] = await Promise.all([
+      q('profiles'), q('matches'), q('tournaments'), q('events'), q('challenges'),
       this.sb.from('settings').select('data').eq('id', 1).maybeSingle(),
     ]);
     for (const r of [p, m, t, e, s]) if (r.error) throw translateError(r.error);
-    return { profiles: p.data, matches: m.data, tournaments: t.data, events: e.data, settings: s.data?.data || {} };
+    // вызовы появятся после обновления базы — без таблицы приложение тоже работает
+    return { profiles: p.data, matches: m.data, tournaments: t.data, events: e.data, challenges: c.error ? [] : c.data, settings: s.data?.data || {} };
   }
 
   async insert(table, row) {
@@ -125,6 +126,45 @@ class SupaStore {
   async toggleRsvp(eventId) {
     const { error } = await this.sb.rpc('toggle_rsvp', { event_id: eventId });
     if (error) throw translateError(error);
+  }
+
+  async deleteMatch(id, reason) {
+    const { error } = await this.sb.rpc('delete_match', { mid: id, reason });
+    if (error) throw translateError(error);
+  }
+
+  async deleteTournament(id, reason) {
+    const { error } = await this.sb.rpc('delete_tournament', { tid: id, reason });
+    if (error) throw translateError(error);
+  }
+
+  async loadAudit(limit = 300) {
+    const { data, error } = await this.sb.from('audit_log').select('*').order('at', { ascending: false }).limit(limit);
+    if (error) throw translateError(error);
+    return data;
+  }
+
+  async restoreMatch(logId) {
+    const { error } = await this.sb.rpc('restore_match', { log_id: logId });
+    if (error) throw translateError(error);
+  }
+
+  async listBackups() {
+    const { data, error } = await this.sb.storage.from('backups').list('', { sortBy: { column: 'name', order: 'desc' }, limit: 50 });
+    if (error) throw translateError(error);
+    return (data || []).filter(f => f.name.endsWith('.json'));
+  }
+
+  async backupUrl(name) {
+    const { data, error } = await this.sb.storage.from('backups').createSignedUrl(name, 120, { download: name });
+    if (error) throw translateError(error);
+    return data.signedUrl;
+  }
+
+  async backupNow() {
+    const { data, error } = await this.sb.functions.invoke('notify', { body: { action: 'backup' } });
+    if (error || !data?.name) throw new Error('Не удалось сделать резервную копию');
+    return data.name;
   }
 
   async adminDeletePlayer(id) {
@@ -233,12 +273,12 @@ class LocalStore {
 
   async loadAll() {
     const c = JSON.parse(JSON.stringify(this.db));
-    return { profiles: c.profiles, matches: c.matches, tournaments: c.tournaments, events: c.events, settings: c.settings || {} };
+    return { profiles: c.profiles, matches: c.matches, tournaments: c.tournaments, events: c.events, challenges: c.challenges || [], settings: c.settings || {} };
   }
 
   async insert(table, row) {
     const r = { id: uid(), created_at: new Date().toISOString(), ...row };
-    this.db[table].push(r); this.save();
+    (this.db[table] = this.db[table] || []).push(r); this.save();
     return r;
   }
 
@@ -266,6 +306,29 @@ class LocalStore {
     this.save();
   }
 
+  log(action, table, old, neu, reason) {
+    (this.db.audit = this.db.audit || []).unshift({ id: (this.db.audit[0]?.id || 0) + 1, at: new Date().toISOString(), actor_id: this.db.session, action, table_name: table, record_id: (neu || old).id, old_data: old, new_data: neu, reason });
+  }
+  async deleteMatch(id, reason) {
+    const m = this.db.matches.find(x => x.id === id);
+    this.db.matches = this.db.matches.filter(x => x.id !== id);
+    if (m) this.log('delete', 'matches', m, null, reason);
+    this.save();
+  }
+  async deleteTournament(id, reason) {
+    this.db.matches.filter(m => m.tournament_id === id).forEach(m => this.log('delete', 'matches', m, null, reason));
+    const t = this.db.tournaments.find(x => x.id === id);
+    if (t) this.log('delete', 'tournaments', t, null, reason);
+    await this.remove('tournaments', id);
+  }
+  async loadAudit() { return JSON.parse(JSON.stringify(this.db.audit || [])); }
+  async restoreMatch(logId) {
+    const e = (this.db.audit || []).find(x => x.id === logId);
+    if (e && !this.db.matches.some(m => m.id === e.old_data.id)) { this.db.matches.push({ ...e.old_data }); this.log('insert', 'matches', null, e.old_data, 'Восстановлен из журнала'); this.save(); }
+  }
+  async listBackups() { return []; }
+  async backupUrl() { throw new Error('В демо-режиме резервных копий нет'); }
+  async backupNow() { throw new Error('В демо-режиме резервных копий нет'); }
   async adminDeletePlayer(id) {
     const p = this.db.profiles.find(x => x.id === id);
     Object.assign(p, { nickname: 'Бывший игрок ' + id.slice(-4), full_name: null, photo_url: null, bio: null, hand: null, avatar: '👤', color: '#adb5bd', role: 'player', status: 'deleted' });
@@ -364,6 +427,13 @@ function seedDemo() {
     matches.push(makeMatch(t2ids[i], t2ids[j], t2Time + n * 9e5, { type: 'tournament', tournament_id: t2, stage: 'rr', best_of: 3 }));
   }
   matches.push({ ...makeMatch('demo-7', 'demo-8', now - 3 * 36e5), status: 'pending', submitted_by: 'demo-7' });
+  // Парные игры 2×2
+  const quads = [['demo-1', 'demo-5', 'demo-2', 'demo-6'], ['demo-3', 'demo-4', 'demo-1', 'demo-8'], ['demo-2', 'demo-7', 'demo-3', 'demo-5'], ['demo-1', 'demo-5', 'demo-3', 'demo-4'], ['demo-6', 'demo-2', 'demo-4', 'demo-7']];
+  quads.forEach(([a, c, b, d], k) => matches.push(makeMatch(a, b, now - (20 - k * 3) * day, { kind: 'doubles', player3_id: c, player4_id: d, best_of: 3 })));
+  const challenges = [
+    { id: uid(), from_id: 'demo-4', to_id: 'demo-1', status: 'pending', message: 'Реванш за кубок?', match_id: null, created_at: new Date(now - 2 * 36e5).toISOString() },
+    { id: uid(), from_id: 'demo-1', to_id: 'demo-3', status: 'accepted', message: '', match_id: null, created_at: new Date(now - day).toISOString() },
+  ];
 
   const tournaments = [
     { id: t1, name: 'Осенний кубок', date: new Date(t1Time).toISOString().slice(0, 10), place: 'Офис, 3 этаж', format: 'ko', best_of: 5, points_to: 11, status: 'finished', participants: seeds, config: { slots, thirdPlace: true }, results: { gold: fin.winner_id, silver: fin.winner_id === fin.player1_id ? fin.player2_id : fin.player1_id, bronze: [third.winner_id] }, created_by: 'demo-1', created_at: new Date(t1Time - day).toISOString() },
@@ -373,5 +443,5 @@ function seedDemo() {
     { id: uid(), title: 'Вечерняя игра', starts_at: new Date(now + 2 * day).toISOString(), place: 'Офис, 3 этаж', note: 'Берите свои ракетки', attendees: ['demo-1', 'demo-2', 'demo-5'], created_by: 'demo-1', created_at: new Date().toISOString() },
     { id: uid(), title: 'Зимний кубок', starts_at: new Date(now + 12 * day).toISOString(), place: 'Спортклуб «Ракетка»', note: 'Олимпийская система, до 3 побед', attendees: ['demo-1'], created_by: 'demo-1', created_at: new Date().toISOString() },
   ];
-  return { users, profiles, matches, tournaments, events, settings: {}, session: null };
+  return { users, profiles, matches, tournaments, events, challenges, audit: [], settings: {}, session: null };
 }

@@ -2,6 +2,7 @@ import { createStore } from './store.js';
 import {
   analyze, ranking, playerStats, ACHIEVEMENTS, insights, playerOfMonth, headToHead, validateSet,
   leagueOf, nextLeague, LEAGUES, DEFAULT_SETTINGS, ratingAt, setsFor, expected, marginFactor, winsNeeded, ts,
+  analyzeDoubles, rankingDoubles, isDoubles, seasons, seasonTable, monthKey, monthName, weekSummary,
 } from './engine.js';
 import {
   FORMATS, koBracket, koPlacings, roundName, pairings, standings, snakeGroups, playoffSlots, slotsFromSeeds, findPairMatch,
@@ -105,6 +106,9 @@ function derive() {
   S.me = S.user ? S.byId.get(S.user.id) || null : null;
   S.A = analyze(d.profiles.filter(p => ['approved', 'archived', 'deleted'].includes(p.status)), d.matches, d.settings);
   S.rank = ranking(S.A, d.profiles);
+  S.D = analyzeDoubles(d.profiles.filter(p => ['approved', 'archived', 'deleted'].includes(p.status)), d.matches, d.settings);
+  S.data.challenges = S.data.challenges || [];
+  S.seasons = seasons(S.A, d.profiles);
   document.title = settings().clubName || 'PongHub';
   if (S.data.settings && S.data.settings.icon) applyIcon();
 }
@@ -146,7 +150,7 @@ function render() {
   else if (S.me.status === 'rejected') html = gateView('🚫', 'Заявка отклонена', 'Администратор отклонил регистрацию. Если это ошибка — свяжитесь с ним лично.');
   else if (S.me.status === 'archived') html = gateView('📦', 'Профиль в архиве', 'Ваш профиль перенесён в архив. Свяжитесь с администратором.');
   else {
-    const views = { home: viewHome, rating: viewRating, matches: viewMatches, player: viewPlayer, h2h: viewH2H, tournaments: viewTournaments, tournament: viewTournament, calendar: viewCalendar, admin: viewAdmin, rules: viewRules, me: viewMe, help: viewHelp };
+    const views = { home: viewHome, rating: viewRating, matches: viewMatches, player: viewPlayer, h2h: viewH2H, tournaments: viewTournaments, tournament: viewTournament, calendar: viewCalendar, admin: viewAdmin, rules: viewRules, me: viewMe, help: viewHelp, seasons: viewSeasons };
     const v = views[r.name] || viewHome;
     html = shell(r, v(r));
   }
@@ -259,7 +263,30 @@ function recoveryView() {
 }
 
 // ───────────── Компоненты ─────────────
+const players = m => (isDoubles(m) ? [m.player1_id, m.player2_id, m.player3_id, m.player4_id] : [m.player1_id, m.player2_id]);
+const teamName = (m, side) => isDoubles(m)
+  ? `${P(side === 1 ? m.player1_id : m.player2_id).nickname} + ${P(side === 1 ? m.player3_id : m.player4_id).nickname}`
+  : P(side === 1 ? m.player1_id : m.player2_id).nickname;
+const wonBy = (m, id) => (isDoubles(m) ? (m.winner_id === m.player1_id) === (id === m.player1_id || id === m.player3_id) : m.winner_id === id);
+
+function doublesCard(m, ctx) {
+  const d = S.D.md.get(m.id);
+  const w1 = m.winner_id === m.player1_id;
+  const line = (id, right) => `<span class="dp ${right ? 'right' : ''}">${right ? '' : ava(P(id), 'xs')}<span class="nick">${esc(P(id).nickname)}</span>${right ? ava(P(id), 'xs') : ''}${d && m.rated !== false ? delta(d.delta[id], 'xs') : ''}</span>`;
+  const sets = (m.sets || []).map(s => `<span>${s[0]}:${s[1]}</span>`).join('');
+  const status = m.status === 'pending' ? '<span class="badge warn">ждёт подтверждения</span>' : '';
+  const hl = ctx ? (wonBy(m, ctx) ? 'hl-win' : 'hl-loss') : '';
+  return `<div class="mcard ${hl}" data-act="match" data-id="${m.id}">
+    <div class="mmeta"><span class="badge dbl">2×2</span>${m.rated === false ? '<span class="badge">без рейтинга</span>' : ''}${status}<span class="mdate">${fmtDT(m.played_at)}</span></div>
+    <div class="mrow"><div class="mp team ${w1 ? 'win' : ''}">${line(m.player1_id)}${line(m.player3_id)}</div>
+      <div class="mscore"><b class="${w1 ? 'w' : ''}">${m.sets1}</b>:<b class="${!w1 ? 'w' : ''}">${m.sets2}</b></div>
+      <div class="mp team right ${!w1 ? 'win' : ''}">${line(m.player2_id, true)}${line(m.player4_id, true)}</div></div>
+    ${sets ? `<div class="msets">${sets}</div>` : ''}
+  </div>`;
+}
+
 function matchCard(m, ctx = null) {
+  if (isDoubles(m)) return doublesCard(m, ctx);
   const a = P(m.player1_id), b = P(m.player2_id);
   const d = S.A.md.get(m.id);
   const t = m.tournament_id ? tById(m.tournament_id) : null;
@@ -272,7 +299,7 @@ function matchCard(m, ctx = null) {
   const hl = ctx ? (m.winner_id === ctx ? 'hl-win' : 'hl-loss') : '';
   return `<div class="mcard ${hl}" data-act="match" data-id="${m.id}">
     <div class="mmeta"><span class="badge ${m.type === 'tournament' ? 'tour' : 'free'}">${m.type === 'tournament' ? 'Турнир' : 'Свободная'}</span>
-      ${t ? `<span class="tname">${esc(t.name)}</span>` : ''}${status}<span class="mdate">${fmtDT(m.played_at)}</span></div>
+      ${t ? `<span class="tname">${esc(t.name)}</span>` : ''}${m.rated === false ? '<span class="badge">без рейтинга</span>' : ''}${status}<span class="mdate">${fmtDT(m.played_at)}</span></div>
     <div class="mrow">${side(a, w1, false)}<div class="mscore"><b class="${w1 ? 'w' : ''}">${m.sets1 ?? '-'}</b>:<b class="${!w1 ? 'w' : ''}">${m.sets2 ?? '-'}</b></div>${side(b, !w1, true)}</div>
     ${sets ? `<div class="msets">${sets}</div>` : ''}
   </div>`;
@@ -321,7 +348,7 @@ function formDots(form) {
   return `<div class="form">${form.map(x => `<i class="${x === 'W' ? 'w' : 'l'}">${x === 'W' ? 'В' : 'П'}</i>`).join('') || '<span class="muted small">нет матчей</span>'}</div>`;
 }
 
-const visibleMatch = m => m.status === 'approved' || isEditor() || m.submitted_by === S.me.id || m.player1_id === S.me.id || m.player2_id === S.me.id;
+const visibleMatch = m => m.status === 'approved' || isEditor() || m.submitted_by === S.me.id || players(m).includes(S.me.id);
 
 // ───────────── Главная ─────────────
 function viewHome() {
@@ -363,11 +390,14 @@ function viewHome() {
   ${pc.total ? `<a href="#/admin" class="alert">🔔 Ждут вашего решения: ${pc.users ? `${pc.users} ${plural(pc.users, 'заявка', 'заявки', 'заявок')} на регистрацию` : ''}${pc.users && pc.matches ? ', ' : ''}${pc.matches ? `${pc.matches} ${plural(pc.matches, 'матч', 'матча', 'матчей')}` : ''} →</a>` : ''}
   ${mine.length ? `<div class="alert info">⏳ ${mine.length} ${plural(mine.length, 'ваш результат ждёт', 'ваших результата ждут', 'ваших результатов ждут')} подтверждения администратором</div>` : ''}
 
+  ${challengesBlock()}
+  ${weekCard()}
+
   ${active.map(t => `<a href="#/tournament/${t.id}" class="card live-t"><span class="live">● LIVE</span><div><b>${esc(t.name)}</b><div class="muted small">${FORMATS[t.format]} · ${t.participants.length} участников</div></div><span>→</span></a>`).join('')}
 
-  ${pom ? `<section class="card pom" data-act="go" data-href="#/player/${pom.id}">
-    <div class="pom-badge">⭐ Игрок месяца</div>
-    <div class="pom-row">${ava(P(pom.id), 'md')}<div><b>${esc(P(pom.id).nickname)}</b><div class="muted small">прибавил ${fmtD(pom.g)} за ${new Date().toLocaleDateString('ru-RU', { month: 'long' })}</div></div></div>
+  ${pom ? `<section class="card pom" data-act="go" data-href="#/seasons">
+    <div class="pom-badge">⭐ Лидер сезона · ${new Date().toLocaleDateString('ru-RU', { month: 'long' })}</div>
+    <div class="pom-row">${ava(P(pom.id), 'md')}<div><b>${esc(P(pom.id).nickname)}</b><div class="muted small">прибавил ${fmtD(pom.g)} за месяц · все сезоны →</div></div></div>
   </section>` : ''}
 
   <section class="card">
@@ -395,7 +425,18 @@ function rankRow(x, i) {
 }
 
 // ───────────── Рейтинг ─────────────
-function viewRating() {
+function viewRating(r) {
+  const mode = r?.q.get('mode') === 'doubles' ? 'doubles' : 'singles';
+  const tabs = `<div class="seg"><a href="#/rating" class="${mode === 'singles' ? 'on' : ''}">Одиночный 1×1</a><a href="#/rating?mode=doubles" class="${mode === 'doubles' ? 'on' : ''}">Парный 2×2</a></div>`;
+  const head = `<div class="page-h"><h1>Рейтинг</h1><div class="row-inline"><a href="#/seasons" class="link">🏆 Сезоны</a><a href="#/rules" class="link">Как считается?</a></div></div>${tabs}`;
+  if (mode === 'doubles') {
+    const list = rankingDoubles(S.D, S.data.profiles);
+    return `${head}<p class="muted small">Отдельный рейтинг только по парным играм. У всех стартует с ${S.D.S.initialRating}.</p>
+      <section class="card">${list.map((x, i) => `<a href="#/player/${x.p.id}" class="rank-row ${x.p.id === S.me.id ? 'me' : ''}">
+        <span class="pos">${['🥇', '🥈', '🥉'][i] || i + 1}</span>${ava(x.p, 'sm')}
+        <span class="rn"><b>${esc(x.p.nickname)}</b><small>${x.st.wins}В · ${x.st.losses}П · ${pct(x.st.wins / x.g)}</small></span>
+        <span class="rr"><b>${fmtR(x.r)}</b></span></a>`).join('') || '<div class="empty">Парных игр пока не было. Нажмите «+» → «2×2».</div>'}</section>`;
+  }
   const top = S.rank.filter(x => x.g).slice(0, 3);
   const podium = top.length === 3 ? `
     <div class="podium">
@@ -407,7 +448,7 @@ function viewRating() {
   }).join('');
   const none = S.rank.filter(x => !x.g);
   return `
-  <div class="page-h"><h1>Рейтинг</h1><a href="#/rules" class="link">Как считается?</a></div>
+  ${head}
   ${podium}
   <section class="card">${byLeague || '<div class="empty">Пока никто не сыграл ни одного матча</div>'}</section>
   ${none.length ? `<section class="card"><div class="card-h"><h3>Ещё без матчей</h3></div>${none.map(x => rankRow(x, 0)).join('')}</section>` : ''}`;
@@ -418,8 +459,9 @@ function viewMatches(r) {
   const type = r.q.get('type') || 'all';
   const pl = r.q.get('p') || '';
   let list = S.data.matches.filter(visibleMatch);
-  if (type !== 'all') list = list.filter(m => m.type === type);
-  if (pl) list = list.filter(m => m.player1_id === pl || m.player2_id === pl);
+  if (type === 'doubles') list = list.filter(isDoubles);
+  else if (type !== 'all') list = list.filter(m => !isDoubles(m) && m.type === type);
+  if (pl) list = list.filter(m => players(m).includes(pl));
   list.sort((a, b) => ts(b) - ts(a));
   const groups = new Map();
   for (const m of list) { const k = fmtDate(m.played_at, { day: 'numeric', month: 'long', year: 'numeric' }); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(m); }
@@ -431,6 +473,7 @@ function viewMatches(r) {
     <a href="${qs('all', pl)}" class="${type === 'all' ? 'on' : ''}">Все</a>
     <a href="${qs('free', pl)}" class="${type === 'free' ? 'on' : ''}">Свободные</a>
     <a href="${qs('tournament', pl)}" class="${type === 'tournament' ? 'on' : ''}">Турнирные</a>
+    <a href="${qs('doubles', pl)}" class="${type === 'doubles' ? 'on' : ''}">Пары</a>
   </div>
   <select class="filter" data-act-change="filter-player" data-type="${type}">
     <option value="">Все игроки</option>${players.map(p => `<option value="${p.id}" ${p.id === pl ? 'selected' : ''}>${esc(p.nickname)}</option>`).join('')}
@@ -446,6 +489,8 @@ function viewPlayer(r) {
   if (p.status === 'deleted') return `<div class="empty">👤 Этот игрок удалён из клуба.<br>Его матчи сохранены в истории соперников.</div>`;
   const st = playerStats(id, S.A, S.data.tournaments);
   const rt = ratingOf(id);
+  const decay = S.A.decayTotal.get(id) || 0;
+  const titles = S.seasons.filter(t => t.finished && t.champion?.id === id);
   const pos = S.rank.findIndex(x => x.p.id === id) + 1;
   const hist = S.A.history.get(id) || [];
   const nl = nextLeague(rt);
@@ -464,11 +509,11 @@ function viewPlayer(r) {
       <div class="hero-rank"><small>место</small><b>${st.matches ? pos : '—'}</b><small>из ${S.rank.length}</small></div>
     </div>
     ${p.bio ? `<p class="bio">${esc(p.bio)}</p>` : ''}
-    <div class="hero-mid"><div><div class="big-num">${fmtR(rt)}</div><div class="muted small">пик ${fmtR(st.peak)} · старт ${fmtR(hist[0]?.r)}</div></div>
-      ${medalsTotal ? `<div class="medals">${'🥇'.repeat(st.medals.gold)}${'🥈'.repeat(st.medals.silver)}${'🥉'.repeat(st.medals.bronze)}</div>` : ''}</div>
+    <div class="hero-mid"><div><div class="big-num">${fmtR(rt)}</div><div class="muted small">пик ${fmtR(st.peak)} · старт ${fmtR(hist[0]?.r)}${decay > 0.005 ? ` · −${fmtR(decay)} за паузы в игре` : ''}</div></div>
+      ${medalsTotal || titles.length ? `<div class="medals" title="${titles.map(t => 'Чемпион сезона: ' + monthName(t.key)).join(', ')}">${'🏆'.repeat(titles.length)}${'🥇'.repeat(st.medals.gold)}${'🥈'.repeat(st.medals.silver)}${'🥉'.repeat(st.medals.bronze)}</div>` : ''}</div>
     ${nl ? `<div class="next-league"><span>До лиги «${nl.name}»: ${fmtR(nl.min - rt)}</span><div class="bar thin"><i style="width:${Math.max(4, Math.min(100, 100 - (nl.min - rt) * 5))}%"></i></div></div>` : ''}
     <div class="row-btns">
-      ${mine ? '<button class="btn ghost-light" data-act="edit-profile">✏️ Редактировать</button>' : `<a class="btn ghost-light" href="#/h2h/${S.me.id}/${id}">⚔️ Сравнить со мной</a>`}
+      ${mine ? '<button class="btn ghost-light" data-act="edit-profile">✏️ Редактировать</button>' : `<a class="btn ghost-light" href="#/h2h/${S.me.id}/${id}">📊 Сравнить</a>${p.status === 'approved' ? `<button class="btn ghost-light" data-act="challenge" data-id="${id}">⚔️ Вызвать на матч</button>` : ''}`}
     </div>
   </section>
 
@@ -497,6 +542,8 @@ function viewPlayer(r) {
     ${bar('Свободные игры', st.freeW, st.freeL)}
     ${st.ptsW + st.ptsL ? `<div class="muted small mt">Очки в партиях: ${st.ptsW}:${st.ptsL} (${pct(st.ptsW / (st.ptsW + st.ptsL))} розыгрышей выиграно)</div>` : ''}
   </section>
+
+  ${doublesBlock(id)}
 
   <section class="card"><div class="card-h"><h3>🏅 Достижения</h3><span class="muted small">${unlocked.length} из ${ACHIEVEMENTS.length}</span></div>
     <div class="ach-grid">${ACHIEVEMENTS.map(a => { const ok = a.test(st); const pr = !ok && a.prog ? a.prog(st) : null; return `<div class="ach ${ok ? 'ok' : ''}" title="${esc(a.desc)}"><span class="ach-i">${a.icon}</span><b>${a.name}</b><small>${esc(a.desc)}</small>${pr ? `<div class="bar thin"><i style="width:${Math.min(100, pr[0] / pr[1] * 100)}%"></i></div><small>${pr[0]}/${pr[1]}</small>` : ''}</div>`; }).join('')}</div>
@@ -687,6 +734,8 @@ function viewRules() {
       <li>Первые <b>${s.newcomerGames}</b> матчей рейтинг меняется в <b>${s.newcomerMult}×</b> быстрее, чтобы новичок быстрее нашёл свой уровень.</li>
       ${s.marginBonus ? '<li>Счёт тоже важен: победа всухую (3:0) даёт +10%, а победа в решающей партии (3:2) — −10%.</li>' : ''}
       <li>Рейтинг всегда пересчитывается по всей истории, поэтому исправление ошибочного матча обновляет всё автоматически.</li>
+      ${s.decayEnabled ? `<li><b>Пауза в игре:</b> после ${s.decayGraceDays} дней без матчей рейтинг снижается на ${s.decayPerWeek} в неделю, но не ниже стартового. Первый же матч останавливает снижение.</li>` : ''}
+      <li><b>Парные игры 2×2</b> считаются в отдельном парном рейтинге (вес до ${s.kDoubles}), по среднему рейтингу команд.</li>
     </ul>
     <h3>Сколько очков за турнирный матч</h3>
     <p class="muted small">Колонки — насколько рейтинг соперника выше (+) или ниже (−) вашего. Сверху — за победу, снизу — за поражение (для опытного игрока, счёт 3:1).</p>
@@ -695,6 +744,221 @@ function viewRules() {
     <h3>Лиги</h3>
     <div class="chips">${LEAGUES.map((l, i) => `<span class="league ${l.cls}">${l.name} ${l.min === -Infinity ? `< ${LEAGUES[1].min}` : `${l.min}${LEAGUES[i + 1] ? '–' + LEAGUES[i + 1].min : '+'}`}</span>`).join('')}</div>
   </section>`;
+}
+
+// ───────────── Вызовы на матч ─────────────
+function challengesBlock() {
+  const me = S.me.id;
+  const list = S.data.challenges.filter(c => (c.from_id === me || c.to_id === me) && ['pending', 'accepted'].includes(c.status))
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+  if (!list.length) return '';
+  const row = c => {
+    const incoming = c.to_id === me, other = P(incoming ? c.from_id : c.to_id);
+    const msg = c.message ? `<small class="muted">«${esc(c.message)}»</small>` : '';
+    let text, btns;
+    if (c.status === 'pending' && incoming) {
+      text = `<b>${esc(other.nickname)}</b> вызывает вас на матч`;
+      btns = `<button class="btn sm primary" data-act="ch-accept" data-id="${c.id}">Принять</button><button class="btn sm ghost" data-act="ch-decline" data-id="${c.id}">Отказать</button>`;
+    } else if (c.status === 'pending') {
+      text = `Вы вызвали <b>${esc(other.nickname)}</b> · ждём ответа`;
+      btns = `<button class="btn sm ghost" data-act="ch-cancel" data-id="${c.id}">Отменить</button>`;
+    } else {
+      text = `Вызов принят: вы и <b>${esc(other.nickname)}</b> — к столу!`;
+      btns = `<button class="btn sm primary" data-act="ch-result" data-id="${c.id}">Внести результат</button><button class="btn sm ghost" data-act="ch-cancel" data-id="${c.id}">Отменить</button>`;
+    }
+    return `<div class="ch-row">${ava(other, 'md')}<div class="rn"><span>${text}</span>${msg}</div><div class="ch-btns">${btns}</div></div>`;
+  };
+  return `<section class="card challenges"><div class="card-h"><h3>⚔️ Вызовы</h3></div>${list.map(row).join('')}</section>`;
+}
+
+function challengeStats(id) {
+  const cs = S.data.challenges;
+  return {
+    sent: cs.filter(c => c.from_id === id).length,
+    accepted: cs.filter(c => c.to_id === id && ['accepted', 'done'].includes(c.status)).length,
+  };
+}
+
+function openChallengeForm(toId) {
+  const p = P(toId);
+  const open = S.data.challenges.find(c => c.from_id === S.me.id && c.to_id === toId && ['pending', 'accepted'].includes(c.status));
+  if (open) return toast(`У вас уже есть активный вызов для ${p.nickname}`, 'warn');
+  const h = headToHead(S.A, S.me.id, toId);
+  openModal(`<form data-form="challenge" class="stack"><input type="hidden" name="to" value="${toId}">
+    <h3>Вызов на матч</h3>
+    <div class="ch-vs">${ava(S.me, 'lg')}<b>vs</b>${ava(p, 'lg')}</div>
+    <p class="center muted small">Личные встречи ${h.wa}:${h.wb} · шанс по рейтингу ${pct(expected(ratingOf(S.me.id), ratingOf(toId), S.A.S.spread))}</p>
+    <label>Сообщение<input name="message" maxlength="80" placeholder="Например: реванш после обеда?"></label>
+    <button class="btn primary">⚔️ Вызвать ${esc(p.nickname)}</button></form>`);
+}
+
+// ───────────── Итоги недели ─────────────
+function weekCard() {
+  const w = weekSummary(S.A, S.D, S.data.profiles);
+  if (!w.matches) return '';
+  const range = `${fmtDate(w.from)} – ${fmtDate(w.to - 1)}`;
+  const item = (icon, label, val) => `<div class="wk-item"><span>${icon}</span><div><small>${label}</small><b>${val}</b></div></div>`;
+  return `<section class="card week"><div class="card-h"><h3>📊 Итоги недели</h3><span class="muted small">${range}</span></div>
+    <div class="wk-grid">
+      ${item('🏓', 'Сыграно', `${w.matches} ${plural(w.matches, 'матч', 'матча', 'матчей')}${w.doubles ? ` (пар: ${w.doubles})` : ''}`)}
+      ${w.top ? item('📈', 'Рост недели', `${esc(P(w.top.id).nickname)} ${fmtD(w.top.g)}`) : ''}
+      ${w.active ? item('🔋', 'Самый активный', `${esc(P(w.active.id).nickname)} · ${w.active.n}`) : ''}
+      ${w.upset ? item('💥', 'Сенсация', `${esc(P(w.upset.w).nickname)} обыграл ${esc(P(w.upset.l).nickname)}`) : ''}
+    </div></section>`;
+}
+
+// ───────────── Парные игры в профиле ─────────────
+function doublesBlock(id) {
+  const st = S.D.stats.get(id);
+  if (!st || !st.matches) return '';
+  const r = S.D.rating.get(id);
+  const pos = rankingDoubles(S.D, S.data.profiles).findIndex(x => x.p.id === id) + 1;
+  const partners = [...st.partners].map(([pid, o]) => ({ pid, ...o, n: o.w + o.l })).sort((a, b) => b.n - a.n || b.w - a.w).slice(0, 4);
+  const recent = S.D.played.filter(m => players(m).includes(id)).slice(-5).reverse();
+  return `<section class="card"><div class="card-h"><h3>👥 Парные игры 2×2</h3><a class="link" href="#/rating?mode=doubles">Парный рейтинг →</a></div>
+    <div class="stat-grid in">
+      <div><b>${fmtR(r)}</b><small>парный рейтинг</small></div>
+      <div><b>${pos ? '#' + pos : '—'}</b><small>место</small></div>
+      <div><b class="up">${st.wins}</b><small>побед</small></div>
+      <div><b class="down">${st.losses}</b><small>поражений</small></div>
+    </div>
+    ${partners.length ? `<div class="card-h mt"><h3>Партнёры</h3></div>${partners.map(o => `<div class="opp-row">${ava(P(o.pid), 'sm')}<span class="rn"><b>${esc(P(o.pid).nickname)}</b><small>${o.n} ${plural(o.n, 'игра', 'игры', 'игр')} вместе</small></span><span class="h2h-score"><b class="up">${o.w}</b>:<b class="down">${o.l}</b></span></div>`).join('')}` : ''}
+    ${recent.map(m => matchCard(m, id)).join('')}
+  </section>`;
+}
+
+// ───────────── Сезоны ─────────────
+function viewSeasons() {
+  const list = S.seasons;
+  const min = S.A.S.seasonMinMatches;
+  const table = (t, live) => `
+    <section class="card season ${live ? 'live-season' : ''}">
+      <div class="card-h"><h3>${live ? '🔥 ' : '🏆 '}${monthName(t.key)}</h3><span class="muted small">${t.total} ${plural(t.total, 'матч', 'матча', 'матчей')}</span></div>
+      ${t.champion ? `<div class="champ">${ava(P(t.champion.id), 'md')}<div><small>${live ? 'Сейчас лидирует' : 'Чемпион сезона'}</small><b>${esc(P(t.champion.id).nickname)}</b><span class="up">${fmtD(t.champion.gain)}</span></div></div>` : `<p class="muted small">Пока никто не сыграл ${min} ${plural(min, 'матч', 'матча', 'матчей')} — нужно для борьбы за титул.</p>`}
+      ${t.eligible.slice(live ? 0 : 1, live ? 10 : 3).map((r, i) => `<a href="#/player/${r.id}" class="rank-row"><span class="pos">${live ? i + 1 : i + 2}</span>${ava(P(r.id), 'sm')}<span class="rn"><b>${esc(P(r.id).nickname)}</b><small>${r.matches} ${plural(r.matches, 'матч', 'матча', 'матчей')} · ${r.wins}В</small></span><span class="rr">${delta(r.gain)}</span></a>`).join('')}
+      ${live && t.rest.length ? `<p class="muted small mt">Ещё не набрали ${min} матча: ${t.rest.map(r => `${esc(P(r.id).nickname)} (${r.matches})`).join(', ')}</p>` : ''}
+    </section>`;
+  const cur = list.find(t => !t.finished);
+  const past = list.filter(t => t.finished);
+  return `<div class="page-h"><a href="#/rating" class="back">← Рейтинг</a></div>
+    <h1>Сезоны</h1>
+    <p class="muted small">Каждый месяц — отдельный сезон. Чемпион — тот, кто сильнее всех прибавил в рейтинге за месяц (нужно сыграть минимум ${min} ${plural(min, 'матч', 'матча', 'матчей')}). Общий рейтинг не обнуляется. 1-го числа всем приходит уведомление с итогами.</p>
+    ${cur ? table(cur, true) : ''}
+    ${past.length ? `<div class="sec-h"><h3>Прошлые сезоны</h3></div>${past.map(t => table(t, false)).join('')}` : ''}
+    ${!list.length ? '<div class="empty">Сезоны появятся после первых матчей</div>' : ''}`;
+}
+
+// ───────────── Карточка результата ─────────────
+async function shareMatch(m) {
+  const c = document.createElement('canvas');
+  c.width = 1080; c.height = 1080;
+  const x = c.getContext('2d');
+  const g = x.createLinearGradient(0, 0, 0, 1080);
+  g.addColorStop(0, '#3b7fd4'); g.addColorStop(1, '#1c4f9c');
+  x.fillStyle = g; x.fillRect(0, 0, 1080, 1080);
+  x.strokeStyle = 'rgba(255,255,255,.9)'; x.lineWidth = 14; x.strokeRect(50, 50, 980, 980);
+  x.strokeStyle = 'rgba(255,255,255,.25)'; x.lineWidth = 6; x.beginPath(); x.moveTo(540, 50); x.lineTo(540, 1030); x.stroke();
+  const logoImg = await new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = logo(); });
+  if (logoImg) x.drawImage(logoImg, 100, 100, 90, 90);
+  x.fillStyle = '#fff'; x.textBaseline = 'middle';
+  x.font = '800 54px "Barlow Condensed", sans-serif'; x.textAlign = 'left'; x.fillText('PONGHUB', 210, 147);
+  x.font = '500 34px Inter, sans-serif'; x.textAlign = 'right';
+  x.fillText(isDoubles(m) ? 'Парная игра 2×2' : m.type === 'tournament' ? 'Турнирный матч' : 'Свободная игра', 980, 147);
+  const w1 = m.winner_id === m.player1_id;
+  const fit = (txt, max, size) => { let s2 = size; do { x.font = `800 ${s2}px "Barlow Condensed", sans-serif`; s2 -= 2; } while (x.measureText(txt).width > max && s2 > 30); };
+  const name = (txt, cx, y, win) => { x.textAlign = 'center'; fit(txt, 400, 76); x.fillStyle = win ? '#fff' : 'rgba(255,255,255,.65)'; x.fillText(txt, cx, y); };
+  name(teamName(m, 1), 290, 420, w1); name(teamName(m, 2), 790, 420, !w1);
+  x.fillStyle = '#16181d'; x.beginPath(); x.roundRect(370, 500, 340, 200, 36); x.fill();
+  x.fillStyle = '#fff'; x.textAlign = 'center'; x.font = '800 150px "Barlow Condensed", sans-serif'; x.fillText(`${m.sets1}:${m.sets2}`, 540, 605);
+  if (m.sets?.length) { x.font = '600 40px Inter, sans-serif'; x.fillStyle = 'rgba(255,255,255,.85)'; x.fillText(m.sets.map(s2 => s2.join(':')).join('   '), 540, 780); }
+  const d = isDoubles(m) ? S.D.md.get(m.id) : S.A.md.get(m.id);
+  if (d && m.rated !== false) {
+    const ids = players(m), wid = ids.find(id => wonBy(m, id));
+    x.font = '700 44px Inter, sans-serif'; x.fillStyle = '#7dffc4';
+    x.fillText(`${teamName(m, w1 ? 1 : 2)}  ${fmtD(d.delta[wid])} к рейтингу`, 540, 860);
+  }
+  x.font = '500 32px Inter, sans-serif'; x.fillStyle = 'rgba(255,255,255,.75)';
+  x.fillText(new Date(m.played_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) + ' · ' + (settings().clubName || 'PongHub'), 540, 960);
+  const blob = await new Promise(res => c.toBlob(res, 'image/png'));
+  const file = new File([blob], 'ponghub-match.png', { type: 'image/png' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: 'PongHub', text: `${teamName(m, 1)} ${m.sets1}:${m.sets2} ${teamName(m, 2)}` }); } catch { /* закрыли меню */ }
+  } else {
+    download('ponghub-match.png', blob, 'image/png');
+    toast('Картинка сохранена — отправьте её в чат');
+  }
+}
+
+// ───────────── Удаление с причиной ─────────────
+const DELETE_REASONS = ['Ошибка при вводе — внесу заново', 'Матч не состоялся', 'Дубликат', 'Неверные игроки'];
+function askReason(title, text) {
+  return new Promise(res => {
+    openModal(`<form class="stack" id="reason-form"><h3>${esc(title)}</h3><p class="muted small">${esc(text)}</p>
+      <div class="reasons">${DELETE_REASONS.map((r, i) => `<label class="pick"><input type="radio" name="r" value="${esc(r)}" ${i === 0 ? 'checked' : ''}><span>${esc(r)}</span></label>`).join('')}
+        <label class="pick"><input type="radio" name="r" value="other"><span>Другое…</span></label></div>
+      <input name="other" maxlength="120" placeholder="Опишите причину" hidden>
+      <p class="muted small">Причина сохранится в журнале изменений, владелец её увидит.</p>
+      <div class="row-btns"><button type="button" class="btn ghost" id="rs-no">Отмена</button><button class="btn danger">Удалить</button></div></form>`, sh => {
+      const f = sh.querySelector('form');
+      f.addEventListener('change', () => { f.other.hidden = f.r.value !== 'other'; if (!f.other.hidden) f.other.focus(); });
+      sh.querySelector('#rs-no').onclick = () => { closeModal(); res(null); };
+      f.addEventListener('submit', e => {
+        e.preventDefault(); e.stopPropagation();
+        const v = f.r.value === 'other' ? f.other.value.trim() : f.r.value;
+        if (!v) { f.other.focus(); return; }
+        closeModal(); res(v);
+      });
+    });
+  });
+}
+
+// ───────────── Журнал изменений ─────────────
+function auditText(e) {
+  const who = e.actor_id ? esc(P(e.actor_id).nickname) : 'Система';
+  const m = e.new_data || e.old_data || {};
+  const score = d => d ? `${esc(isDoubles(d) ? teamName(d, 1) : P(d.player1_id).nickname)} ${d.sets1}:${d.sets2} ${esc(isDoubles(d) ? teamName(d, 2) : P(d.player2_id).nickname)}` : '';
+  if (e.table_name === 'matches') {
+    if (e.action === 'insert') return `${who} внёс матч ${score(m)}${m.status === 'pending' ? ' (на подтверждение)' : ''}`;
+    if (e.action === 'delete') return `${who} <b class="down">удалил</b> матч ${score(e.old_data)}`;
+    const o = e.old_data, n = e.new_data;
+    if (o.status !== n.status && n.status === 'approved') return `${who} подтвердил матч ${score(n)}`;
+    if (o.sets1 !== n.sets1 || o.sets2 !== n.sets2 || JSON.stringify(o.sets) !== JSON.stringify(n.sets)) return `${who} <b>изменил счёт</b>: было ${score(o)} → стало ${score(n)}`;
+    return `${who} изменил матч ${score(n)}`;
+  }
+  if (e.table_name === 'tournaments') return `${who} ${e.action === 'insert' ? 'создал' : e.action === 'delete' ? '<b class="down">удалил</b>' : 'изменил'} турнир «${esc(m.name)}»${e.action === 'update' && e.new_data?.status === 'finished' && e.old_data?.status !== 'finished' ? ' (завершён)' : ''}`;
+  if (e.table_name === 'profiles') {
+    const o = e.old_data || {}, n = e.new_data || {};
+    if (o.status !== n.status) return `${who}: ${esc(o.nickname)} — статус «${o.status}» → «${n.status}»`;
+    if (o.role !== n.role) return `${who}: ${esc(n.nickname)} — ${n.role === 'editor' ? 'назначен помощником' : 'больше не помощник'}`;
+    if (o.initial_rating !== n.initial_rating) return `${who}: ${esc(n.nickname)} — стартовый рейтинг ${o.initial_rating ?? 'по умолчанию'} → ${n.initial_rating ?? 'по умолчанию'}`;
+    return `${who}: ник «${esc(o.nickname)}» → «${esc(n.nickname)}»`;
+  }
+  if (e.table_name === 'settings') return `${who} изменил настройки рейтинга`;
+  return `${who}: ${e.action} ${e.table_name}`;
+}
+
+async function renderAudit() {
+  const box = document.getElementById('audit-box');
+  if (!box) return;
+  let list;
+  try { list = await S.store.loadAudit(300); } catch (e) { box.innerHTML = `<div class="empty">Журнал станет доступен после обновления базы</div>`; return; }
+  const onlyDel = box.dataset.filter === 'del';
+  if (onlyDel) list = list.filter(e => e.action === 'delete');
+  const existing = new Set(S.data.matches.map(m => m.id));
+  box.innerHTML = list.map(e => `<div class="log-row ${e.action === 'delete' ? 'del' : ''}">
+      <div class="log-main"><span>${auditText(e)}</span>${e.reason ? `<small class="log-reason">Причина: ${esc(e.reason)}</small>` : ''}<small class="muted">${fmtDT(e.at)}</small></div>
+      ${e.action === 'delete' && e.table_name === 'matches' && !existing.has(e.record_id) ? `<button class="btn xs" data-act="restore-match" data-id="${e.id}">Восстановить</button>` : ''}
+    </div>`).join('') || '<div class="empty">Записей пока нет</div>';
+}
+
+async function renderBackups() {
+  const box = document.getElementById('backup-box');
+  if (!box) return;
+  let list = [];
+  try { list = await S.store.listBackups(); } catch { /* */ }
+  box.innerHTML = list.length
+    ? list.map(f => `<div class="opp-row"><span class="rn"><b>${esc(f.name.replace('backup-', '').replace('.json', '').replace('T', ' '))}</b><small>${Math.round((f.metadata?.size || 0) / 1024)} КБ</small></span><button class="btn xs" data-act="get-backup" data-name="${esc(f.name)}">Скачать</button></div>`).join('')
+    : '<p class="muted small">Копий пока нет. Первая появится в понедельник ночью — или нажмите «Сделать копию сейчас».</p>';
 }
 
 // ───────────── Подсказка установки для iPhone ─────────────
@@ -728,6 +992,9 @@ function viewHelp() {
   <h1>Как пользоваться</h1>
   ${sec('🏓 Свободная игра', `<p>Обычная игра в перерыв. Нажмите <b>«+»</b>, выберите игроков, формат и счёт по партиям.</p>
     <ul><li>Вы и помощники вносите результат сразу.</li><li>Игрок может отправить результат сам — он попадёт в рейтинг после подтверждения владельцем или помощником.</li><li>Свободная игра весит в рейтинге вдвое меньше турнирной.</li></ul>`)}
+  ${sec('👥 Парные игры 2×2', `<p>«+» → <b>«Пары 2×2»</b>, выберите две команды и счёт. Парные игры считаются в <b>отдельном парном рейтинге</b> (вкладка «Парный 2×2» в рейтинге) и не трогают одиночный. Переключатель «Учитывать в парном рейтинге» можно выключить для разминочной игры.</p>`)}
+  ${sec('⚔️ Вызов на матч', `<p>Откройте профиль соперника → <b>«Вызвать на матч»</b>. Ему придёт уведомление, он принимает или отказывается. После игры нажмите на главной <b>«Внести результат»</b>.</p>`)}
+  ${sec('🏆 Сезоны и итоги недели', `<p>Каждый месяц — сезон: чемпион тот, кто сильнее всех вырос в рейтинге за месяц. Каждый понедельник приходят итоги прошлой недели. Если долго не играть, рейтинг понемногу снижается (но не ниже стартового).</p>`)}
   ${sec('🏆 Турнир по шагам', `<ol>
     <li><b>Турниры → «Создать».</b> Название, дата, где проходит (необязательно), формат, до скольких побед и до скольких очков партия.</li>
     <li><b>Отметьте участников.</b> Приложение само составит пары и сетку по текущему рейтингу.</li>
@@ -785,7 +1052,7 @@ function viewMe() {
 // ───────────── Админка ─────────────
 function viewAdmin(r) {
   if (!isEditor()) return '<div class="empty">Нет доступа</div>';
-  const tabs = isAdmin() ? [['reqs', 'Заявки'], ['matches', 'Матчи'], ['players', 'Игроки'], ['rating', 'Рейтинг'], ['data', 'Данные']] : [['matches', 'Матчи']];
+  const tabs = isAdmin() ? [['reqs', 'Заявки'], ['matches', 'Матчи'], ['players', 'Игроки'], ['log', 'Журнал'], ['rating', 'Рейтинг'], ['data', 'Данные']] : [['matches', 'Матчи']];
   const tab = tabs.some(t => t[0] === r.args[0]) ? r.args[0] : tabs[0][0];
   const pc = pendingCounts();
   const cnt = { reqs: pc.users, matches: pc.matches };
@@ -812,6 +1079,11 @@ function viewAdmin(r) {
           <button class="btn xs ghost danger" data-act="delete-user" data-id="${p.id}">Удалить</button>
         </div>`}</div>`).join('')}</section>
       <p class="muted small">«В архив» скрывает игрока из рейтинга, но сохраняет историю его матчей.</p>`;
+  } else if (tab === 'log') {
+    const del = r.q.get('f') === 'del';
+    body = `<p class="muted small">Все изменения: кто внёс, исправил или удалил матч, турнир, права и настройки. Удалённый матч можно восстановить. Если матч удалил помощник, вам приходит уведомление с причиной.</p>
+      <div class="seg"><a href="#/admin/log" class="${del ? '' : 'on'}">Всё</a><a href="#/admin/log?f=del" class="${del ? 'on' : ''}">Только удаления</a></div>
+      <section class="card" id="audit-box" data-filter="${del ? 'del' : ''}"><div class="muted small">Загружаю…</div></section>`;
   } else if (tab === 'rating') {
     const s = settings();
     const f = (k, label, hint, step = 1) => `<label>${label}<input type="number" name="${k}" value="${s[k]}" step="${step}" min="0"><small class="muted">${hint}</small></label>`;
@@ -824,6 +1096,13 @@ function viewAdmin(r) {
       ${f('newcomerGames', 'Матчей «новичка»', 'Сколько первых матчей рейтинг меняется быстрее', 1)}
       ${f('newcomerMult', 'Ускорение для новичков', 'Множитель для первых матчей', 0.1)}
       <label class="switch"><input type="checkbox" name="marginBonus" ${s.marginBonus ? 'checked' : ''}><i></i><span>Учитывать счёт (3:0 весит больше, чем 3:2)</span></label>
+      ${f('kDoubles', 'Вес парной игры 2×2 (K)', 'Максимум очков парного рейтинга за игру', 0.5)}
+      <hr><b class="small">Снижение рейтинга без игр</b>
+      <label class="switch"><input type="checkbox" name="decayEnabled" ${s.decayEnabled ? 'checked' : ''}><i></i><span>Включено</span></label>
+      ${f('decayGraceDays', 'Дней без игр без штрафа', 'После этого рейтинг начинает снижаться', 1)}
+      ${f('decayPerWeek', 'Минус за каждую неделю', 'Рейтинг не опускается ниже стартового', 0.1)}
+      ${f('seasonMinMatches', 'Матчей для борьбы за титул сезона', 'Минимум матчей за месяц, чтобы стать чемпионом', 1)}
+      <hr>
       <div><b class="small">Иконка приложения</b><div class="icon-pick">${Object.entries(ICON_VARIANTS).map(([k, l]) => `<label><input type="radio" name="icon" value="${k}" ${iconChoice() === k ? 'checked' : ''}><img src="icons/${k}.svg" alt="" width="64" height="64"><span>${l}</span></label>`).join('')}</div>
         <small class="muted">Меняется в приложении сразу. На главном экране телефона иконка обновится после переустановки.</small></div>
       <div class="calc" id="calc"></div>
@@ -836,6 +1115,9 @@ function viewAdmin(r) {
       <button class="btn" data-act="export-matches">📋 Все матчи (Excel/CSV)</button>
       <button class="btn ghost" data-act="export-json">💾 Полная резервная копия (JSON)</button>
     </section>
+    <section class="card"><div class="card-h"><h3>🗄️ Автоматические копии</h3><button class="btn sm" data-act="backup-now">Сделать копию сейчас</button></div>
+      <p class="muted small">Каждый понедельник ночью база сама сохраняет полную копию. Хранятся 12 последних (≈ 3 месяца).</p>
+      <div id="backup-box"><div class="muted small">Загружаю…</div></div></section>
     <section class="card"><div class="card-h"><h3>Статистика клуба</h3></div>
       <div class="stat-grid in">
         <div><b>${S.data.profiles.filter(p => p.status === 'approved').length}</b><small>игроков</small></div>
@@ -871,7 +1153,8 @@ function updateCalc(form) {
 
 // ───────────── Формы в модальных окнах ─────────────
 function playerOptions(sel, exclude) {
-  return S.data.profiles.filter(p => p.status === 'approved' && p.id !== exclude).sort((a, b) => a.nickname.localeCompare(b.nickname))
+  const ex = [].concat(exclude || []);
+  return S.data.profiles.filter(p => p.status === 'approved' && (p.id === sel || !ex.includes(p.id))).sort((a, b) => a.nickname.localeCompare(b.nickname))
     .map(p => `<option value="${p.id}" ${p.id === sel ? 'selected' : ''}>${esc(p.nickname)} · ${fmtR(ratingOf(p.id))}</option>`).join('');
 }
 
@@ -890,8 +1173,15 @@ function openMatchForm(opts = {}) {
     s1: m0?.sets1 ?? '', s2: m0?.sets2 ?? '',
     date: toLocalInput(m0?.played_at || new Date()),
     note: m0?.note || '',
+    kind: m0?.kind || 'singles',
+    p3: m0?.player3_id || '', p4: m0?.player4_id || '',
+    rated: m0 ? m0.rated !== false : true,
   };
   const lockPlayers = !!(fx.player1_id || m0?.tournament_id);
+  const canDoubles = !fx.player1_id && !m0?.tournament_id && !fx.tournament_id && !(m0 && m0.kind !== 'doubles');
+  const team = n => (st.kind === 'doubles'
+    ? [n === 1 ? st.p1 : st.p2, n === 1 ? st.p3 : st.p4].filter(Boolean).map(id => P(id).nickname).join(' + ') || `Команда ${n}`
+    : (n === 1 ? st.p1 : st.p2) ? P(n === 1 ? st.p1 : st.p2).nickname : `Игрок ${n}`);
   const lockFormat = !!(fx.tournament_id || m0?.tournament_id);
   const lockP1 = !editor;
   const tour = tById(fx.tournament_id || m0?.tournament_id);
@@ -901,7 +1191,7 @@ function openMatchForm(opts = {}) {
     let a = 0, b = 0;
     if (st.simple) { a = +st.s1 || 0; b = +st.s2 || 0; }
     else st.sets.forEach(([x, y]) => { if (x !== '' && y !== '' && +x !== +y) (+x > +y ? a++ : b++); });
-    const n1 = st.p1 ? P(st.p1).nickname : 'Игрок 1', n2 = st.p2 ? P(st.p2).nickname : 'Игрок 2';
+    const n1 = team(1), n2 = team(2);
     const win = a >= need ? n1 : b >= need ? n2 : null;
     return `<b>${a}:${b}</b> ${win ? `— победа <b>${esc(win)}</b>` : `<span class="muted">(до ${need} ${plural(need, 'победы', 'побед', 'побед')})</span>`}`;
   };
@@ -913,12 +1203,24 @@ function openMatchForm(opts = {}) {
       <h3>${m0 ? 'Изменить матч' : editor ? 'Новый матч' : 'Отправить результат'}</h3>
       ${tour ? `<div class="chip">🏆 ${esc(tour.name)}</div>` : ''}
       ${!editor ? '<p class="muted small">Результат попадёт в рейтинг после подтверждения администратором.</p>' : ''}
-      <div class="vs-pick">
+      ${canDoubles && !m0 ? `<div class="seg"><button type="button" data-k="kind" data-v="singles" class="${st.kind === 'singles' ? 'on' : ''}">🏓 1×1</button><button type="button" data-k="kind" data-v="doubles" class="${st.kind === 'doubles' ? 'on' : ''}">👥 Пары 2×2</button></div>` : ''}
+      ${st.kind === 'doubles' ? `<div class="teams">
+          <div class="team-box"><small>Команда 1</small>
+            <select name="p1" ${lockP1 ? 'disabled' : ''}><option value="">Игрок</option>${playerOptions(st.p1, [st.p2, st.p3, st.p4])}</select>
+            <select name="p3"><option value="">Партнёр</option>${playerOptions(st.p3, [st.p1, st.p2, st.p4])}</select></div>
+          <span class="vs">vs</span>
+          <div class="team-box"><small>Команда 2</small>
+            <select name="p2"><option value="">Игрок</option>${playerOptions(st.p2, [st.p1, st.p3, st.p4])}</select>
+            <select name="p4"><option value="">Партнёр</option>${playerOptions(st.p4, [st.p1, st.p2, st.p3])}</select></div>
+        </div>
+        <label class="switch"><input type="checkbox" name="rated" ${st.rated ? 'checked' : ''}><i></i><span>Учитывать в парном рейтинге</span></label>
+        <p class="hint">Парные игры идут в <b>отдельный парный рейтинг</b> и не влияют на одиночный. Выключите, если игра была просто «для разминки».</p>`
+      : `<div class="vs-pick">
         <select name="p1" ${lockPlayers || lockP1 ? 'disabled' : ''}><option value="">Игрок 1</option>${playerOptions(st.p1, st.p2)}</select>
         <span>vs</span>
         <select name="p2" ${lockPlayers ? 'disabled' : ''}><option value="">Игрок 2</option>${playerOptions(st.p2, st.p1)}</select>
-      </div>
-      ${editor && !lockFormat ? `<div class="seg"><button type="button" data-k="type" data-v="free" class="${st.type === 'free' ? 'on' : ''}">Свободная игра</button><button type="button" data-k="type" data-v="tournament" class="${st.type === 'tournament' ? 'on' : ''}">Турнирный матч</button></div>
+      </div>`}
+      ${editor && !lockFormat && st.kind === 'singles' ? `<div class="seg"><button type="button" data-k="type" data-v="free" class="${st.type === 'free' ? 'on' : ''}">Свободная игра</button><button type="button" data-k="type" data-v="tournament" class="${st.type === 'tournament' ? 'on' : ''}">Турнирный матч</button></div>
         ${st.type === 'tournament' ? '<p class="hint">Для турнира, созданного в приложении, счёт вносится на странице турнира. Здесь — разовый важный матч или матч турнира вне приложения: он просто весит в рейтинге больше.</p>' : ''}` : ''}
       <div class="fmt-row">
         <div><small class="muted">Играем до</small><div class="seg sm">${[[1, '1'], [3, '2'], [5, '3'], [7, '4']].map(([v, l]) => `<button type="button" data-k="bestOf" data-v="${v}" class="${st.bestOf === v ? 'on' : ''}" ${lockFormat ? 'disabled' : ''}>${l}</button>`).join('')}</div><small class="muted">побед в партиях</small></div>
@@ -926,7 +1228,7 @@ function openMatchForm(opts = {}) {
       </div>
       <label class="switch"><input type="checkbox" name="simple" ${st.simple ? 'checked' : ''}><i></i><span>Знаю только итоговый счёт по партиям</span></label>
       ${st.simple ? `<div class="sets-simple"><input type="number" name="s1" min="0" max="4" value="${st.s1}" placeholder="0"><span>:</span><input type="number" name="s2" min="0" max="4" value="${st.s2}" placeholder="0"></div>`
-        : `<div class="sets-grid"><div class="sg-h"><span></span><span>${esc(st.p1 ? P(st.p1).nickname : 'Игрок 1')}</span><span>${esc(st.p2 ? P(st.p2).nickname : 'Игрок 2')}</span></div>
+        : `<div class="sets-grid"><div class="sg-h"><span></span><span>${esc(team(1))}</span><span>${esc(team(2))}</span></div>
           ${rows.map((s, i) => `<div class="sg-row"><span>Партия ${i + 1}</span><input type="number" inputmode="numeric" min="0" max="99" data-set="${i}" data-side="0" value="${s[0]}"><input type="number" inputmode="numeric" min="0" max="99" data-set="${i}" data-side="1" value="${s[1]}"></div>`).join('')}</div>`}
       <div class="mf-sum">${summary()}</div>
       <label>Дата и время<input type="datetime-local" name="date" value="${st.date}"></label>
@@ -939,11 +1241,12 @@ function openMatchForm(opts = {}) {
     draw(sh);
     sh.addEventListener('click', async e => {
       const b = e.target.closest('[data-k]');
-      if (b && !b.disabled) { const k = b.dataset.k; st[k] = k === 'type' ? b.dataset.v : +b.dataset.v; draw(sh); return; }
+      if (b && !b.disabled) { const k = b.dataset.k; st[k] = k === 'type' || k === 'kind' ? b.dataset.v : +b.dataset.v; if (k === 'kind' && st.kind === 'doubles' && st.bestOf === 5) st.bestOf = 3; draw(sh); return; }
       const act = e.target.closest('[data-mf]')?.dataset.mf;
       if (act === 'save') saveMatch(e.target.closest('button'));
-      if (act === 'delete' && await confirmDialog('Удалить этот матч? Рейтинг будет пересчитан.', 'Удалить', true)) {
-        await busy(null, async () => { await S.store.remove('matches', m0.id); toast('Матч удалён'); await refresh(); });
+      if (act === 'delete') {
+        const reason = await askReason('Удалить матч?', 'Рейтинг будет пересчитан. Укажите причину.');
+        if (reason) await busy(null, async () => { await S.store.deleteMatch(m0.id, reason); toast('Матч удалён'); await refresh(); });
       }
     });
     sh.addEventListener('input', e => {
@@ -960,7 +1263,8 @@ function openMatchForm(opts = {}) {
     });
     sh.addEventListener('change', e => {
       const t = e.target;
-      if (t.name === 'p1' || t.name === 'p2') { st[t.name] = t.value; draw(sh); }
+      if (['p1', 'p2', 'p3', 'p4'].includes(t.name)) { st[t.name] = t.value; draw(sh); }
+      if (t.name === 'rated') st.rated = t.checked;
       if (t.name === 'simple') { st.simple = t.checked; draw(sh); }
       if (t.classList.contains('pts-custom') && +t.value >= 5) { st.pointsTo = +t.value; draw(sh); }
     });
@@ -968,8 +1272,16 @@ function openMatchForm(opts = {}) {
 
   async function saveMatch(btn) {
     const err = msg => { $modal.querySelector('.mf-err').textContent = msg; };
-    if (!st.p1 || !st.p2) return err('Выберите обоих игроков');
-    if (st.p1 === st.p2) return err('Игрок не может играть сам с собой');
+    const dbl = st.kind === 'doubles';
+    if (dbl) {
+      const ids = [st.p1, st.p2, st.p3, st.p4];
+      if (ids.some(x => !x)) return err('Выберите всех четырёх игроков');
+      if (new Set(ids).size < 4) return err('Один игрок не может быть в двух местах сразу');
+      if (!editor && !ids.includes(S.me.id)) return err('Можно отправить только игру, в которой вы участвовали');
+    } else {
+      if (!st.p1 || !st.p2) return err('Выберите обоих игроков');
+      if (st.p1 === st.p2) return err('Игрок не может играть сам с собой');
+    }
     const need = winsNeeded(st.bestOf);
     let sets = [], s1 = 0, s2 = 0;
     if (st.simple) {
@@ -996,10 +1308,14 @@ function openMatchForm(opts = {}) {
       sets, sets1: s1, sets2: s2, winner_id: s1 > s2 ? st.p1 : st.p2,
       best_of: st.bestOf, points_to: st.pointsTo, played_at: new Date(st.date).toISOString(), note: st.note.trim(),
       status: editor ? 'approved' : 'pending',
+      ...(dbl ? { kind: 'doubles', player3_id: st.p3, player4_id: st.p4, rated: st.rated, type: 'free' } : {}),
     };
     await busy(btn, async () => {
       if (m0) await S.store.update('matches', m0.id, row);
-      else await S.store.insert('matches', { ...row, submitted_by: S.me.id });
+      else {
+        const saved = await S.store.insert('matches', { ...row, submitted_by: S.me.id });
+        if (fx.challengeId) await S.store.update('challenges', fx.challengeId, { status: 'done', match_id: saved.id }).catch(() => {});
+      }
       closeModal();
       toast(editor ? 'Матч сохранён, рейтинг пересчитан' : 'Результат отправлен на подтверждение');
       if (m0 && m0.stage === 'ko' && m0.winner_id !== row.winner_id) toast('Победитель изменился — проверьте следующие раунды сетки', 'warn');
@@ -1011,6 +1327,7 @@ function openMatchForm(opts = {}) {
 function openMatchDetail(id) {
   const m = S.data.matches.find(x => x.id === id);
   if (!m) return;
+  if (isDoubles(m)) return openDoublesDetail(m);
   const d = S.A.md.get(m.id);
   const a = P(m.player1_id), b = P(m.player2_id);
   const t = m.tournament_id ? tById(m.tournament_id) : null;
@@ -1026,11 +1343,33 @@ function openMatchDetail(id) {
       ${m.note ? `<p class="center">«${esc(m.note)}»</p>` : ''}
       <div class="row-btns">
         <a class="btn ghost" href="#/h2h/${a.id}/${b.id}" data-act="close">⚔️ Все встречи</a>
+        ${m.status === 'approved' ? `<button class="btn ghost" data-act="share-match" data-id="${m.id}">📤 Поделиться</button>` : ''}
         ${canEdit && isEditor() ? `<button class="btn" data-act="edit-match" data-id="${m.id}">✏️ Изменить</button>` : ''}
         ${canEdit && !isEditor() ? `<button class="btn danger ghost" data-act="withdraw-match" data-id="${m.id}">Отозвать</button>` : ''}
         ${isEditor() && m.status === 'pending' ? `<button class="btn primary" data-act="approve-match" data-id="${m.id}">Подтвердить</button>` : ''}
       </div>
     </div>`);
+}
+
+function openDoublesDetail(m) {
+  const d = S.D.md.get(m.id);
+  const w1 = m.winner_id === m.player1_id;
+  const pl = id => `<a href="#/player/${id}" class="dd-p" data-act="close">${ava(P(id), 'md')}<span><b>${esc(P(id).nickname)}</b>${d && m.rated !== false ? `<small>${fmtR(d.before[id])} → ${fmtR(d.after[id])} ${delta(d.delta[id], 'xs')}</small>` : ''}</span></a>`;
+  const canEdit = isEditor() || (m.status === 'pending' && m.submitted_by === S.me.id);
+  openModal(`<div class="md">
+    <div class="mmeta center"><span class="badge dbl">Пары 2×2</span>${m.rated === false ? '<span class="badge">без рейтинга</span>' : ''}</div>
+    <div class="dd-top"><div class="dd-team ${w1 ? 'win' : ''}">${pl(m.player1_id)}${pl(m.player3_id)}</div>
+      <div class="md-score"><b>${m.sets1}:${m.sets2}</b></div>
+      <div class="dd-team ${!w1 ? 'win' : ''}">${pl(m.player2_id)}${pl(m.player4_id)}</div></div>
+    ${m.sets?.length ? `<div class="md-sets">${m.sets.map((s2, i) => `<div><small>П${i + 1}</small><span class="${s2[0] > s2[1] ? 'w' : ''}">${s2[0]}</span><span class="${s2[1] > s2[0] ? 'w' : ''}">${s2[1]}</span></div>`).join('')}</div>` : ''}
+    <div class="muted small center">${fmtDT(m.played_at)}${d && m.rated !== false ? ` · шанс команды 1 был ${pct(d.expA)}` : ''}${m.status === 'pending' ? ' · ⏳ ждёт подтверждения' : ''}</div>
+    ${m.note ? `<p class="center">«${esc(m.note)}»</p>` : ''}
+    <div class="row-btns">
+      ${m.status === 'approved' ? `<button class="btn ghost" data-act="share-match" data-id="${m.id}">📤 Поделиться</button>` : ''}
+      ${canEdit && isEditor() ? `<button class="btn" data-act="edit-match" data-id="${m.id}">✏️ Изменить</button>` : ''}
+      ${canEdit && !isEditor() ? `<button class="btn danger ghost" data-act="withdraw-match" data-id="${m.id}">Отозвать</button>` : ''}
+      ${isEditor() && m.status === 'pending' ? `<button class="btn primary" data-act="approve-match" data-id="${m.id}">Подтвердить</button>` : ''}
+    </div></div>`);
 }
 
 function openProfileForm() {
@@ -1192,6 +1531,19 @@ const ACT = {
   close: () => closeModal(),
   go: el => go(el.dataset.href),
   refresh: el => busy(el, refresh),
+  challenge: el => openChallengeForm(el.dataset.id),
+  'ch-accept': el => busy(el, async () => { await S.store.update('challenges', el.dataset.id, { status: 'accepted', responded_at: new Date().toISOString() }); await refresh(); toast('Вызов принят — к столу! 🏓'); }),
+  'ch-decline': el => busy(el, async () => { await S.store.update('challenges', el.dataset.id, { status: 'declined', responded_at: new Date().toISOString() }); await refresh(); }),
+  'ch-cancel': el => busy(el, async () => { await S.store.update('challenges', el.dataset.id, { status: 'cancelled' }); await refresh(); }),
+  'ch-result': el => {
+    const c = S.data.challenges.find(x => x.id === el.dataset.id);
+    const other = c.from_id === S.me.id ? c.to_id : c.from_id;
+    openMatchForm({ fixed: { player1_id: S.me.id, player2_id: other, type: 'free', challengeId: c.id } });
+  },
+  'restore-match': el => busy(el, async () => { await S.store.restoreMatch(+el.dataset.id); await refresh(); toast('Матч восстановлен'); }),
+  'backup-now': el => busy(el, async () => { await S.store.backupNow(); toast('Резервная копия сохранена'); renderBackups(); }),
+  'get-backup': el => busy(el, async () => { location.href = await S.store.backupUrl(el.dataset.name); }),
+  'share-match': el => busy(el, async () => { await shareMatch(S.data.matches.find(m => m.id === el.dataset.id)); }),
   'ios-hint-later': () => { lsSet('ponghub_ios_hint_until', String(Date.now() + 3 * DAY)); document.querySelector('.ios-hint')?.remove(); },
   'push-on': el => busy(el, async () => { await enablePush(); toast('Уведомления включены 🔔'); renderPushBox(); }),
   'push-off': el => busy(el, async () => { await disablePush(); toast('Уведомления выключены'); renderPushBox(); }),
@@ -1202,9 +1554,9 @@ const ACT = {
   'add-match': () => openMatchForm(),
   match: el => openMatchDetail(el.dataset.id),
   'edit-match': el => { const m = S.data.matches.find(x => x.id === el.dataset.id); closeModal(); openMatchForm({ match: m }); },
-  'withdraw-match': async el => { if (await confirmDialog('Отозвать отправленный результат?', 'Отозвать', true)) await busy(el, async () => { await S.store.remove('matches', el.dataset.id); closeModal(); await refresh(); toast('Результат отозван'); }); },
+  'withdraw-match': async el => { if (await confirmDialog('Отозвать отправленный результат?', 'Отозвать', true)) await busy(el, async () => { await S.store.deleteMatch(el.dataset.id, 'Отозван игроком'); closeModal(); await refresh(); toast('Результат отозван'); }); },
   'approve-match': el => busy(el, async () => { await S.store.update('matches', el.dataset.id, { status: 'approved' }); closeModal(); await refresh(); toast('Матч подтверждён'); }),
-  'reject-match': async el => { if (await confirmDialog('Отклонить и удалить этот результат?', 'Отклонить', true)) await busy(el, async () => { await S.store.remove('matches', el.dataset.id); await refresh(); toast('Результат отклонён'); }); },
+  'reject-match': async el => { const reason = await askReason('Отклонить результат?', 'Он будет удалён. Укажите причину.'); if (reason) await busy(el, async () => { await S.store.deleteMatch(el.dataset.id, 'Отклонён: ' + reason); await refresh(); toast('Результат отклонён'); }); },
   'approve-user': el => busy(el, async () => { await S.store.update('profiles', el.dataset.id, { status: 'approved' }); await refresh(); toast('Игрок принят в клуб 🎉'); }),
   'reject-user': async el => { if (await confirmDialog('Отклонить заявку?', 'Отклонить', true)) await busy(el, async () => { await S.store.update('profiles', el.dataset.id, { status: 'rejected' }); await refresh(); }); },
   'archive-user': async el => { if (await confirmDialog('Перенести игрока в архив? Его матчи сохранятся, но он пропадёт из рейтинга.')) await busy(el, async () => { await S.store.update('profiles', el.dataset.id, { status: 'archived', role: 'player' }); await refresh(); }); },
@@ -1237,7 +1589,7 @@ const ACT = {
     const c = third ? br.third : br.rounds[+el.dataset.r][+el.dataset.i];
     if (c.conflict) {
       if (isEditor() && await confirmDialog('Этот результат больше не соответствует сетке (изменился победитель предыдущего раунда). Удалить его?', 'Удалить', true))
-        await busy(null, async () => { await S.store.remove('matches', c.conflict.id); await refresh(); });
+        await busy(null, async () => { await S.store.deleteMatch(c.conflict.id, 'Устарел после изменения сетки'); await refresh(); });
       return;
     }
     if (c.match && !(isEditor() && t.status === 'active')) return openMatchDetail(c.match.id);
@@ -1262,8 +1614,9 @@ const ACT = {
   },
   'reopen-t': el => busy(el, async () => { await S.store.update('tournaments', el.dataset.t, { status: 'active', results: null }); await refresh(); }),
   'del-t': async el => {
-    if (!(await confirmDialog('Удалить турнир вместе со всеми его матчами? Рейтинг будет пересчитан.', 'Удалить', true))) return;
-    await busy(el, async () => { await S.store.remove('tournaments', el.dataset.t); go('#/tournaments'); await refresh(); toast('Турнир удалён'); });
+    const reason = await askReason('Удалить турнир?', 'Вместе со всеми его матчами. Рейтинг будет пересчитан.');
+    if (!reason) return;
+    await busy(el, async () => { await S.store.deleteTournament(el.dataset.t, reason); go('#/tournaments'); await refresh(); toast('Турнир удалён'); });
   },
   'settings-default': () => { const f = document.querySelector('[data-form=settings]'); for (const [k, v] of Object.entries(DEFAULT_SETTINGS)) { if (!f[k]) continue; f[k].type === 'checkbox' ? f[k].checked = v : f[k].value = v; } f.clubName.value = settings().clubName; updateCalc(f); },
   'export-rating': () => {
@@ -1317,7 +1670,8 @@ const FORMS = {
   },
   settings: async (f, fd) => {
     const s = { ...settings() };
-    for (const k of ['initialRating', 'kTournament', 'kFree', 'spread', 'newcomerGames', 'newcomerMult']) s[k] = +fd.get(k);
+    for (const k of ['initialRating', 'kTournament', 'kFree', 'spread', 'newcomerGames', 'newcomerMult', 'kDoubles', 'decayGraceDays', 'decayPerWeek', 'seasonMinMatches']) s[k] = +fd.get(k);
+    s.decayEnabled = !!fd.get('decayEnabled');
     if (!(s.spread > 0)) throw new Error('Масштаб должен быть больше нуля');
     s.marginBonus = !!fd.get('marginBonus');
     s.clubName = fd.get('clubName').trim() || 'PongHub';
@@ -1342,6 +1696,10 @@ const FORMS = {
       best_of: +fd.get('best_of'), points_to: +fd.get('points_to'), status: 'active', participants: sorted, config, results: null, created_by: S.me.id,
     });
     closeModal(); await refresh(); go(`#/tournament/${t.id}`); toast('Турнир создан!');
+  },
+  challenge: async (f, fd) => {
+    await S.store.insert('challenges', { from_id: S.me.id, to_id: fd.get('to'), status: 'pending', message: fd.get('message').trim() || null });
+    closeModal(); await refresh(); toast('Вызов отправлен ⚔️');
   },
   event: async (f, fd) => {
     await S.store.insert('events', { title: fd.get('title').trim(), starts_at: new Date(fd.get('starts_at')).toISOString(), place: fd.get('place').trim(), note: fd.get('note').trim(), attendees: [S.me.id], created_by: S.me.id });
@@ -1375,7 +1733,7 @@ document.addEventListener('submit', async e => {
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && $modal.classList.contains('open')) closeModal(); });
 
 // ───────────── Push-уведомления ─────────────
-const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isIOS = () => !/android/i.test(navigator.userAgent) && (/iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
 const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone;
 function b64ToBytes(b64) {
   const raw = atob((b64 + '='.repeat((4 - b64.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/'));
@@ -1433,6 +1791,8 @@ function afterRender(r) {
   fitNicks();
   document.fonts?.ready.then(fitNicks);
   if (r.name === 'me') renderPushBox();
+  if (r.name === 'admin' && r.args[0] === 'log') renderAudit();
+  if (r.name === 'admin' && r.args[0] === 'data') renderBackups();
   const f = document.querySelector('[data-form=settings]');
   if (f) updateCalc(f);
 }

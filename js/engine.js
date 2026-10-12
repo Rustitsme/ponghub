@@ -8,10 +8,15 @@ export const DEFAULT_SETTINGS = {
   spread: 50,          // «масштаб»: разница в 50 очков ≈ шанс 10 к 1
   kTournament: 8,      // максимальное изменение за турнирный матч
   kFree: 4,            // максимальное изменение за свободную игру
+  kDoubles: 4,         // максимальное изменение за парную игру (отдельный рейтинг)
   newcomerGames: 10,   // первые N матчей рейтинг двигается быстрее
   newcomerMult: 1.5,
   marginBonus: true,   // 3:0 весит чуть больше, чем 3:2
   minRating: 1,
+  decayEnabled: true,  // снижение рейтинга, если долго не играть
+  decayGraceDays: 30,  // сколько дней без игр не наказываются
+  decayPerWeek: 0.5,   // минус за каждую следующую неделю (не ниже стартового рейтинга)
+  seasonMinMatches: 3, // минимум матчей за месяц, чтобы бороться за звание чемпиона сезона
 };
 
 export const LEAGUES = [
@@ -47,48 +52,75 @@ export function marginFactor(w, l, bestOf) {
 }
 
 export const ts = m => Date.parse(m.played_at) || 0;
+export const DAY = 864e5;
+export const isDoubles = m => m.kind === 'doubles';
 
 export function sortMatches(ms) {
   return [...ms].sort((a, b) => ts(a) - ts(b) || (Date.parse(a.created_at) || 0) - (Date.parse(b.created_at) || 0));
 }
 
-/** Полный пересчёт рейтинга по всем подтверждённым матчам. */
-export function analyze(profiles, matches, settings) {
+const startRating = (p, S) => (p && p.initial_rating != null && p.initial_rating !== '' ? +p.initial_rating : S.initialRating);
+
+/**
+ * Полный пересчёт одиночного рейтинга по всем подтверждённым матчам 1×1.
+ * now — момент, до которого считается снижение за неактивность.
+ */
+export function analyze(profiles, matches, settings, now = Date.now()) {
   const S = { ...DEFAULT_SETTINGS, ...(settings || {}) };
-  const rating = new Map(), games = new Map(), history = new Map();
+  const rating = new Map(), games = new Map(), history = new Map(), start = new Map();
+  const last = new Map(), decayWeeks = new Map(), decayTotal = new Map();
   const active = new Set(profiles.filter(p => p.status === 'approved').map(p => p.id));
   const ensure = (id, p) => {
     if (rating.has(id)) return;
-    const r0 = p && p.initial_rating != null && p.initial_rating !== '' ? +p.initial_rating : S.initialRating;
-    rating.set(id, r0);
-    games.set(id, 0);
+    const r0 = startRating(p, S);
+    rating.set(id, r0); start.set(id, r0); games.set(id, 0); decayTotal.set(id, 0);
     history.set(id, [{ t: p ? Date.parse(p.created_at) || 0 : 0, r: r0, init: true }]);
   };
   profiles.forEach(p => ensure(p.id, p));
 
+  // Снижение: после decayGraceDays без игр — минус decayPerWeek за каждую неделю, но не ниже стартового рейтинга
+  const decayTo = (id, t) => {
+    if (!S.decayEnabled || !last.has(id)) return;
+    const weeks = Math.floor(((t - last.get(id)) / DAY - S.decayGraceDays) / 7);
+    const done = decayWeeks.get(id) || 0;
+    if (weeks <= done) return;
+    decayWeeks.set(id, weeks);
+    const r = rating.get(id), floor = start.get(id);
+    if (r <= floor) return;
+    const nr = Math.max(floor, r - (weeks - done) * S.decayPerWeek);
+    rating.set(id, nr);
+    decayTotal.set(id, decayTotal.get(id) + (r - nr));
+    history.get(id).push({ t: last.get(id) + (S.decayGraceDays + weeks * 7) * DAY, r: nr, decay: true });
+  };
+
   const md = new Map();
   const played = sortMatches(matches.filter(m =>
-    m.status === 'approved' && m.winner_id && m.player1_id && m.player2_id));
+    !isDoubles(m) && m.status === 'approved' && m.winner_id && m.player1_id && m.player2_id));
 
   for (const m of played) {
-    const a = m.player1_id, b = m.player2_id;
+    const a = m.player1_id, b = m.player2_id, t = ts(m);
     ensure(a); ensure(b);
+    decayTo(a, t); decayTo(b, t);
     const ra = rating.get(a), rb = rating.get(b);
 
     let leader = null, best = -Infinity;
     for (const [id, r] of rating) if (active.has(id) && games.get(id) > 0 && r > best) { best = r; leader = id; }
 
     const ea = expected(ra, rb, S.spread);
-    const sa = m.winner_id === a ? 1 : 0;
-    const K = m.type === 'tournament' ? +S.kTournament : +S.kFree;
-    const w = Math.max(m.sets1 || 0, m.sets2 || 0), l = Math.min(m.sets1 || 0, m.sets2 || 0);
-    const f = S.marginBonus && w > 0 ? marginFactor(w, l, m.best_of) : 1;
-    const ka = K * f * (games.get(a) < S.newcomerGames ? +S.newcomerMult : 1);
-    const kb = K * f * (games.get(b) < S.newcomerGames ? +S.newcomerMult : 1);
-    const na = Math.max(+S.minRating, ra + ka * (sa - ea));
-    const nb = Math.max(+S.minRating, rb + kb * ((1 - sa) - (1 - ea)));
-    rating.set(a, na); rating.set(b, nb);
-    games.set(a, games.get(a) + 1); games.set(b, games.get(b) + 1);
+    let na = ra, nb = rb;
+    if (m.rated !== false) {
+      const sa = m.winner_id === a ? 1 : 0;
+      const K = m.type === 'tournament' ? +S.kTournament : +S.kFree;
+      const w = Math.max(m.sets1 || 0, m.sets2 || 0), l = Math.min(m.sets1 || 0, m.sets2 || 0);
+      const f = S.marginBonus && w > 0 ? marginFactor(w, l, m.best_of) : 1;
+      const ka = K * f * (games.get(a) < S.newcomerGames ? +S.newcomerMult : 1);
+      const kb = K * f * (games.get(b) < S.newcomerGames ? +S.newcomerMult : 1);
+      na = Math.max(+S.minRating, ra + ka * (sa - ea));
+      nb = Math.max(+S.minRating, rb + kb * ((1 - sa) - (1 - ea)));
+      rating.set(a, na); rating.set(b, nb);
+      games.set(a, games.get(a) + 1); games.set(b, games.get(b) + 1);
+      last.set(a, t); last.set(b, t); decayWeeks.set(a, 0); decayWeeks.set(b, 0);
+    }
     md.set(m.id, {
       before: { [a]: ra, [b]: rb },
       after: { [a]: na, [b]: nb },
@@ -96,11 +128,68 @@ export function analyze(profiles, matches, settings) {
       exp: { [a]: ea, [b]: 1 - ea },
       leaderBefore: leader,
     });
-    const t = ts(m);
     history.get(a).push({ t, r: na, matchId: m.id });
     history.get(b).push({ t, r: nb, matchId: m.id });
   }
-  return { rating, games, history, md, played, S };
+  for (const id of rating.keys()) decayTo(id, now);
+  return { rating, games, history, md, played, decayTotal, S };
+}
+
+/**
+ * Отдельный парный рейтинг (2×2). Команда 1 = player1 + player3, команда 2 = player2 + player4.
+ * Шанс считается по среднему рейтингу команд, каждый игрок получает своё изменение.
+ */
+export function analyzeDoubles(profiles, matches, settings) {
+  const S = { ...DEFAULT_SETTINGS, ...(settings || {}) };
+  const rating = new Map(), games = new Map(), history = new Map(), stats = new Map();
+  const ensure = (id, p) => {
+    if (rating.has(id)) return;
+    rating.set(id, +S.initialRating); games.set(id, 0);
+    history.set(id, [{ t: p ? Date.parse(p.created_at) || 0 : 0, r: +S.initialRating, init: true }]);
+    stats.set(id, { matches: 0, wins: 0, losses: 0, partners: new Map() });
+  };
+  profiles.forEach(p => ensure(p.id, p));
+  const md = new Map();
+  const played = sortMatches(matches.filter(m =>
+    isDoubles(m) && m.status === 'approved' && m.winner_id && m.player1_id && m.player2_id && m.player3_id && m.player4_id));
+  for (const m of played) {
+    const A = [m.player1_id, m.player3_id], B = [m.player2_id, m.player4_id];
+    [...A, ...B].forEach(id => ensure(id));
+    const winA = m.winner_id === m.player1_id || m.winner_id === m.player3_id;
+    const before = {}, after = {}, delta = {};
+    [...A, ...B].forEach(id => { before[id] = after[id] = rating.get(id); delta[id] = 0; });
+    const avg = ids => (rating.get(ids[0]) + rating.get(ids[1])) / 2;
+    const eA = expected(avg(A), avg(B), S.spread);
+    if (m.rated !== false) {
+      const w = Math.max(m.sets1 || 0, m.sets2 || 0), l = Math.min(m.sets1 || 0, m.sets2 || 0);
+      const f = S.marginBonus && w > 0 ? marginFactor(w, l, m.best_of) : 1;
+      const apply = (ids, score, e) => ids.forEach(id => {
+        const k = +S.kDoubles * f * (games.get(id) < S.newcomerGames ? +S.newcomerMult : 1);
+        const nr = Math.max(+S.minRating, rating.get(id) + k * (score - e));
+        after[id] = nr; delta[id] = nr - rating.get(id);
+      });
+      apply(A, winA ? 1 : 0, eA);
+      apply(B, winA ? 0 : 1, 1 - eA);
+      [...A, ...B].forEach(id => { rating.set(id, after[id]); games.set(id, games.get(id) + 1); history.get(id).push({ t: ts(m), r: after[id], matchId: m.id }); });
+    }
+    const note = (ids, won) => ids.forEach((id, i) => {
+      const st = stats.get(id), mate = ids[1 - i];
+      st.matches++; won ? st.wins++ : st.losses++;
+      const ps = st.partners.get(mate) || { w: 0, l: 0 };
+      won ? ps.w++ : ps.l++;
+      st.partners.set(mate, ps);
+    });
+    note(A, winA); note(B, !winA);
+    md.set(m.id, { before, after, delta, expA: eA, winA });
+  }
+  return { rating, games, history, stats, md, played, S };
+}
+
+export function rankingDoubles(D, profiles) {
+  return profiles
+    .filter(p => p.status === 'approved' && (D.stats.get(p.id)?.matches || 0) > 0)
+    .map(p => ({ p, r: D.rating.get(p.id), g: D.stats.get(p.id).matches, st: D.stats.get(p.id) }))
+    .sort((x, y) => y.r - x.r);
 }
 
 /** Рейтинг игрока на момент времени t (для «изменение за 30 дней»). */
@@ -281,4 +370,71 @@ export function validateSet(x, y, pointsTo) {
   if (lo >= pointsTo - 1) { if (hi - lo !== 2) return `На балансе (${pointsTo - 1}:${pointsTo - 1}) нужно выиграть ровно 2 очка подряд`; }
   else if (hi !== pointsTo) return `При счёте ${lo} у проигравшего победитель набирает ровно ${pointsTo}`;
   return null;
+}
+
+// ───────────── Сезоны и итоги недели ─────────────
+
+export const monthKey = t => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+export const monthBounds = key => { const [y, m] = key.split('-').map(Number); return [new Date(y, m - 1, 1).getTime(), new Date(y, m, 1).getTime()]; };
+export const monthName = key => { const [y, m] = key.split('-').map(Number); return new Date(y, m - 1, 1).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }); };
+
+/** Таблица одного сезона (месяца): прирост рейтинга за месяц среди сыгравших не меньше seasonMinMatches. */
+export function seasonTable(A, profiles, key, now = Date.now()) {
+  const [from, to] = monthBounds(key);
+  const end = Math.min(to, now);
+  const count = new Map(), wins = new Map();
+  for (const m of A.played) {
+    const t = ts(m);
+    if (t < from || t >= to || m.rated === false) continue;
+    for (const id of [m.player1_id, m.player2_id]) {
+      count.set(id, (count.get(id) || 0) + 1);
+      if (m.winner_id === id) wins.set(id, (wins.get(id) || 0) + 1);
+    }
+  }
+  const ok = new Set(profiles.filter(p => p.status === 'approved' || p.status === 'archived').map(p => p.id));
+  const rows = [...count].filter(([id]) => ok.has(id)).map(([id, n]) => ({
+    id, matches: n, wins: wins.get(id) || 0,
+    gain: ratingAt(A, id, end - 1) - ratingAt(A, id, from - 1),
+  }));
+  const min = +A.S.seasonMinMatches || 1;
+  const eligible = rows.filter(r => r.matches >= min).sort((a, b) => b.gain - a.gain);
+  const rest = rows.filter(r => r.matches < min).sort((a, b) => b.matches - a.matches);
+  const total = A.played.filter(m => { const t = ts(m); return t >= from && t < to; }).length;
+  return { key, eligible, rest, champion: eligible[0] || null, total, finished: now >= to };
+}
+
+/** Все сезоны от первого матча до текущего месяца (новые сверху). */
+export function seasons(A, profiles, now = Date.now()) {
+  if (!A.played.length) return [];
+  const keys = [];
+  let d = new Date(ts(A.played[0])); d = new Date(d.getFullYear(), d.getMonth(), 1);
+  while (d.getTime() <= now) { keys.push(monthKey(d)); d = new Date(d.getFullYear(), d.getMonth() + 1, 1); }
+  return keys.reverse().map(k => seasonTable(A, profiles, k, now));
+}
+
+/** Итоги прошлой недели (пн–вс): матчи, кто вырос сильнее всех, самый активный, главная сенсация. */
+export function weekSummary(A, D, profiles, now = Date.now()) {
+  const d = new Date(now); d.setHours(0, 0, 0, 0);
+  const monday = d.getTime() - ((d.getDay() + 6) % 7) * DAY;
+  const from = monday - 7 * DAY, to = monday;
+  const inWeek = m => { const t = ts(m); return t >= from && t < to; };
+  const singles = A.played.filter(inWeek), doubles = (D ? D.played : []).filter(inWeek);
+  const ok = new Set(profiles.filter(p => p.status === 'approved').map(p => p.id));
+  const count = new Map();
+  for (const m of singles) for (const id of [m.player1_id, m.player2_id]) count.set(id, (count.get(id) || 0) + 1);
+  for (const m of doubles) for (const id of [m.player1_id, m.player2_id, m.player3_id, m.player4_id]) count.set(id, (count.get(id) || 0) + 1);
+  let top = null, active = null, upset = null;
+  for (const [id, n] of count) {
+    if (!ok.has(id)) continue;
+    if (!active || n > active.n) active = { id, n };
+    const g = ratingAt(A, id, to - 1) - ratingAt(A, id, from - 1);
+    if (g > 0.005 && (!top || g > top.g)) top = { id, g };
+  }
+  for (const m of singles) {
+    const md = A.md.get(m.id); if (!md || m.rated === false) continue;
+    const w = m.winner_id, l = w === m.player1_id ? m.player2_id : m.player1_id;
+    const diff = md.before[l] - md.before[w];
+    if (diff > 0 && (!upset || diff > upset.diff)) upset = { m, w, l, diff };
+  }
+  return { from, to, matches: singles.length + doubles.length, singles: singles.length, doubles: doubles.length, top, active, upset };
 }
