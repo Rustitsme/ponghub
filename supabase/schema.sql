@@ -1,0 +1,244 @@
+-- ═══════════════════════════════════════════════════════════════
+--  TopSpin — схема базы данных для Supabase
+--  Скопируйте ВЕСЬ этот файл в Supabase → SQL Editor → New query → Run.
+--  Скрипт можно запускать повторно — он ничего не сломает.
+--
+--  ВАЖНО: первый зарегистрировавшийся пользователь автоматически
+--  становится владельцем клуба (админом). Зарегистрируйтесь первым!
+-- ═══════════════════════════════════════════════════════════════
+
+create extension if not exists pgcrypto;
+
+-- ───────────── Таблицы ─────────────
+
+create table if not exists public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  nickname text not null,
+  full_name text,
+  avatar text default '🏓',
+  color text default '#e63946',
+  hand text,
+  bio text,
+  role text not null default 'player' check (role in ('player', 'editor', 'admin')),
+  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected', 'archived')),
+  initial_rating numeric,
+  created_at timestamptz not null default now()
+);
+create unique index if not exists profiles_nickname_uq on public.profiles (lower(nickname));
+
+create table if not exists public.tournaments (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  date date,
+  place text,
+  format text not null check (format in ('ko', 'rr', 'groups')),
+  best_of int not null default 5,
+  points_to int not null default 11,
+  status text not null default 'active' check (status in ('active', 'finished')),
+  participants uuid[] not null default '{}',
+  config jsonb not null default '{}',
+  results jsonb,
+  created_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.matches (
+  id uuid primary key default gen_random_uuid(),
+  played_at timestamptz not null default now(),
+  type text not null default 'free' check (type in ('free', 'tournament')),
+  tournament_id uuid references public.tournaments(id) on delete cascade,
+  stage text,
+  grp int,
+  round int,
+  slot int,
+  player1_id uuid not null references public.profiles(id) on delete cascade,
+  player2_id uuid not null references public.profiles(id) on delete cascade,
+  sets jsonb not null default '[]',
+  sets1 int not null default 0,
+  sets2 int not null default 0,
+  winner_id uuid references public.profiles(id) on delete cascade,
+  best_of int not null default 5,
+  points_to int not null default 11,
+  status text not null default 'approved' check (status in ('approved', 'pending', 'rejected')),
+  submitted_by uuid references public.profiles(id) on delete set null,
+  note text,
+  created_at timestamptz not null default now(),
+  check (player1_id <> player2_id)
+);
+create index if not exists matches_played_idx on public.matches (played_at);
+create index if not exists matches_tournament_idx on public.matches (tournament_id);
+
+create table if not exists public.events (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  starts_at timestamptz not null,
+  place text,
+  note text,
+  attendees uuid[] not null default '{}',
+  created_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.settings (
+  id int primary key default 1 check (id = 1),
+  data jsonb not null default '{}'
+);
+insert into public.settings (id, data) values (1, '{}') on conflict (id) do nothing;
+
+-- ───────────── Проверки ролей ─────────────
+
+create or replace function public.is_approved() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from profiles where id = auth.uid() and status = 'approved');
+$$;
+
+create or replace function public.is_editor() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from profiles where id = auth.uid() and status = 'approved' and role in ('editor', 'admin'));
+$$;
+
+create or replace function public.is_admin() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from profiles where id = auth.uid() and status = 'approved' and role = 'admin');
+$$;
+
+-- ───────────── Регистрация: профиль создаётся автоматически ─────────────
+
+create or replace function public.handle_new_user() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  nick text;
+  first_user boolean;
+begin
+  nick := coalesce(nullif(trim(new.raw_user_meta_data ->> 'nickname'), ''), split_part(new.email, '@', 1));
+  if exists (select 1 from profiles where lower(nickname) = lower(nick)) then
+    nick := nick || '_' || substr(new.id::text, 1, 4);
+  end if;
+  first_user := not exists (select 1 from profiles where role = 'admin');
+  insert into profiles (id, nickname, full_name, role, status)
+  values (
+    new.id, nick, nullif(trim(new.raw_user_meta_data ->> 'full_name'), ''),
+    case when first_user then 'admin' else 'player' end,
+    case when first_user then 'approved' else 'pending' end
+  );
+  return new;
+end $$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+-- Обычный игрок не может сам поменять себе роль, статус или стартовый рейтинг
+create or replace function public.protect_profile() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then return new; end if;  -- изменения из панели Supabase
+  if not public.is_admin() then
+    new.role := old.role;
+    new.status := old.status;
+    new.initial_rating := old.initial_rating;
+  end if;
+  if old.id = auth.uid() and old.role = 'admin' then  -- админ не может случайно разжаловать себя
+    new.role := 'admin';
+    new.status := 'approved';
+  end if;
+  new.id := old.id;
+  new.created_at := old.created_at;
+  return new;
+end $$;
+
+drop trigger if exists profiles_protect on public.profiles;
+create trigger profiles_protect before update on public.profiles
+  for each row execute function public.protect_profile();
+
+-- ───────────── Вспомогательные функции для приложения ─────────────
+
+create or replace function public.nickname_available(n text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select not exists (select 1 from profiles where lower(nickname) = lower(trim(n)));
+$$;
+grant execute on function public.nickname_available(text) to anon, authenticated;
+
+-- email-адреса видит только админ (чтобы понимать, кто подал заявку)
+create or replace function public.admin_emails() returns table (id uuid, email text)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_admin() then return; end if;
+  return query select u.id, u.email::text from auth.users u;
+end $$;
+grant execute on function public.admin_emails() to authenticated;
+
+-- «Пойду / не пойду» на событие
+create or replace function public.toggle_rsvp(event_id uuid) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_approved() then raise exception 'not allowed'; end if;
+  update events set attendees =
+    case when auth.uid() = any(attendees) then array_remove(attendees, auth.uid())
+         else array_append(attendees, auth.uid()) end
+  where id = event_id;
+end $$;
+grant execute on function public.toggle_rsvp(uuid) to authenticated;
+
+-- ───────────── Права доступа (Row Level Security) ─────────────
+
+alter table public.profiles enable row level security;
+alter table public.matches enable row level security;
+alter table public.tournaments enable row level security;
+alter table public.events enable row level security;
+alter table public.settings enable row level security;
+
+-- Профили: свой видно всегда; участники клуба видят друг друга; админ видит всех (включая заявки)
+drop policy if exists profiles_select on public.profiles;
+create policy profiles_select on public.profiles for select
+  using (id = auth.uid() or public.is_admin() or (public.is_approved() and status in ('approved', 'archived')));
+drop policy if exists profiles_update on public.profiles;
+create policy profiles_update on public.profiles for update
+  using (id = auth.uid() or public.is_admin()) with check (id = auth.uid() or public.is_admin());
+drop policy if exists profiles_delete on public.profiles;
+create policy profiles_delete on public.profiles for delete using (public.is_admin());
+
+-- Матчи: смотрят все участники; вносят админ и помощники;
+-- игрок может только ОТПРАВИТЬ свой результат на подтверждение
+drop policy if exists matches_select on public.matches;
+create policy matches_select on public.matches for select using (public.is_approved());
+drop policy if exists matches_insert on public.matches;
+create policy matches_insert on public.matches for insert with check (
+  public.is_editor()
+  or (public.is_approved() and status = 'pending' and type = 'free' and tournament_id is null
+      and submitted_by = auth.uid() and auth.uid() in (player1_id, player2_id))
+);
+drop policy if exists matches_update on public.matches;
+create policy matches_update on public.matches for update using (public.is_editor()) with check (public.is_editor());
+drop policy if exists matches_delete on public.matches;
+create policy matches_delete on public.matches for delete
+  using (public.is_editor() or (submitted_by = auth.uid() and status = 'pending'));
+
+-- Турниры
+drop policy if exists tournaments_select on public.tournaments;
+create policy tournaments_select on public.tournaments for select using (public.is_approved());
+drop policy if exists tournaments_write on public.tournaments;
+create policy tournaments_write on public.tournaments for all using (public.is_editor()) with check (public.is_editor());
+
+-- События календаря
+drop policy if exists events_select on public.events;
+create policy events_select on public.events for select using (public.is_approved());
+drop policy if exists events_write on public.events;
+create policy events_write on public.events for all using (public.is_editor()) with check (public.is_editor());
+
+-- Настройки рейтинга: читают все, меняет только админ
+drop policy if exists settings_select on public.settings;
+create policy settings_select on public.settings for select using (public.is_approved());
+drop policy if exists settings_write on public.settings;
+create policy settings_write on public.settings for all using (public.is_admin()) with check (public.is_admin());
+
+-- ───────────── Живые обновления (турнир обновляется у всех сразу) ─────────────
+do $$
+declare t text;
+begin
+  foreach t in array array['profiles', 'matches', 'tournaments', 'events', 'settings'] loop
+    if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t) then
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    end if;
+  end loop;
+end $$;
