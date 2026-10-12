@@ -73,11 +73,11 @@ function download(name, content, type) {
 
 // ───────────── Тема ─────────────
 function applyTheme() {
-  let t = 'dark';
-  try { t = localStorage.getItem('topspin_theme') || 'dark'; } catch { /* */ }
+  let t = 'light';
+  try { t = localStorage.getItem('topspin_theme') || 'light'; } catch { /* */ }
   const real = t === 'auto' ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark') : t;
   document.documentElement.dataset.theme = real;
-  document.querySelector('meta[name=theme-color]')?.setAttribute('content', real === 'light' ? '#eef2f8' : '#0a1f3c');
+  document.querySelector('meta[name=theme-color]')?.setAttribute('content', real === 'light' ? '#eaf5ff' : '#0f2540');
   return t;
 }
 
@@ -681,8 +681,8 @@ function viewRules() {
 // ───────────── Профиль / настройки ─────────────
 function viewMe() {
   const me = S.me;
-  let theme = 'dark';
-  try { theme = localStorage.getItem('topspin_theme') || 'dark'; } catch { /* */ }
+  let theme = 'light';
+  try { theme = localStorage.getItem('topspin_theme') || 'light'; } catch { /* */ }
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
   return `<div class="page-h"><h1>Профиль</h1></div>
