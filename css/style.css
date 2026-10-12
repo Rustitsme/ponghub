@@ -131,7 +131,7 @@ a.card:hover, .card[data-act]:hover { border-color: color-mix(in srgb, var(--red
 .hero-top { display: flex; align-items: center; gap: 14px; }
 .hero-id { flex: 1; min-width: 0; }
 .hello { font-size: 13px; opacity: .75; }
-.hero-nick { font: 800 28px/1.05 var(--display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hero-nick { font: 800 28px/1.25 var(--display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-bottom: 2px; margin-bottom: -2px; }
 .hero-rank { text-align: center; color: #3b2410; background: linear-gradient(135deg, var(--wood-l), var(--wood)); box-shadow: 0 3px 0 #8a5426; border-radius: 12px; padding: 6px 12px; display: flex; flex-direction: column; }
 .hero-rank b { font: 800 26px/1 var(--display); }
 .hero-rank small { font-size: 11px; opacity: .8; font-weight: 600; }
