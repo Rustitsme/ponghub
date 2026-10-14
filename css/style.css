@@ -655,3 +655,8 @@ select:disabled, input:disabled { opacity: .7; }
 textarea { width: 100%; padding: 11px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg2); color: var(--text); font: 500 15px var(--font); resize: vertical; }
 .ann-to { color: var(--red-d); font-weight: 600; }
 .ann-pick { max-height: 220px; }
+
+/* ── Выбор системы рейтинга ── */
+.sys-seg label { cursor: pointer; color: var(--muted); font-weight: 600; display: block; text-align: center; padding: 8px 6px; border-radius: 9px; }
+.sys-seg label.on { background: var(--red); color: #fff; }
+form[data-sys="league"] .only-elo, form[data-sys="elo"] .only-league { display: none; }

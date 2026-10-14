@@ -17,7 +17,24 @@ export const DEFAULT_SETTINGS = {
   decayGraceDays: 30,  // сколько дней без игр не наказываются
   decayPerWeek: 0.5,   // минус за каждую следующую неделю (не ниже стартового рейтинга)
   seasonMinMatches: 3, // минимум матчей за месяц, чтобы бороться за звание чемпиона сезона
+  // Система расчёта: 'league' — как в любительских лигах (ТТВ/«Тайфун»), 'elo' — классическая Эло
+  system: 'league',
+  leagueWin: 2,          // победа над равным
+  leagueWinSlope: 0.02,  // + за каждое очко, на которое соперник сильнее (− если слабее)
+  leagueWinMax: 4,       // максимум за одну победу
+  leagueLoss: 1,         // поражение от равного
+  leagueLossSlope: 0.01, // поражение от сильного дешевле, от слабого дороже — на столько за очко
+  leagueLossMax: 2,      // максимум потери за одно поражение
+  leagueFreeMult: 1,     // свободная игра считается так же, как турнирная
 };
+
+/** Изменения по лиговой формуле. diff = рейтинг проигравшего − рейтинг победителя (до дня игры). */
+export function leagueDelta(S, winnerR, loserR, free) {
+  const k = free ? +S.leagueFreeMult : 1;
+  const win = Math.min(+S.leagueWinMax, Math.max(0, +S.leagueWin + +S.leagueWinSlope * (loserR - winnerR)));
+  const loss = Math.min(+S.leagueLossMax, Math.max(0, +S.leagueLoss - +S.leagueLossSlope * (winnerR - loserR)));
+  return { win: win * k, loss: loss * k };
+}
 
 export const LEAGUES = [
   { min: -Infinity, name: 'Бронза', cls: 'bronze' },
@@ -97,10 +114,14 @@ export function analyze(profiles, matches, settings, now = Date.now()) {
   const played = sortMatches(matches.filter(m =>
     !isDoubles(m) && m.status === 'approved' && m.winner_id && m.player1_id && m.player2_id));
 
+  const league = S.system !== 'elo';
+  let day = null, snap = null;  // в лиговой системе все матчи дня считаются от рейтинга на начало дня
   for (const m of played) {
     const a = m.player1_id, b = m.player2_id, t = ts(m);
     ensure(a); ensure(b);
     decayTo(a, t); decayTo(b, t);
+    const dk = new Date(t).toDateString();
+    if (dk !== day) { day = dk; snap = new Map(rating); }
     const ra = rating.get(a), rb = rating.get(b);
 
     let leader = null, best = -Infinity;
@@ -110,13 +131,21 @@ export function analyze(profiles, matches, settings, now = Date.now()) {
     let na = ra, nb = rb;
     if (m.rated !== false) {
       const sa = m.winner_id === a ? 1 : 0;
+      if (league) {
+        const ba = snap.get(a) ?? ra, bb = snap.get(b) ?? rb;
+        const d = sa ? leagueDelta(S, ba, bb, m.type !== 'tournament') : leagueDelta(S, bb, ba, m.type !== 'tournament');
+        na = Math.max(+S.minRating, ra + (sa ? d.win : -d.loss));
+        nb = Math.max(+S.minRating, rb + (sa ? -d.loss : d.win));
+      }
       const K = m.type === 'tournament' ? +S.kTournament : +S.kFree;
       const w = Math.max(m.sets1 || 0, m.sets2 || 0), l = Math.min(m.sets1 || 0, m.sets2 || 0);
       const f = S.marginBonus && w > 0 ? marginFactor(w, l, m.best_of) : 1;
       const ka = K * f * (games.get(a) < S.newcomerGames ? +S.newcomerMult : 1);
       const kb = K * f * (games.get(b) < S.newcomerGames ? +S.newcomerMult : 1);
-      na = Math.max(+S.minRating, ra + ka * (sa - ea));
-      nb = Math.max(+S.minRating, rb + kb * ((1 - sa) - (1 - ea)));
+      if (!league) {
+        na = Math.max(+S.minRating, ra + ka * (sa - ea));
+        nb = Math.max(+S.minRating, rb + kb * ((1 - sa) - (1 - ea)));
+      }
       rating.set(a, na); rating.set(b, nb);
       games.set(a, games.get(a) + 1); games.set(b, games.get(b) + 1);
       last.set(a, t); last.set(b, t); decayWeeks.set(a, 0); decayWeeks.set(b, 0);
@@ -164,8 +193,16 @@ export function analyzeDoubles(profiles, matches, settings) {
       const w = Math.max(m.sets1 || 0, m.sets2 || 0), l = Math.min(m.sets1 || 0, m.sets2 || 0);
       const f = S.marginBonus && w > 0 ? marginFactor(w, l, m.best_of) : 1;
       const apply = (ids, score, e) => ids.forEach(id => {
-        const k = +S.kDoubles * f * (games.get(id) < S.newcomerGames ? +S.newcomerMult : 1);
-        const nr = Math.max(+S.minRating, rating.get(id) + k * (score - e));
+        let ch;
+        if (S.system !== 'elo') {
+          const own = avg(ids), opp = avg(ids === A ? B : A);
+          const d = score ? leagueDelta(S, own, opp, true) : leagueDelta(S, opp, own, true);
+          ch = score ? d.win : -d.loss;
+        } else {
+          const k = +S.kDoubles * f * (games.get(id) < S.newcomerGames ? +S.newcomerMult : 1);
+          ch = k * (score - e);
+        }
+        const nr = Math.max(+S.minRating, rating.get(id) + ch);
         after[id] = nr; delta[id] = nr - rating.get(id);
       });
       apply(A, winA ? 1 : 0, eA);

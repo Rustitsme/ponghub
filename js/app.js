@@ -2,7 +2,7 @@ import { createStore } from './store.js';
 import {
   analyze, ranking, playerStats, ACHIEVEMENTS, insights, playerOfMonth, headToHead, validateSet,
   leagueOf, nextLeague, LEAGUES, DEFAULT_SETTINGS, ratingAt, setsFor, expected, marginFactor, winsNeeded, ts,
-  analyzeDoubles, rankingDoubles, isDoubles, seasons, seasonTable, monthKey, monthName, weekSummary, replayLive,
+  analyzeDoubles, rankingDoubles, isDoubles, seasons, seasonTable, monthKey, monthName, weekSummary, replayLive, leagueDelta,
 } from './engine.js';
 import {
   FORMATS, koBracket, koPlacings, roundName, pairings, standings, snakeGroups, playoffSlots, slotsFromSeeds, findPairMatch,
@@ -730,6 +730,31 @@ function viewRules() {
   const s = settings();
   const diffs = [-30, -15, 0, 15, 30];
   const row = (k, label) => `<tr><td class="l">${label}</td>${diffs.map(d => { const e = expected(0, d, s.spread); return `<td><span class="up">+${(k * (1 - e)).toFixed(2)}</span><br><span class="down">−${(k * e).toFixed(2)}</span></td>`; }).join('')}</tr>`;
+  if (s.system !== 'elo') {
+    const ds = [-30, -15, 0, 15, 30];
+    const r0 = 50;
+    return `<div class="page-h"><a href="#/me" class="back">← Профиль</a></div>
+    <section class="card prose">
+      <h1>Как считается рейтинг</h1>
+      <p>Как в любительских лигах по настольному теннису (ТТВ, «Тайфун»): <b>победа даёт больше, чем отнимает поражение</b>, поэтому активная игра окупается.</p>
+      <ul>
+        <li>Каждый начинает с <b>${s.initialRating}</b>.</li>
+        <li><b>Победа над равным</b> — <b class="up">+${s.leagueWin}</b>. За каждое очко, на которое соперник сильнее, — ещё +${s.leagueWinSlope}; слабее — на столько же меньше (не больше +${s.leagueWinMax} и не меньше 0).</li>
+        <li><b>Поражение от равного</b> — <b class="down">−${s.leagueLoss}</b>. Проиграть сильному дешевле (на ${s.leagueLossSlope} за очко разницы), слабому — дороже (не больше −${s.leagueLossMax}). Проигрыш намного более сильному — 0.</li>
+        <li>${+s.leagueFreeMult === 1 ? 'Свободные и турнирные игры считаются <b>одинаково</b>.' : `Свободная игра весит <b>×${s.leagueFreeMult}</b> от турнирной.`} Счёт (3:0 или 3:2) не важен — важна победа.</li>
+        <li>Все матчи одного дня считаются от рейтинга <b>на начало дня</b> — как на турнире.</li>
+        ${s.decayEnabled ? `<li><b>Пауза в игре:</b> после ${s.decayGraceDays} дней без матчей рейтинг снижается на ${s.decayPerWeek} в неделю, но не ниже стартового.</li>` : ''}
+        <li><b>Парные игры 2×2</b> — по той же формуле, в отдельном парном рейтинге, по среднему рейтингу команд.</li>
+        <li>Рейтинг пересчитывается по всей истории, поэтому исправление матча обновляет всё автоматически.</li>
+      </ul>
+      <h3>Сколько очков за матч</h3>
+      <p class="muted small">Для игрока с рейтингом ${r0}. Колонки — насколько соперник сильнее (+) или слабее (−). Сверху — победа, снизу — поражение.</p>
+      <div class="tbl-wrap"><table class="tbl rules"><thead><tr><th class="l">Соперник</th>${ds.map(d => `<th>${d > 0 ? '+' : ''}${d}</th>`).join('')}</tr></thead><tbody>
+        <tr><td class="l">Матч</td>${ds.map(d => `<td><span class="up">+${leagueDelta(s, r0, r0 + d, false).win.toFixed(2)}</span><br><span class="down">−${leagueDelta(s, r0 + d, r0, false).loss.toFixed(2)}</span></td>`).join('')}</tr></tbody></table></div>
+      <h3>Лиги</h3>
+      <div class="chips">${LEAGUES.map((l, i) => `<span class="league ${l.cls}">${l.name} ${l.min === -Infinity ? `< ${LEAGUES[1].min}` : `${l.min}${LEAGUES[i + 1] ? '–' + LEAGUES[i + 1].min : '+'}`}</span>`).join('')}</div>
+    </section>`;
+  }
   return `<div class="page-h"><a href="#/me" class="back">← Профиль</a></div>
   <section class="card prose">
     <h1>Как считается рейтинг</h1>
@@ -1121,7 +1146,7 @@ function viewHelp() {
   return `<div class="page-h"><a href="#/me" class="back">← Профиль</a></div>
   <h1>Как пользоваться</h1>
   ${sec('🏓 Свободная игра', `<p>Обычная игра в перерыв. Нажмите <b>«+»</b>, выберите игроков, формат и счёт по партиям.</p>
-    <ul><li>Вы и помощники вносите результат сразу.</li><li>Игрок может отправить результат сам — он попадёт в рейтинг после подтверждения владельцем или помощником.</li><li>Свободная игра весит в рейтинге вдвое меньше турнирной.</li></ul>`)}
+    <ul><li>Вы и помощники вносите результат сразу.</li><li>Игрок может отправить результат сам — он попадёт в рейтинг после подтверждения владельцем или помощником.</li><li>${settings().system !== 'elo' && +settings().leagueFreeMult === 1 ? 'Свободная игра считается в рейтинге так же, как турнирная.' : 'Свободная игра весит в рейтинге меньше турнирной.'}</li></ul>`)}
   ${sec('👥 Парные игры 2×2', `<p>«+» → <b>«Пары 2×2»</b>, выберите две команды и счёт. Парные игры считаются в <b>отдельном парном рейтинге</b> (вкладка «Парный 2×2» в рейтинге) и не трогают одиночный. Переключатель «Учитывать в парном рейтинге» можно выключить для разминочной игры.</p>`)}
   ${sec('⚔️ Вызов на матч', `<p>Откройте профиль соперника → <b>«Вызвать на матч»</b>. Ему придёт уведомление, он принимает или отказывается. После игры нажмите на главной <b>«Внести результат»</b>.</p>`)}
   ${sec('🏆 Сезоны и итоги недели', `<p>Каждый месяц — сезон: чемпион тот, кто сильнее всех вырос в рейтинге за месяц. Каждый понедельник приходят итоги прошлой недели. Если долго не играть, рейтинг понемногу снижается (но не ниже стартового).</p>`)}
@@ -1224,16 +1249,32 @@ function viewAdmin(r) {
   } else if (tab === 'rating') {
     const s = settings();
     const f = (k, label, hint, step = 1) => `<label>${label}<input type="number" name="${k}" value="${s[k]}" step="${step}" min="0"><small class="muted">${hint}</small></label>`;
-    body = `<form data-form="settings" class="card stack">
+    const sys = s.system === 'elo' ? 'elo' : 'league';
+    body = `<form data-form="settings" class="card stack" data-sys="${sys}">
       <label>Название клуба<input name="clubName" value="${esc(s.clubName)}" maxlength="30"></label>
       ${f('initialRating', 'Стартовый рейтинг', 'С какого рейтинга начинают новые игроки', 0.5)}
-      ${f('kTournament', 'Вес турнирного матча (K)', 'Максимум очков за турнирный матч', 0.5)}
-      ${f('kFree', 'Вес свободной игры (K)', 'Максимум очков за обычную игру', 0.5)}
-      ${f('spread', 'Масштаб разницы', 'При такой разнице рейтингов фаворит побеждает в ~10 раз чаще', 1)}
-      ${f('newcomerGames', 'Матчей «новичка»', 'Сколько первых матчей рейтинг меняется быстрее', 1)}
-      ${f('newcomerMult', 'Ускорение для новичков', 'Множитель для первых матчей', 0.1)}
-      <label class="switch"><input type="checkbox" name="marginBonus" ${s.marginBonus ? 'checked' : ''}><i></i><span>Учитывать счёт (3:0 весит больше, чем 3:2)</span></label>
-      ${f('kDoubles', 'Вес парной игры 2×2 (K)', 'Максимум очков парного рейтинга за игру', 0.5)}
+      <div><b class="small">Система расчёта</b>
+        <div class="seg sys-seg"><label class="${sys === 'league' ? 'on' : ''}"><input type="radio" name="system" value="league" ${sys === 'league' ? 'checked' : ''} hidden>Как в лиге</label><label class="${sys === 'elo' ? 'on' : ''}"><input type="radio" name="system" value="elo" ${sys === 'elo' ? 'checked' : ''} hidden>Эло</label></div>
+        <small class="muted only-league">Как в любительских лигах (ТТВ, «Тайфун»): победа ≈ +2, поражение ≈ −1, поправка на разницу рейтингов. Все матчи дня считаются от рейтинга на начало дня.</small>
+        <small class="muted only-elo">Классическая Эло: сколько получил победитель, столько потерял проигравший; бонус новичкам и поправка на счёт.</small></div>
+      <div class="stack only-league">
+        ${f('leagueWin', 'Победа над равным', 'Сколько даёт победа над соперником с таким же рейтингом', 0.1)}
+        ${f('leagueWinSlope', 'Поправка к победе за 1 очко разницы', 'Победа над сильным дороже, над слабым дешевле — на столько за каждое очко', 0.005)}
+        ${f('leagueWinMax', 'Максимум за победу', '', 0.5)}
+        ${f('leagueLoss', 'Поражение от равного', 'Сколько отнимает поражение от соперника с таким же рейтингом', 0.1)}
+        ${f('leagueLossSlope', 'Поправка к поражению за 1 очко разницы', 'Поражение от сильного дешевле, от слабого дороже', 0.005)}
+        ${f('leagueLossMax', 'Максимум потери за поражение', '', 0.5)}
+        ${f('leagueFreeMult', 'Вес свободной игры', '1 — как турнир, 0.5 — вдвое меньше', 0.1)}
+      </div>
+      <div class="stack only-elo">
+        ${f('kTournament', 'Вес турнирного матча (K)', 'Максимум очков за турнирный матч', 0.5)}
+        ${f('kFree', 'Вес свободной игры (K)', 'Максимум очков за обычную игру', 0.5)}
+        ${f('spread', 'Масштаб разницы', 'При такой разнице рейтингов фаворит побеждает в ~10 раз чаще', 1)}
+        ${f('newcomerGames', 'Матчей «новичка»', 'Сколько первых матчей рейтинг меняется быстрее', 1)}
+        ${f('newcomerMult', 'Ускорение для новичков', 'Множитель для первых матчей', 0.1)}
+        <label class="switch"><input type="checkbox" name="marginBonus" ${s.marginBonus ? 'checked' : ''}><i></i><span>Учитывать счёт (3:0 весит больше, чем 3:2)</span></label>
+        ${f('kDoubles', 'Вес парной игры 2×2 (K)', 'Максимум очков парного рейтинга за игру', 0.5)}
+      </div>
       <hr><b class="small">Снижение рейтинга без игр</b>
       <label class="switch"><input type="checkbox" name="decayEnabled" ${s.decayEnabled ? 'checked' : ''}><i></i><span>Включено</span></label>
       ${f('decayGraceDays', 'Дней без игр без штрафа', 'После этого рейтинг начинает снижаться', 1)}
@@ -1273,6 +1314,20 @@ function updateCalc(form) {
   if (!el) return;
   const fd = new FormData(form);
   const s = { ...settings() };
+  const sys = fd.get('system') === 'elo' ? 'elo' : 'league';
+  form.dataset.sys = sys;
+  form.querySelectorAll('.sys-seg label').forEach(l => l.classList.toggle('on', l.querySelector('input').checked));
+  if (sys === 'league') {
+    for (const k of ['leagueWin', 'leagueWinSlope', 'leagueWinMax', 'leagueLoss', 'leagueLossSlope', 'leagueLossMax', 'leagueFreeMult']) s[k] = +fd.get(k) || 0;
+    const me = 50;
+    const W = o => leagueDelta(s, me, o, false).win.toFixed(2), L = o => leagueDelta(s, o, me, false).loss.toFixed(2);
+    el.innerHTML = `<b>Примеры для игрока с рейтингом ${me}:</b>
+      <div>Обыграл равного (50): <span class="up">+${W(50)}</span> · проиграл ему: <span class="down">−${L(50)}</span></div>
+      <div>Обыграл сильного (80): <span class="up">+${W(80)}</span> · проиграл ему: <span class="down">−${L(80)}</span></div>
+      <div>Обыграл слабого (20): <span class="up">+${W(20)}</span> · проиграл ему: <span class="down">−${L(20)}</span></div>
+      <div class="muted">Свободная игра: ×${s.leagueFreeMult}</div>`;
+    return;
+  }
   for (const k of ['kTournament', 'kFree', 'spread', 'initialRating']) s[k] = +fd.get(k) || 0;
   s.marginBonus = !!fd.get('marginBonus');
   const base = s.initialRating;
@@ -1867,7 +1922,9 @@ const FORMS = {
   },
   settings: async (f, fd) => {
     const s = { ...settings() };
-    for (const k of ['initialRating', 'kTournament', 'kFree', 'spread', 'newcomerGames', 'newcomerMult', 'kDoubles', 'decayGraceDays', 'decayPerWeek', 'seasonMinMatches']) s[k] = +fd.get(k);
+    for (const k of ['initialRating', 'kTournament', 'kFree', 'spread', 'newcomerGames', 'newcomerMult', 'kDoubles', 'decayGraceDays', 'decayPerWeek', 'seasonMinMatches',
+      'leagueWin', 'leagueWinSlope', 'leagueWinMax', 'leagueLoss', 'leagueLossSlope', 'leagueLossMax', 'leagueFreeMult']) s[k] = +fd.get(k);
+    s.system = fd.get('system') === 'elo' ? 'elo' : 'league';
     s.decayEnabled = !!fd.get('decayEnabled');
     if (!(s.spread > 0)) throw new Error('Масштаб должен быть больше нуля');
     s.marginBonus = !!fd.get('marginBonus');
