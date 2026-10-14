@@ -115,13 +115,13 @@ export function analyze(profiles, matches, settings, now = Date.now()) {
     !isDoubles(m) && m.status === 'approved' && m.winner_id && m.player1_id && m.player2_id));
 
   const league = S.system !== 'elo';
-  let day = null, snap = null;  // в лиговой системе все матчи дня считаются от рейтинга на начало дня
+  // Лиговая система: свободные игры — от текущего рейтинга после каждого матча,
+  // турнир — все его матчи от рейтинга на момент начала турнира (как в лигах)
+  const tSnap = new Map();
   for (const m of played) {
     const a = m.player1_id, b = m.player2_id, t = ts(m);
     ensure(a); ensure(b);
     decayTo(a, t); decayTo(b, t);
-    const dk = new Date(t).toDateString();
-    if (dk !== day) { day = dk; snap = new Map(rating); }
     const ra = rating.get(a), rb = rating.get(b);
 
     let leader = null, best = -Infinity;
@@ -132,7 +132,12 @@ export function analyze(profiles, matches, settings, now = Date.now()) {
     if (m.rated !== false) {
       const sa = m.winner_id === a ? 1 : 0;
       if (league) {
-        const ba = snap.get(a) ?? ra, bb = snap.get(b) ?? rb;
+        let ba = ra, bb = rb;
+        if (m.type === 'tournament' && m.tournament_id) {
+          if (!tSnap.has(m.tournament_id)) tSnap.set(m.tournament_id, new Map(rating));
+          const sn = tSnap.get(m.tournament_id);
+          ba = sn.get(a) ?? ra; bb = sn.get(b) ?? rb;
+        }
         const d = sa ? leagueDelta(S, ba, bb, m.type !== 'tournament') : leagueDelta(S, bb, ba, m.type !== 'tournament');
         na = Math.max(+S.minRating, ra + (sa ? d.win : -d.loss));
         nb = Math.max(+S.minRating, rb + (sa ? -d.loss : d.win));
