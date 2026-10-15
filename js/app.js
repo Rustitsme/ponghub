@@ -2154,6 +2154,64 @@ function b64ToBytes(b64) {
   const raw = atob((b64 + '='.repeat((4 - b64.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/'));
   return Uint8Array.from(raw, c => c.charCodeAt(0));
 }
+// ───────────── Окна при входе: «Что нового» и напоминание об уведомлениях ─────────────
+const WHATS_NEW = {
+  id: '2026-10-predictions',
+  title: 'Что нового в PongHub 🎉',
+  items: [
+    ['🎯', 'Прогнозы на матчи', 'Когда начинается живой счёт или принят вызов, можно поставить пинг-коины на победителя. Угадали — выигрыш по коэффициенту: чем неожиданнее победа, тем больше.'],
+    ['🪙', '1 000 PC уже на вашем счёте', 'Каждый понедельник всем +100 PC. А если баланс опустился до нуля — +50 PC каждый день, чтобы вы оставались в игре.'],
+    ['🏆', 'Лучшие прогнозисты', 'Отдельная таблица тех, кто точнее всех угадывает, и свои достижения: «Провидец», «Против толпы» и другие.'],
+    ['🤝', 'Только на интерес', 'Пинг-коины — игровые баллы: их нельзя купить, и они никак не влияют на рейтинг.'],
+  ],
+  cta: ['Попробовать прогнозы', '#/predict'],
+};
+
+async function startupModals() {
+  if (!S.me || S.me.status !== 'approved' || S.startupDone === S.me.id) return;
+  S.startupDone = S.me.id;
+  if (lsGet('ponghub_seen_news') !== WHATS_NEW.id) return showWhatsNew();
+  await maybeAskPush();
+}
+
+function showWhatsNew() {
+  lsSet('ponghub_seen_news', WHATS_NEW.id);
+  const close = () => { lsSet('ponghub_seen_news', WHATS_NEW.id); closeModal(); setTimeout(maybeAskPush, 400); };
+  openModal(`<div class="wn">
+    <div class="wn-badge">Обновление</div>
+    <h3>${WHATS_NEW.title}</h3>
+    ${WHATS_NEW.items.map(([ic, t, d]) => `<div class="wn-item"><span>${ic}</span><div><b>${t}</b><p>${d}</p></div></div>`).join('')}
+    <div class="wn-btns"><button class="btn ghost" id="wn-ok">Понятно</button><button class="btn primary" id="wn-go">${WHATS_NEW.cta[0]}</button></div>
+  </div>`, sh => {
+    sh.classList.add('center-sheet');
+    sh.querySelector('#wn-ok').onclick = close;
+    sh.querySelector('#wn-go').onclick = () => { close(); location.hash = WHATS_NEW.cta[1]; };
+    sh.querySelector('.sheet-x').onclick = close;
+  });
+}
+
+async function maybeAskPush() {
+  if (S.store.mode === 'demo' || $modal.classList.contains('open')) return;
+  if (Date.now() < +(lsGet('ponghub_push_later') || 0)) return;
+  const st = await pushState();
+  if (!['off', 'ios-install', 'denied'].includes(st)) return;
+  const later = () => { lsSet('ponghub_push_later', String(Date.now() + 3 * DAY)); closeModal(); };
+  const body = {
+    off: `<p>Чтобы не пропустить <b>вызов на матч</b>, открытые <b>прогнозы</b> и <b>итоги недели</b>, включите уведомления — это одно нажатие.</p>
+      <div class="wn-btns"><button class="btn ghost" id="pn-later">Позже</button><button class="btn primary" id="pn-on">🔔 Включить</button></div>`,
+    'ios-install': `<p>На iPhone уведомления работают только в установленном приложении. Нажмите <b>«Поделиться» ⬆︎</b> внизу Safari → <b>«На экран „Домой“»</b>, откройте PongHub с иконки и включите уведомления в Профиле.</p>
+      <div class="wn-btns"><button class="btn primary" id="pn-later">Понятно</button></div>`,
+    denied: `<p>Уведомления для PongHub сейчас запрещены в настройках. Откройте <b>Настройки телефона → Уведомления</b> (или настройки сайта в браузере) и разрешите их для PongHub — тогда вы не пропустите вызовы, прогнозы и итоги.</p>
+      <div class="wn-btns"><button class="btn primary" id="pn-later">Понятно</button></div>`,
+  }[st];
+  openModal(`<div class="wn pn"><div class="pn-ic">🔔</div><h3>Включите уведомления</h3>${body}</div>`, sh => {
+    sh.classList.add('center-sheet');
+    sh.querySelector('#pn-later').onclick = later;
+    sh.querySelector('.sheet-x').onclick = later;
+    sh.querySelector('#pn-on')?.addEventListener('click', ev => busy(ev.target, async () => { await enablePush(); closeModal(); toast('Уведомления включены 🔔'); }));
+  });
+}
+
 async function pushState() {
   if (S.store.mode === 'demo') return 'demo';
   if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return isIOS() && !isStandalone() ? 'ios-install' : 'unsupported';
@@ -2234,6 +2292,7 @@ async function boot() {
       await reload();
       if (u && ['login', 'register', 'forgot'].includes(route().name)) location.hash = '#/home';
       render();
+      setTimeout(startupModals, 800);
     }
   });
   S.store.subscribe(async () => {
@@ -2247,6 +2306,7 @@ async function boot() {
   addEventListener('hashchange', () => { closeModal(); render(); });
   render();
   document.getElementById('splash')?.remove();
+  setTimeout(startupModals, 800);
 }
 
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});
