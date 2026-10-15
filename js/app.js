@@ -203,7 +203,7 @@ function shell(r, body) {
   </header>
   ${S.testMode ? `<div class="test-banner">🧪 <span><b>Тестовый режим.</b> Тестовых игроков и их матчи видите только вы.</span><a href="#/admin/players" class="link">Управлять</a></div>` : ''}
   <main class="page">${body}</main>
-  ${r.name === 'live' ? '' : `<button class="fab" data-act="add-match" aria-label="${isEditor() ? 'Внести матч' : 'Отправить результат'}">${icon('plus')}</button>`}
+  ${r.name === 'live' ? '' : `<button class="fab" data-act="add-match" aria-label="${isAdmin() ? 'Внести матч' : 'Внести результат'}">${icon('plus')}</button>`}
   <nav class="tabs">
     ${tab('home', 'Главная', 'home')}
     ${tab('rating', 'Рейтинг', 'rating')}
@@ -359,7 +359,7 @@ function formDots(form) {
   return `<div class="form">${form.map(x => `<i class="${x === 'W' ? 'w' : 'l'}">${x === 'W' ? 'В' : 'П'}</i>`).join('') || '<span class="muted small">нет матчей</span>'}</div>`;
 }
 
-const visibleMatch = m => m.status === 'approved' || isEditor() || m.submitted_by === S.me.id || players(m).includes(S.me.id);
+const visibleMatch = m => m.status === 'approved' || isAdmin() || m.submitted_by === S.me.id || players(m).includes(S.me.id);
 
 // ───────────── Главная ─────────────
 function viewHome() {
@@ -474,7 +474,7 @@ function viewMatches(r) {
   const type = r.q.get('type') || 'all';
   const pl = r.q.get('p') || '';
   let list = S.data.matches.filter(visibleMatch);
-  if (!isEditor()) list = list.filter(m => players(m).includes(S.me.id));
+  if (!isAdmin()) list = list.filter(m => players(m).includes(S.me.id));
   if (type === 'doubles') list = list.filter(isDoubles);
   else if (type !== 'all') list = list.filter(m => !isDoubles(m) && m.type === type);
   if (pl) list = list.filter(m => players(m).includes(pl));
@@ -484,14 +484,14 @@ function viewMatches(r) {
   const qs = (t, p) => `#/matches?type=${t}${p ? '&p=' + p : ''}`;
   const plist = S.data.profiles.filter(p => p.status === 'approved').sort((a, b) => a.nickname.localeCompare(b.nickname));
   return `
-  <div class="page-h"><h1>${isEditor() ? 'Матчи' : 'Мои матчи'}</h1><button class="btn sm" data-act="h2h-pick">⚔️ Личные встречи</button></div>
+  <div class="page-h"><h1>${isAdmin() ? 'Матчи' : 'Мои матчи'}</h1><button class="btn sm" data-act="h2h-pick">⚔️ Личные встречи</button></div>
   <div class="seg">
     <a href="${qs('all', pl)}" class="${type === 'all' ? 'on' : ''}">Все</a>
     <a href="${qs('free', pl)}" class="${type === 'free' ? 'on' : ''}">Свободные</a>
     <a href="${qs('tournament', pl)}" class="${type === 'tournament' ? 'on' : ''}">Турнирные</a>
     <a href="${qs('doubles', pl)}" class="${type === 'doubles' ? 'on' : ''}">Пары</a>
   </div>
-  ${isEditor() ? `<select class="filter" data-act-change="filter-player" data-type="${type}">
+  ${isAdmin() ? `<select class="filter" data-act-change="filter-player" data-type="${type}">
     <option value="">Все игроки</option>${plist.map(p => `<option value="${p.id}" ${p.id === pl ? 'selected' : ''}>${esc(p.nickname)}</option>`).join('')}
   </select>` : ''}
   ${[...groups].map(([k, ms]) => `<div class="day-h">${k}</div>${ms.map(m => matchCard(m, pl || null)).join('')}`).join('') || '<div class="empty">Матчей не найдено</div>'}`;
@@ -615,7 +615,7 @@ function viewTournaments() {
       ${r && r.gold ? `<small>🥇 ${esc(P(r.gold).nickname)}${r.silver ? ` · 🥈 ${esc(P(r.silver).nickname)}` : ''}${(r.bronze || []).length ? ` · 🥉 ${r.bronze.map(x => esc(P(x).nickname)).join(', ')}` : ''}</small>` : ''}</div>
       ${t.status === 'active' ? '<span class="live">● идёт</span>' : ''}</a>`;
   };
-  return `<div class="page-h"><h1>Турниры</h1>${isEditor() ? '<button class="btn primary sm" data-act="new-tournament">+ Создать</button>' : ''}</div>
+  return `<div class="page-h"><h1>Турниры</h1>${isAdmin() ? '<button class="btn primary sm" data-act="new-tournament">+ Создать</button>' : ''}</div>
     ${active.length ? `<div class="sec-h"><h3>Идут сейчас</h3></div>${active.map(card).join('')}` : ''}
     <div class="sec-h"><h3>Архив</h3></div>${done.map(card).join('') || '<div class="empty">Завершённых турниров пока нет</div>'}`;
 }
@@ -624,7 +624,7 @@ function tMatches(t) { return S.data.matches.filter(m => m.tournament_id === t.i
 
 function koBlock(t, slots, ms) {
   const br = koBracket(slots, ms, t.config.thirdPlace);
-  const can = isEditor() && t.status === 'active';
+  const can = isAdmin() && t.status === 'active';
   const cell = (c, label) => {
     const m = c.match;
     const sc = id => (m && m.status === 'approved' ? (id === m.player1_id ? m.sets1 : m.sets2) : '');
@@ -644,7 +644,7 @@ function koBlock(t, slots, ms) {
 
 function rrBlock(t, ids, ms, stage, grp = null, title = '') {
   const st = standings(ids, ms.filter(m => m.stage === stage && (grp === null || m.grp === grp)));
-  const can = isEditor() && t.status === 'active';
+  const can = isAdmin() && t.status === 'active';
   const table = `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>#</th><th class="l">Игрок</th><th>И</th><th>В</th><th>П</th><th>Партии</th><th>Очки</th></tr></thead><tbody>
     ${st.list.map((x, i) => `<tr class="${grp !== null && i < (t.config.advance || 2) ? 'adv' : ''}"><td>${i + 1}</td><td class="l"><a href="#/player/${x.id}">${ava(P(x.id), 'xs')} ${esc(P(x.id).nickname)}</a></td><td>${x.p}</td><td>${x.w}</td><td>${x.l}</td><td>${x.sw}:${x.sl}</td><td><b>${x.pts}</b></td></tr>`).join('')}
   </tbody></table></div>`;
@@ -675,7 +675,7 @@ function viewTournament(r) {
   const t = tById(r.args[0]);
   if (!t) return '<div class="empty">Турнир не найден</div>';
   const ms = tMatches(t);
-  const can = isEditor();
+  const can = isAdmin();
   let body = '';
   if (t.format === 'ko') body = `<section class="card">${koBlock(t, t.config.slots, ms).html}</section>`;
   else if (t.format === 'rr') body = `<section class="card">${rrBlock(t, t.participants, ms, 'rr').html}</section>`;
@@ -721,13 +721,13 @@ function eventRow(it) {
       ${e.note ? `<small>${esc(e.note)}</small>` : ''}
       <div class="ev-people">${(e.attendees || []).map(id => ava(P(id), 'xs')).join('')}<small class="muted">${(e.attendees || []).length ? `${e.attendees.length} ${plural(e.attendees.length, 'идёт', 'идут', 'идут')}` : 'пока никто не отметился'}</small></div></div>
     <div class="ev-act"><button class="btn sm ${going ? 'primary' : ''}" data-act="rsvp" data-id="${e.id}">${going ? '✓ Иду' : 'Пойду'}</button>
-      ${isEditor() ? `<button class="btn xs ghost" data-act="del-event" data-id="${e.id}">Удалить</button>` : ''}</div>
+      ${isAdmin() ? `<button class="btn xs ghost" data-act="del-event" data-id="${e.id}">Удалить</button>` : ''}</div>
   </div>`;
 }
 function viewCalendar() {
   const up = upcomingItems();
   const past = S.data.events.filter(e => Date.parse(e.starts_at) < Date.now() - 3 * 36e5).sort((a, b) => Date.parse(b.starts_at) - Date.parse(a.starts_at)).slice(0, 10);
-  return `<div class="page-h"><h1>Календарь</h1>${isEditor() ? '<button class="btn primary sm" data-act="new-event">+ Событие</button>' : ''}</div>
+  return `<div class="page-h"><h1>Календарь</h1>${isAdmin() ? '<button class="btn primary sm" data-act="new-event">+ Событие</button>' : ''}</div>
     <section class="card">${up.map(eventRow).join('') || '<div class="empty">Ближайших событий нет</div>'}</section>
     ${past.length ? `<details class="card"><summary>Прошедшие</summary>${past.map(e => eventRow({ e })).join('')}</details>` : ''}`;
 }
@@ -1015,7 +1015,7 @@ async function saveLive(l, btn) {
   const log = liveLog(l);
   const g = replayLive(log, l.best_of, l.points_to, l.first_server);
   if (g.winner === null) return;
-  const editor = isEditor();
+  const editor = isAdmin() || (isEditor() && [l.player1_id, l.player2_id, l.player3_id, l.player4_id].includes(S.me.id));
   const row = {
     kind: l.kind, type: l.type, player1_id: l.player1_id, player2_id: l.player2_id, player3_id: l.player3_id, player4_id: l.player4_id,
     tournament_id: l.tournament_id, stage: l.stage, grp: l.grp, round: l.round, slot: l.slot,
@@ -1495,7 +1495,8 @@ function playerOptions(sel, exclude) {
 function openMatchForm(opts = {}) {
   const m0 = opts.match || null;
   const fx = opts.fixed || {};
-  const editor = isEditor();
+  const editor = isAdmin();  // только владелец вносит любые матчи и правит их
+  const trusted = ids => isAdmin() || (isEditor() && ids.includes(S.me.id));  // помощник: свои матчи засчитываются сразу
   const st = {
     p1: m0?.player1_id || fx.player1_id || (editor ? '' : S.me.id),
     p2: m0?.player2_id || fx.player2_id || '',
@@ -1534,9 +1535,9 @@ function openMatchForm(opts = {}) {
     const rows = Array.from({ length: st.bestOf }, (_, i) => st.sets[i] || ['', '']);
     st.sets = rows;
     sh.querySelector('.mf-body').innerHTML = `
-      <h3>${m0 ? 'Изменить матч' : editor ? 'Новый матч' : 'Отправить результат'}</h3>
+      <h3>${m0 ? 'Изменить матч' : editor ? 'Новый матч' : 'Результат матча'}</h3>
       ${tour ? `<div class="chip">🏆 ${esc(tour.name)}</div>` : ''}
-      ${!editor ? '<p class="muted small">Результат попадёт в рейтинг после подтверждения администратором.</p>' : ''}
+      ${!editor ? `<p class="muted small">${isEditor() ? 'Вы помощник: результат вашего матча засчитается сразу. Чужие матчи уходят на подтверждение владельцу.' : 'Результат попадёт в рейтинг после подтверждения владельцем клуба.'}</p>` : ''}
       ${canDoubles && !m0 ? `<div class="seg"><button type="button" data-k="kind" data-v="singles" class="${st.kind === 'singles' ? 'on' : ''}">🏓 1×1</button><button type="button" data-k="kind" data-v="doubles" class="${st.kind === 'doubles' ? 'on' : ''}">👥 Пары 2×2</button></div>` : ''}
       ${st.kind === 'doubles' ? `<div class="teams">
           <div class="team-box"><small>Команда 1</small>
@@ -1568,7 +1569,7 @@ function openMatchForm(opts = {}) {
       <label>Дата и время<input type="datetime-local" name="date" value="${st.date}"></label>
       <label>Комментарий<input name="note" value="${esc(st.note)}" maxlength="140" placeholder="необязательно"></label>
       <div class="mf-err"></div>
-      <div class="row-btns">${m0 && editor ? '<button type="button" class="btn danger ghost" data-mf="delete">Удалить</button>' : ''}<button type="button" class="btn primary" data-mf="save">${editor ? 'Сохранить' : 'Отправить'}</button></div>
+      <div class="row-btns">${m0 && editor ? '<button type="button" class="btn danger ghost" data-mf="delete">Удалить</button>' : ''}<button type="button" class="btn primary" data-mf="save">${editor ? 'Сохранить' : isEditor() ? 'Внести' : 'Отправить'}</button></div>
       ${!m0 && (editor || !lockFormat) ? `<div class="live-start"><span class="muted small">Игра только начинается и есть кому считать?</span><button type="button" class="btn full live-btn" data-mf="live">▶ Игра началась — вести счёт</button></div>` : ''}`;
   };
 
@@ -1674,7 +1675,7 @@ function openMatchForm(opts = {}) {
       stage: fx.stage ?? m0?.stage ?? null, grp: fx.grp ?? m0?.grp ?? null, round: fx.round ?? m0?.round ?? null, slot: fx.slot ?? m0?.slot ?? null,
       sets, sets1: s1, sets2: s2, winner_id: s1 > s2 ? st.p1 : st.p2,
       best_of: st.bestOf, points_to: st.pointsTo, played_at: new Date(st.date).toISOString(), note: st.note.trim(),
-      status: editor ? 'approved' : 'pending',
+      status: trusted(st.kind === 'doubles' ? [st.p1, st.p2, st.p3, st.p4] : [st.p1, st.p2]) ? 'approved' : 'pending',
       ...(dbl ? { kind: 'doubles', player3_id: st.p3, player4_id: st.p4, rated: st.rated, type: 'free' } : {}),
     };
     await busy(btn, async () => {
@@ -1684,7 +1685,7 @@ function openMatchForm(opts = {}) {
         if (fx.challengeId) await S.store.update('challenges', fx.challengeId, { status: 'done', match_id: saved.id }).catch(() => {});
       }
       closeModal();
-      toast(editor ? 'Матч сохранён, рейтинг пересчитан' : 'Результат отправлен на подтверждение');
+      toast(row.status === 'approved' ? 'Матч сохранён, рейтинг пересчитан' : 'Результат отправлен владельцу на подтверждение');
       if (m0 && m0.stage === 'ko' && m0.winner_id !== row.winner_id) toast('Победитель изменился — проверьте следующие раунды сетки', 'warn');
       await refresh();
     });
@@ -1700,7 +1701,7 @@ function openMatchDetail(id) {
   const t = m.tournament_id ? tById(m.tournament_id) : null;
   const side = p => `<a href="#/player/${p.id}" class="md-p ${m.winner_id === p.id ? 'win' : ''}" data-act="close">${ava(p, 'lg')}<b>${esc(p.nickname)}</b>
     ${d ? `<small>${fmtR(d.before[p.id])} → ${fmtR(d.after[p.id])}</small>${delta(d.delta[p.id])}<small class="muted">шанс ${pct(d.exp[p.id])}</small>` : ''}</a>`;
-  const canEdit = isEditor() || (m.status === 'pending' && m.submitted_by === S.me.id);
+  const canEdit = isAdmin() || (m.status === 'pending' && m.submitted_by === S.me.id);
   openModal(`
     <div class="md">
       <div class="mmeta center"><span class="badge ${m.type === 'tournament' ? 'tour' : 'free'}">${m.type === 'tournament' ? 'Турнир' : 'Свободная игра'}</span>${t ? `<a href="#/tournament/${t.id}" data-act="close" class="tname">${esc(t.name)}</a>` : ''}</div>
@@ -1711,8 +1712,8 @@ function openMatchDetail(id) {
       <div class="row-btns">
         <a class="btn ghost" href="#/h2h/${a.id}/${b.id}" data-act="close">⚔️ Все встречи</a>
         ${m.status === 'approved' ? `<button class="btn ghost" data-act="share-match" data-id="${m.id}">📤 Поделиться</button>` : ''}
-        ${canEdit && isEditor() ? `<button class="btn" data-act="edit-match" data-id="${m.id}">✏️ Изменить</button>` : ''}
-        ${canEdit && !isEditor() ? `<button class="btn danger ghost" data-act="withdraw-match" data-id="${m.id}">Отозвать</button>` : ''}
+        ${canEdit && isAdmin() ? `<button class="btn" data-act="edit-match" data-id="${m.id}">✏️ Изменить</button>` : ''}
+        ${canEdit && !isAdmin() ? `<button class="btn danger ghost" data-act="withdraw-match" data-id="${m.id}">Отозвать</button>` : ''}
         ${isAdmin() && m.status === 'pending' ? `<button class="btn primary" data-act="approve-match" data-id="${m.id}">Подтвердить</button>` : ''}
       </div>
     </div>`);
@@ -1722,7 +1723,7 @@ function openDoublesDetail(m) {
   const d = S.D.md.get(m.id);
   const w1 = m.winner_id === m.player1_id;
   const pl = id => `<a href="#/player/${id}" class="dd-p" data-act="close">${ava(P(id), 'md')}<span><b>${esc(P(id).nickname)}</b>${d && m.rated !== false ? `<small>${fmtR(d.before[id])} → ${fmtR(d.after[id])} ${delta(d.delta[id], 'xs')}</small>` : ''}</span></a>`;
-  const canEdit = isEditor() || (m.status === 'pending' && m.submitted_by === S.me.id);
+  const canEdit = isAdmin() || (m.status === 'pending' && m.submitted_by === S.me.id);
   openModal(`<div class="md">
     <div class="mmeta center"><span class="badge dbl">Пары 2×2</span>${m.rated === false ? '<span class="badge">без рейтинга</span>' : ''}</div>
     <div class="dd-top"><div class="dd-team ${w1 ? 'win' : ''}">${pl(m.player1_id)}${pl(m.player3_id)}</div>
@@ -1733,8 +1734,8 @@ function openDoublesDetail(m) {
     ${m.note ? `<p class="center">«${esc(m.note)}»</p>` : ''}
     <div class="row-btns">
       ${m.status === 'approved' ? `<button class="btn ghost" data-act="share-match" data-id="${m.id}">📤 Поделиться</button>` : ''}
-      ${canEdit && isEditor() ? `<button class="btn" data-act="edit-match" data-id="${m.id}">✏️ Изменить</button>` : ''}
-      ${canEdit && !isEditor() ? `<button class="btn danger ghost" data-act="withdraw-match" data-id="${m.id}">Отозвать</button>` : ''}
+      ${canEdit && isAdmin() ? `<button class="btn" data-act="edit-match" data-id="${m.id}">✏️ Изменить</button>` : ''}
+      ${canEdit && !isAdmin() ? `<button class="btn danger ghost" data-act="withdraw-match" data-id="${m.id}">Отозвать</button>` : ''}
       ${isAdmin() && m.status === 'pending' ? `<button class="btn primary" data-act="approve-match" data-id="${m.id}">Подтвердить</button>` : ''}
     </div></div>`);
 }
@@ -1984,11 +1985,11 @@ const ACT = {
     const third = el.dataset.r === 'third';
     const c = third ? br.third : br.rounds[+el.dataset.r][+el.dataset.i];
     if (c.conflict) {
-      if (isEditor() && await confirmDialog('Этот результат больше не соответствует сетке (изменился победитель предыдущего раунда). Удалить его?', 'Удалить', true))
+      if (isAdmin() && await confirmDialog('Этот результат больше не соответствует сетке (изменился победитель предыдущего раунда). Удалить его?', 'Удалить', true))
         await busy(null, async () => { await S.store.deleteMatch(c.conflict.id, 'Устарел после изменения сетки'); await refresh(); });
       return;
     }
-    if (c.match && !(isEditor() && t.status === 'active')) return openMatchDetail(c.match.id);
+    if (c.match && !(isAdmin() && t.status === 'active')) return openMatchDetail(c.match.id);
     if (c.match) return openMatchForm({ match: c.match });
     openMatchForm({ fixed: { player1_id: c.a, player2_id: c.b, tournament_id: t.id, type: 'tournament', stage: third ? 'ko3' : 'ko', round: third ? 0 : c.r, slot: third ? 0 : c.i, best_of: t.best_of, points_to: t.points_to } });
   },
