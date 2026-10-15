@@ -1,7 +1,7 @@
 // Слой данных: Supabase (боевой режим) или localStorage (демо-режим, если база не настроена).
 import { CONFIG } from './config.js';
 
-const TABLES = ['profiles', 'matches', 'tournaments', 'events', 'challenges', 'live_matches', 'announcements'];
+const TABLES = ['profiles', 'matches', 'tournaments', 'events', 'challenges', 'live_matches', 'announcements', 'pred_events', 'predictions', 'coin_tx'];
 
 export async function createStore() {
   if (CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY) {
@@ -84,15 +84,17 @@ class SupaStore {
 
   async loadAll() {
     const q = t => this.sb.from(t).select('*');
-    const [p, m, t, e, c, s, l, a] = await Promise.all([
+    const [p, m, t, e, c, s, l, a, pe, pr] = await Promise.all([
       q('profiles'), q('matches'), q('tournaments'), q('events'), q('challenges'),
       this.sb.from('settings').select('data').eq('id', 1).maybeSingle(),
       this.sb.from('live_matches').select('*').eq('status', 'live'),
       this.sb.from('announcements').select('*').order('created_at', { ascending: false }).limit(100),
+      this.sb.from('pred_events').select('*').order('created_at', { ascending: false }).limit(150),
+      this.sb.from('predictions').select('*').order('created_at', { ascending: false }).limit(300),
     ]);
     for (const r of [p, m, t, e, s]) if (r.error) throw translateError(r.error);
     // вызовы появятся после обновления базы — без таблицы приложение тоже работает
-    return { profiles: p.data, matches: m.data, tournaments: t.data, events: e.data, challenges: c.error ? [] : c.data, live: l.error ? [] : l.data, announcements: a.error ? [] : a.data, settings: s.data?.data || {} };
+    return { profiles: p.data, matches: m.data, tournaments: t.data, events: e.data, challenges: c.error ? [] : c.data, live: l.error ? [] : l.data, announcements: a.error ? [] : a.data, predEvents: pe.error ? [] : pe.data, predictions: pr.error ? [] : pr.data, settings: s.data?.data || {} };
   }
 
   async insert(table, row) {
@@ -128,6 +130,12 @@ class SupaStore {
   async toggleRsvp(eventId) {
     const { error } = await this.sb.rpc('toggle_rsvp', { event_id: eventId });
     if (error) throw translateError(error);
+  }
+
+  async rpc(name, args = {}) {
+    const { data, error } = await this.sb.rpc(name, args);
+    if (error) throw translateError(error);
+    return data;
   }
 
   async createTestPlayers(n) {
@@ -286,7 +294,8 @@ class LocalStore {
 
   async loadAll() {
     const c = JSON.parse(JSON.stringify(this.db));
-    return { profiles: c.profiles, matches: c.matches, tournaments: c.tournaments, events: c.events, challenges: c.challenges || [], live: (c.live_matches || []).filter(x => x.status === 'live'), announcements: [...(c.announcements || [])].sort((x, y) => Date.parse(y.created_at) - Date.parse(x.created_at)), settings: c.settings || {} };
+    return { profiles: c.profiles, matches: c.matches, tournaments: c.tournaments, events: c.events, challenges: c.challenges || [], live: (c.live_matches || []).filter(x => x.status === 'live'), announcements: [...(c.announcements || [])].sort((x, y) => Date.parse(y.created_at) - Date.parse(x.created_at)),
+      predEvents: [...(c.pred_events || [])].reverse(), predictions: (c.predictions || []).filter(x => x.user_id === c.session).reverse(), settings: c.settings || {} };
   }
 
   async insert(table, row) {
@@ -300,7 +309,15 @@ class LocalStore {
   async update(table, id, patch) {
     const r = this.db[table].find(x => x.id === id);
     if (!r) throw new Error('Запись не найдена');
-    Object.assign(r, patch); this.save();
+    Object.assign(r, patch);
+    if (table === 'live_matches' || table === 'challenges') {
+      const f = e => e.source_id === id;
+      if (['cancelled', 'declined'].includes(r.status)) this.predCancel(f);
+      else if (r.match_id) this.predSettle(f, r.match_id);
+      else if ((r.log || []).length) (this.db.pred_events || []).filter(f).forEach(e => { if (e.status === 'open') e.status = 'closed'; });
+    }
+    if (table === 'matches' && r.status === 'approved') this.predSettle(e => e.match_id === id, id);
+    this.save();
     return r;
   }
 
@@ -317,6 +334,68 @@ class LocalStore {
     const me = this.db.session;
     e.attendees = e.attendees.includes(me) ? e.attendees.filter(x => x !== me) : [...e.attendees, me];
     this.save();
+  }
+
+  // ── прогнозы в демо-режиме (упрощённая копия серверной логики) ──
+  coinBal(uid) { return (this.db.coin_tx || []).filter(t => t.user_id === uid).reduce((a, t) => a + t.amount, 0); }
+  tx(user_id, amount, kind, ref = null) { (this.db.coin_tx = this.db.coin_tx || []).push({ id: uid(), user_id, amount, kind, ref, created_at: new Date().toISOString() }); }
+  predSetting(k, d) { return this.db.settings?.[k] ?? d; }
+  async rpc(name, a = {}) {
+    const me = this.db.session;
+    this.db.pred_events = this.db.pred_events || []; this.db.predictions = this.db.predictions || [];
+    if (name === 'ensure_wallet') { if (!(this.db.coin_tx || []).some(t => t.user_id === me)) { this.tx(me, this.predSetting('predStart', 1000), 'start'); this.save(); } return this.coinBal(me); }
+    if (name === 'create_pred_event') {
+      const ex = this.db.pred_events.find(e => e.source_id === a.src_id); if (ex) return ex.id;
+      const srcRow = a.src === 'live' ? (this.db.live_matches || []).find(x => x.id === a.src_id) : (this.db.challenges || []).find(x => x.id === a.src_id);
+      if (!srcRow) return null;
+      const c = Math.min(0.95, Math.max(0.05, a.chance));
+      const ev = { id: uid(), source: a.src, source_id: a.src_id, kind: srcRow.kind || 'singles', player1_id: srcRow.player1_id || srcRow.from_id, player2_id: srcRow.player2_id || srcRow.to_id, player3_id: srcRow.player3_id || null, player4_id: srcRow.player4_id || null,
+        tournament_id: srcRow.tournament_id || null, chance1: c, odds1: Math.min(10, Math.round(100 / c) / 100), odds2: Math.min(10, Math.round(100 / (1 - c)) / 100), status: 'open', bets_count: 0, pool1: 0, pool2: 0, is_test: !!srcRow.is_test, created_by: me, created_at: new Date().toISOString() };
+      this.db.pred_events.push(ev); this.save(); return ev.id;
+    }
+    if (name === 'place_prediction') {
+      const e = this.db.pred_events.find(x => x.id === a.eid);
+      if (!e || e.status !== 'open') throw new Error('Приём прогнозов закрыт');
+      if ([e.player1_id, e.player2_id, e.player3_id, e.player4_id].includes(me)) throw new Error('На свой матч прогноз сделать нельзя');
+      if (e.source === 'live') { const l = (this.db.live_matches || []).find(x => x.id === e.source_id); if (!l || l.status !== 'live' || (l.log || []).length) { e.status = 'closed'; this.save(); throw new Error('Игра уже началась — приём прогнозов закрыт'); } }
+      if (this.db.predictions.some(p => p.event_id === e.id && p.user_id === me)) throw new Error('Вы уже сделали прогноз на этот матч');
+      const min = this.predSetting('predMin', 10), max = this.predSetting('predMax', 500);
+      if (a.amount < min || a.amount > max) throw new Error(`Ставка от ${min} до ${max} PC`);
+      await this.rpc('ensure_wallet');
+      if (this.coinBal(me) < a.amount) throw new Error(`Недостаточно пинг-коинов (у вас ${this.coinBal(me)})`);
+      this.db.predictions.push({ id: uid(), event_id: e.id, user_id: me, side: a.pick, stake: a.amount, odds: a.pick === 1 ? e.odds1 : e.odds2, status: 'open', created_at: new Date().toISOString() });
+      this.tx(me, -a.amount, 'bet', e.id);
+      e.bets_count++; e['pool' + a.pick] += a.amount; this.save(); return this.coinBal(me);
+    }
+    if (name === 'coin_leaderboard') {
+      const since = a.since ? Date.parse(a.since) : 0;
+      const ids = [...new Set((this.db.coin_tx || []).map(t => t.user_id))];
+      return ids.map(id => {
+        const tx = this.db.coin_tx.filter(t => t.user_id === id), pr = this.db.predictions.filter(p => p.user_id === id && Date.parse(p.created_at) >= since);
+        return { user_id: id, balance: tx.reduce((s, t) => s + t.amount, 0), profit: tx.filter(t => ['bet', 'payout', 'refund'].includes(t.kind) && Date.parse(t.created_at) >= since).reduce((s, t) => s + t.amount, 0),
+          bets: pr.filter(p => ['won', 'lost'].includes(p.status)).length, wins: pr.filter(p => p.status === 'won').length };
+      });
+    }
+    throw new Error('Неизвестная операция ' + name);
+  }
+  predSettle(eventFilter, matchId) {
+    const m = this.db.matches.find(x => x.id === matchId);
+    for (const e of (this.db.pred_events || []).filter(eventFilter)) {
+      e.match_id = matchId; if (e.status === 'open') e.status = 'closed';
+      if (!m || m.status !== 'approved' || e.status === 'settled') continue;
+      const side = [e.player1_id, e.player3_id].includes(m.winner_id) ? 1 : 2;
+      for (const p of this.db.predictions.filter(x => x.event_id === e.id && x.status === 'open')) {
+        if (p.side === side) { p.status = 'won'; p.payout = Math.round(p.stake * p.odds); this.tx(p.user_id, p.payout, 'payout', e.id); } else { p.status = 'lost'; p.payout = 0; }
+      }
+      e.status = 'settled'; e.winner_side = side;
+    }
+  }
+  predCancel(eventFilter) {
+    for (const e of (this.db.pred_events || []).filter(eventFilter)) {
+      if (e.status === 'settled') continue;
+      for (const p of this.db.predictions.filter(x => x.event_id === e.id && x.status === 'open')) { p.status = 'refunded'; p.payout = p.stake; this.tx(p.user_id, p.stake, 'refund', e.id); }
+      e.status = 'cancelled';
+    }
   }
 
   async createTestPlayers(n) {
@@ -341,6 +420,7 @@ class LocalStore {
     (this.db.audit = this.db.audit || []).unshift({ id: (this.db.audit[0]?.id || 0) + 1, at: new Date().toISOString(), actor_id: this.db.session, action, table_name: table, record_id: (neu || old).id, old_data: old, new_data: neu, reason });
   }
   async deleteMatch(id, reason) {
+    this.predCancel(e => e.match_id === id);
     const m = this.db.matches.find(x => x.id === id);
     this.db.matches = this.db.matches.filter(x => x.id !== id);
     if (m) this.log('delete', 'matches', m, null, reason);

@@ -105,7 +105,8 @@ function derive() {
   const d = S.data;
   // Тестовые данные (их получает только владелец) показываем лишь в тестовом режиме
   S.testMode = lsGet('ponghub_testmode') === '1' && (d.profiles.find(p => p.id === S.user?.id)?.role === 'admin');
-  if (!S.testMode) for (const k of ['profiles', 'matches', 'tournaments', 'live', 'challenges', 'announcements']) if (d[k]) d[k] = d[k].filter(x => !x.is_test);
+  if (!S.testMode) for (const k of ['profiles', 'matches', 'tournaments', 'live', 'challenges', 'announcements', 'predEvents']) if (d[k]) d[k] = d[k].filter(x => !x.is_test);
+  if (!S.testMode && d.predictions) { const ok = new Set((d.predEvents || []).map(e => e.id)); d.predictions = d.predictions.filter(p => ok.has(p.event_id)); }
   S.byId = new Map(d.profiles.map(p => [p.id, p]));
   S.me = S.user ? S.byId.get(S.user.id) || null : null;
   S.A = analyze(d.profiles.filter(p => ['approved', 'archived', 'deleted'].includes(p.status)), d.matches, d.settings);
@@ -114,6 +115,8 @@ function derive() {
   S.data.challenges = S.data.challenges || [];
   S.data.live = S.data.live || [];
   S.data.announcements = S.data.announcements || [];
+  S.data.predEvents = S.data.predEvents || [];
+  S.data.predictions = S.data.predictions || [];
   S.seasons = seasons(S.A, d.profiles);
   document.title = settings().clubName || 'PongHub';
   if (S.data.settings && S.data.settings.icon) applyIcon();
@@ -129,6 +132,7 @@ async function reload() {
   }
   derive();
   if (isAdmin() && !S.emails.size) S.emails = await S.store.adminEmails();
+  if (S.me?.status === 'approved' && predOn()) { try { S.coins = await S.store.rpc('ensure_wallet'); } catch { S.coins = null; } }
 }
 async function refresh() { await reload(); render(); }
 
@@ -156,7 +160,7 @@ function render() {
   else if (S.me.status === 'rejected') html = gateView('🚫', 'Заявка отклонена', 'Администратор отклонил регистрацию. Если это ошибка — свяжитесь с ним лично.');
   else if (S.me.status === 'archived') html = gateView('📦', 'Профиль в архиве', 'Ваш профиль перенесён в архив. Свяжитесь с администратором.');
   else {
-    const views = { home: viewHome, rating: viewRating, matches: viewMatches, player: viewPlayer, h2h: viewH2H, tournaments: viewTournaments, tournament: viewTournament, calendar: viewCalendar, admin: viewAdmin, rules: viewRules, me: viewMe, help: viewHelp, seasons: viewSeasons, live: viewLive, inbox: viewInbox };
+    const views = { home: viewHome, rating: viewRating, matches: viewMatches, player: viewPlayer, h2h: viewH2H, tournaments: viewTournaments, tournament: viewTournament, calendar: viewCalendar, admin: viewAdmin, rules: viewRules, me: viewMe, help: viewHelp, seasons: viewSeasons, live: viewLive, inbox: viewInbox, predict: viewPredict };
     const v = views[r.name] || viewHome;
     html = shell(r, v(r));
   }
@@ -391,13 +395,14 @@ function viewHome() {
       <div><b>${st.streakType === 'W' ? '🔥' + st.streak : st.streak ? '−' + st.streak : '0'}</b><small>серия</small></div>
     </div>
     ${nl ? `<div class="next-league"><span>До лиги «${nl.name}»: ${fmtR(nl.min - r)}</span><div class="bar thin"><i style="width:${Math.max(4, Math.min(100, 100 - (nl.min - r) * 5))}%"></i></div></div>` : ''}
-    <a href="#/player/${me.id}" class="btn ghost-light full">Моя статистика и анализ →</a>
+    <div class="row-btns hero-links"><a href="#/player/${me.id}" class="btn ghost-light">Статистика и анализ →</a>${predOn() && S.coins != null ? `<a href="#/predict" class="btn coin-btn">🎯 ${fmtC(S.coins)} PC</a>` : ''}</div>
   </section>
 
   ${pc.total ? `<a href="#/admin" class="alert">🔔 Ждут вашего решения: ${pc.users ? `${pc.users} ${plural(pc.users, 'заявка', 'заявки', 'заявок')} на регистрацию` : ''}${pc.users && pc.matches ? ', ' : ''}${pc.matches ? `${pc.matches} ${plural(pc.matches, 'матч', 'матча', 'матчей')}` : ''} →</a>` : ''}
   ${mine.length ? `<div class="alert info">⏳ ${mine.length} ${plural(mine.length, 'ваш результат ждёт', 'ваших результата ждут', 'ваших результатов ждут')} подтверждения администратором</div>` : ''}
 
   ${liveBlock()}
+  ${predHomeBlock()}
   ${challengesBlock()}
   ${weekCard()}
 
@@ -781,6 +786,125 @@ function viewRules() {
   </section>`;
 }
 
+// ───────────── Прогнозы ─────────────
+const predOn = () => settings().predEnabled !== false;
+const fmtC = n => Math.round(n || 0).toLocaleString('ru-RU');
+function chanceFor(r) {
+  const R = id => (id ? ratingOf(id) : null);
+  const avg = (...ids) => { const v = ids.map(R).filter(x => x != null); return v.reduce((a, b) => a + b, 0) / v.length; };
+  return expected(avg(r.player1_id, r.player3_id), avg(r.player2_id, r.player4_id), S.A.S.spread || 50);
+}
+const evName = (e, side) => (side === 1 ? [e.player1_id, e.player3_id] : [e.player2_id, e.player4_id]).filter(Boolean).map(id => P(id).nickname).join(' + ');
+const evPlayers = e => [e.player1_id, e.player2_id, e.player3_id, e.player4_id].filter(Boolean);
+const myPred = e => S.data.predictions.find(p => p.event_id === e.id && p.user_id === S.me.id);
+
+function predRow(e) {
+  const my = myPred(e), mine = evPlayers(e).includes(S.me.id);
+  const right = my ? `<span class="pr-my">ваш: ${esc(evName(e, my.side))} · ${my.stake}</span>`
+    : mine ? '<span class="muted small">ваш матч</span>'
+      : e.status === 'open' ? `<button class="btn sm primary" data-act="predict" data-id="${e.id}">Прогноз</button>` : '<span class="muted small">приём закрыт</span>';
+  return `<div class="pr-row"><div class="rn"><b>${esc(evName(e, 1))} <span class="muted">×${e.odds1}</span></b><b>${esc(evName(e, 2))} <span class="muted">×${e.odds2}</span></b>
+    <small class="muted">${e.source === 'live' ? '● идёт к столу' : '⚔️ вызов принят'} · прогнозов: ${e.bets_count}</small></div>${right}</div>`;
+}
+
+function predHomeBlock() {
+  if (!predOn()) return '';
+  const open = S.data.predEvents.filter(e => ['open'].includes(e.status));
+  const recent = S.data.predictions.filter(p => p.user_id === S.me.id && ['won', 'lost', 'refunded'].includes(p.status) && Date.now() - Date.parse(p.settled_at || p.created_at) < 3 * DAY).slice(0, 2);
+  if (!open.length && !recent.length) return '';
+  const res = p => { const e = S.data.predEvents.find(x => x.id === p.event_id); return `<div class="pr-res ${p.status}"><b>${p.status === 'won' ? `Прогноз сыграл <span class="up">+${p.payout} PC</span>` : p.status === 'lost' ? `Не сыграл <span class="down">−${p.stake} PC</span>` : `Возврат ${p.stake} PC`}</b><small class="muted">${e ? `${esc(evName(e, 1))} — ${esc(evName(e, 2))}` : ''}</small></div>`; };
+  return `<section class="card pred-home"><div class="card-h"><h3>🎯 Прогнозы</h3><a href="#/predict" class="link">Все →</a></div>
+    ${recent.map(res).join('')}${open.slice(0, 3).map(predRow).join('')}</section>`;
+}
+
+function openPredict(eid) {
+  const e = S.data.predEvents.find(x => x.id === eid);
+  if (!e) return;
+  const s = settings(), min = s.predMin ?? 10, max = s.predMax ?? 500;
+  const bal = S.coins ?? 0;
+  const st = { side: e.chance1 >= 0.5 ? 1 : 2, stake: Math.min(100, bal, max) };
+  const draw = sh => {
+    const odds = st.side === 1 ? e.odds1 : e.odds2;
+    sh.querySelector('.pd-body').innerHTML = `<h3>🎯 Прогноз на матч</h3>
+      <div class="pd-vs"><div><b>${esc(evName(e, 1))}</b><small>${pct(e.chance1)}</small></div><span>vs</span><div><b>${esc(evName(e, 2))}</b><small>${pct(1 - e.chance1)}</small></div></div>
+      <div class="pd-bar"><i style="width:${e.chance1 * 100}%"></i></div>
+      <small class="muted">Шансы по рейтингу. Чем меньше шанс — тем выше коэффициент.</small>
+      <div class="pd-sides">${[1, 2].map(sd => `<button type="button" class="pd-side s${sd} ${st.side === sd ? 'on' : ''}" data-side="${sd}"><span>${esc(evName(e, sd))}</span><b>×${sd === 1 ? e.odds1 : e.odds2}</b></button>`).join('')}</div>
+      <div class="pd-stakes">${[min, 50, 100, 250, max].filter((v, i, a) => v >= min && v <= max && a.indexOf(v) === i).map(v => `<button type="button" class="chip ${st.stake === v ? 'on' : ''}" data-stake="${v}">${v}</button>`).join('')}
+        <input type="number" min="${min}" max="${max}" value="${st.stake}" class="pd-input" aria-label="Своя сумма"></div>
+      <div class="pd-sum">Ставка <b>${st.stake} PC</b> · выигрыш <b class="up">${Math.round(st.stake * odds)} PC</b><small class="muted">На счёте: ${fmtC(bal)} PC</small></div>
+      <div class="mf-err"></div>
+      <button class="btn primary big" data-go="1">Поставить на ${esc(evName(e, st.side))}</button>
+      <small class="muted center">Прогноз нельзя отменить. Баллы не влияют на рейтинг.</small>`;
+  };
+  openModal('<div class="pd-body stack"></div>', sh => {
+    draw(sh);
+    sh.addEventListener('click', async ev => {
+      const sd = ev.target.closest('[data-side]'); if (sd) { st.side = +sd.dataset.side; return draw(sh); }
+      const sk = ev.target.closest('[data-stake]'); if (sk) { st.stake = +sk.dataset.stake; return draw(sh); }
+      if (ev.target.closest('[data-go]')) {
+        const btn = ev.target.closest('button');
+        btn.disabled = true;
+        try {
+          S.coins = await S.store.rpc('place_prediction', { eid: e.id, pick: st.side, amount: st.stake });
+          closeModal(); await refresh(); toast(`Прогноз принят: ${st.stake} PC на ${evName(e, st.side)} 🎯`);
+        } catch (er) { sh.querySelector('.mf-err').textContent = er.message; btn.disabled = false; }
+      }
+    });
+    sh.addEventListener('change', ev => { if (ev.target.classList.contains('pd-input')) { st.stake = Math.max(min, Math.min(max, Math.round(+ev.target.value || min))); draw(sh); } });
+  });
+}
+
+function predAchievements() {
+  const mine = S.data.predictions.filter(p => p.user_id === S.me.id).sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
+  const settled = mine.filter(p => ['won', 'lost'].includes(p.status));
+  let run = 0, best = 0; for (const p of settled) { run = p.status === 'won' ? run + 1 : 0; best = Math.max(best, run); }
+  return [
+    { name: 'Первый прогноз', desc: 'Сделать прогноз', ok: mine.length >= 1 },
+    { name: 'Провидец', desc: '5 верных подряд', ok: best >= 5, prog: [best, 5] },
+    { name: 'Против толпы', desc: 'Угадать на ×3 и выше', ok: settled.some(p => p.status === 'won' && +p.odds >= 3) },
+    { name: 'Болельщик', desc: '50 прогнозов', ok: mine.length >= 50, prog: [mine.length, 50] },
+    { name: 'Магнат', desc: '5 000 PC на счёте', ok: (S.coins || 0) >= 5000, prog: [S.coins || 0, 5000] },
+  ];
+}
+
+function viewPredict() {
+  if (!predOn()) return '<div class="empty">Прогнозы выключены владельцем клуба</div>';
+  const open = S.data.predEvents.filter(e => e.status === 'open');
+  const mine = S.data.predictions.filter(p => p.user_id === S.me.id);
+  const active = mine.filter(p => p.status === 'open');
+  const history = mine.filter(p => p.status !== 'open').slice(0, 30);
+  const settled = mine.filter(p => ['won', 'lost'].includes(p.status));
+  const acc = settled.length ? settled.filter(p => p.status === 'won').length / settled.length : 0;
+  const evOf = p => S.data.predEvents.find(e => e.id === p.event_id);
+  const line = p => { const e = evOf(p); return `<div class="pr-hist ${p.status}"><div class="rn"><b>${e ? `${esc(evName(e, 1))} — ${esc(evName(e, 2))}` : 'Матч'}</b><small class="muted">на ${e ? esc(evName(e, p.side)) : '—'} · ${p.stake} PC × ${p.odds} · ${fmtDT(p.created_at)}</small></div>
+    <b class="${p.status === 'won' ? 'up' : p.status === 'lost' ? 'down' : 'muted'}">${p.status === 'won' ? '+' + p.payout : p.status === 'lost' ? '−' + p.stake : p.status === 'refunded' ? 'возврат' : 'ждём'}</b></div>`; };
+  return `<div class="page-h"><h1>🎯 Прогнозы</h1></div>
+    <section class="hero table-card coin-hero"><div class="coin-top"><div><small>Ваш счёт</small><div class="big-num">${fmtC(S.coins)} <span class="pc">PC</span></div></div>
+      <div class="coin-stats"><div><b>${settled.length}</b><small>прогнозов</small></div><div><b>${pct(acc)}</b><small>верных</small></div></div></div>
+      <p class="muted small">Пинг-коины — игровые баллы. Их нельзя купить, и они никак не влияют на рейтинг. Каждый понедельник +${settings().predWeekly ?? 100} PC всем.</p></section>
+    <section class="card"><div class="card-h"><h3>Открытые прогнозы</h3></div>${open.map(predRow).join('') || '<div class="empty small">Сейчас открытых нет. Прогноз открывается, когда начинается живой счёт или принят вызов.</div>'}</section>
+    ${active.length ? `<section class="card"><div class="card-h"><h3>Ждут результата</h3></div>${active.map(line).join('')}</section>` : ''}
+    <section class="card"><div class="card-h"><h3>🏆 Лучшие прогнозисты</h3><div class="seg sm"><button class="on" data-act="pred-board" data-p="month">месяц</button><button data-act="pred-board" data-p="all">всё время</button></div></div>
+      <div id="pred-board" data-period="month"><div class="muted small">Загружаю…</div></div></section>
+    <section class="card"><div class="card-h"><h3>Достижения прогнозиста</h3></div><div class="ach-grid">${predAchievements().map(a => `<div class="ach ${a.ok ? 'ok' : ''}"><span class="ach-i">🎯</span><b>${a.name}</b><small>${a.desc}</small>${!a.ok && a.prog ? `<div class="bar thin"><i style="width:${Math.min(100, a.prog[0] / a.prog[1] * 100)}%"></i></div>` : ''}</div>`).join('')}</div></section>
+    ${history.length ? `<section class="card"><div class="card-h"><h3>История</h3></div>${history.map(line).join('')}</section>` : ''}`;
+}
+
+async function renderPredBoard() {
+  const box = document.getElementById('pred-board');
+  if (!box) return;
+  const d = new Date();
+  const since = box.dataset.period === 'month' ? new Date(d.getFullYear(), d.getMonth(), 1).toISOString() : null;
+  let rows = [];
+  try { rows = await S.store.rpc('coin_leaderboard', { since }); } catch { box.innerHTML = '<div class="empty small">Таблица появится после обновления базы</div>'; return; }
+  rows = rows.filter(r => S.byId.has(r.user_id)).sort((a, b) => (since ? b.profit - a.profit : b.balance - a.balance));
+  if (document.getElementById('pred-board') !== box) return;
+  box.innerHTML = rows.map((r, i) => `<div class="rank-row ${r.user_id === S.me.id ? 'me' : ''}"><span class="pos">${['🥇', '🥈', '🥉'][i] || i + 1}</span>${ava(P(r.user_id), 'sm')}
+    <span class="rn"><b>${esc(P(r.user_id).nickname)}</b><small>${r.bets ? `${Math.round(r.wins / r.bets * 100)}% верных · ${r.bets} прогн.` : 'ещё без прогнозов'}</small></span>
+    <span class="rr"><b>${fmtC(since ? r.profit : r.balance)}</b><small class="muted">${since ? 'за месяц' : 'PC'}</small></span></div>`).join('') || '<div class="empty small">Пока никто не делал прогнозов</div>';
+}
+
 // ───────────── Объявления ─────────────
 const seenAt = () => +(lsGet('ponghub_seen_ann') || 0);
 const annForMe = a => !a.recipients?.length || a.recipients.includes(S.me?.id) || isAdmin();
@@ -860,9 +984,15 @@ function viewLive(r) {
     </div>`;
   };
   const sets = g.sets.map((x, i) => `<span>П${i + 1} <b>${x[0]}:${x[1]}</b></span>`).join('');
+  const ev = S.data.predEvents.find(e => e.source_id === l.id);
+  const imPlayer = [l.player1_id, l.player2_id, l.player3_id, l.player4_id].includes(S.me.id);
+  const myP = ev && S.data.predictions.find(p => p.event_id === ev.id);
+  const predBar = !ev ? '' : `<div class="card lv-pred">🎯 <span>${myP ? `Ваш прогноз: <b>${esc(sideName(l, myP.side - 1))}</b> · ${myP.stake} PC × ${myP.odds}` : ev.status === 'open' ? `Прогнозы открыты до первого очка · уже ${ev.bets_count}` : `Прогнозов: ${ev.bets_count} · приём закрыт`}</span>
+    ${!myP && !imPlayer && ev.status === 'open' ? `<button class="btn sm primary" data-act="predict" data-id="${ev.id}">×${ev.odds1} / ×${ev.odds2}</button>` : ''}</div>`;
   return `<div class="page-h"><a href="#/home" class="back">← Главная</a><span class="live">● LIVE</span></div>
     <div class="lv-meta">${l.kind === 'doubles' ? 'Пары 2×2' : t ? '🏆 ' + esc(t.name) : l.type === 'tournament' ? 'Турнирный матч' : 'Свободная игра'} · до ${g.need} ${plural(g.need, 'победы', 'побед', 'побед')} · партия до ${l.points_to}${g.deuce && g.winner === null ? ' · <b>баланс</b>' : ''}</div>
     ${scorer && !log.length ? `<div class="card lv-first"><b>Кто подаёт первым?</b><div class="seg">${[0, 1].map(sd => `<button class="${l.first_server === sd ? 'on' : ''}" data-act="live-first" data-id="${l.id}" data-side="${sd}">${esc(sideName(l, sd))}</button>`).join('')}</div></div>` : ''}
+    ${predBar}
     <div class="lv-board">${panel(0)}<div class="lv-sets-score">${g.won[0]}<i>:</i>${g.won[1]}</div>${panel(1)}</div>
     ${sets ? `<div class="lv-sets">${sets}</div>` : ''}
     ${g.winner !== null ? `<div class="card lv-done"><h3>🏁 Матч окончен</h3><p>Победа: <b>${esc(sideName(l, g.winner))}</b> · ${g.won[0]}:${g.won[1]}</p>
@@ -1184,6 +1314,7 @@ function viewMe() {
   ${isEditor() ? `<a href="#/admin" class="card menu-item">🛠️ <span>${isAdmin() ? 'Управление клубом' : 'Подтверждение результатов'}</span>${pendingCounts().total ? `<i class="dot inline">${pendingCounts().total}</i>` : ''}<span>→</span></a>` : ''}
   <section class="card menu">
     <button class="menu-item" data-act="edit-profile">✏️ <span>Редактировать профиль</span></button>
+    ${predOn() ? '<a class="menu-item" href="#/predict">🎯 <span>Прогнозы</span></a>' : ''}
     <a class="menu-item" href="#/help">❓ <span>Как пользоваться</span></a>
     <a class="menu-item" href="#/rules">📐 <span>Как считается рейтинг</span></a>
     <a class="menu-item" href="#/calendar">📅 <span>Календарь игр</span></a>
@@ -1281,6 +1412,13 @@ function viewAdmin(r) {
       ${f('decayGraceDays', 'Дней без игр без штрафа', 'После этого рейтинг начинает снижаться', 1)}
       ${f('decayPerWeek', 'Минус за каждую неделю', 'Рейтинг не опускается ниже стартового', 0.1)}
       ${f('seasonMinMatches', 'Матчей для борьбы за титул сезона', 'Минимум матчей за месяц, чтобы стать чемпионом', 1)}
+      <hr><b class="small">🎯 Прогнозы на матчи</b>
+      <label class="switch"><input type="checkbox" name="predEnabled" ${s.predEnabled ? 'checked' : ''}><i></i><span>Включены</span></label>
+      ${f('predStart', 'Стартовый баланс, PC', 'Сколько пинг-коинов получает каждый в начале', 50)}
+      ${f('predWeekly', 'Бонус по понедельникам, PC', 'Всем, кто уже участвует в прогнозах', 10)}
+      ${f('predDaily', 'Ежедневная помощь при нуле, PC', 'Чтобы никто не выпадал из игры', 10)}
+      ${f('predMin', 'Минимальная ставка, PC', '', 5)}
+      ${f('predMax', 'Максимальная ставка, PC', '', 50)}
       <hr>
       <div><b class="small">Иконка приложения</b><div class="icon-pick">${Object.entries(ICON_VARIANTS).map(([k, l]) => `<label><input type="radio" name="icon" value="${k}" ${iconChoice() === k ? 'checked' : ''}><img src="icons/${k}.svg" alt="" width="64" height="64"><span>${l}</span></label>`).join('')}</div>
         <small class="muted">Меняется в приложении сразу. На главном экране телефона иконка обновится после переустановки.</small></div>
@@ -1491,6 +1629,7 @@ function openMatchForm(opts = {}) {
     };
     await busy(btn, async () => {
       const l = await S.store.insert('live_matches', row);
+      if (predOn()) await S.store.rpc('create_pred_event', { src: 'live', src_id: l.id, chance: chanceFor(row) }).catch(() => {});
       closeModal(); await refresh(); go(`#/live/${l.id}`);
     });
   }
@@ -1773,7 +1912,11 @@ const ACT = {
   },
   'live-save': el => saveLive(S.data.live.find(x => x.id === el.dataset.id), el),
   challenge: el => openChallengeForm(el.dataset.id),
-  'ch-accept': el => busy(el, async () => { await S.store.update('challenges', el.dataset.id, { status: 'accepted', responded_at: new Date().toISOString() }); await refresh(); toast('Вызов принят — к столу! 🏓'); }),
+  'ch-accept': el => busy(el, async () => {
+    const c = await S.store.update('challenges', el.dataset.id, { status: 'accepted', responded_at: new Date().toISOString() });
+    if (predOn()) await S.store.rpc('create_pred_event', { src: 'challenge', src_id: c.id, chance: chanceFor({ player1_id: c.from_id, player2_id: c.to_id }) }).catch(() => {});
+    await refresh(); toast('Вызов принят — к столу! 🏓');
+  }),
   'ch-decline': el => busy(el, async () => { await S.store.update('challenges', el.dataset.id, { status: 'declined', responded_at: new Date().toISOString() }); await refresh(); }),
   'ch-cancel': el => busy(el, async () => { await S.store.update('challenges', el.dataset.id, { status: 'cancelled' }); await refresh(); }),
   'ch-result': el => {
@@ -1782,6 +1925,8 @@ const ACT = {
     openMatchForm({ fixed: { player1_id: S.me.id, player2_id: other, type: 'free', challengeId: c.id } });
   },
   'new-ann': () => openAnnForm(),
+  predict: el => openPredict(el.dataset.id),
+  'pred-board': el => { document.getElementById('pred-board').dataset.period = el.dataset.p; document.querySelectorAll('[data-act=pred-board]').forEach(b => b.classList.toggle('on', b === el)); renderPredBoard(); },
   'del-ann': async el => { if (await confirmDialog('Удалить объявление? Оно пропадёт из ленты у всех.', 'Удалить', true)) await busy(el, async () => { await S.store.remove('announcements', el.dataset.id); await refresh(); }); },
   'test-create': el => busy(el, async () => { const n = await S.store.createTestPlayers(4); await refresh(); toast(`Создано тестовых игроков: ${n}`); }),
   'test-purge': async el => {
@@ -1927,6 +2072,8 @@ const FORMS = {
       'leagueWin', 'leagueWinSlope', 'leagueWinMax', 'leagueLoss', 'leagueLossSlope', 'leagueLossMax', 'leagueFreeMult']) s[k] = +fd.get(k);
     s.system = fd.get('system') === 'elo' ? 'elo' : 'league';
     s.decayEnabled = !!fd.get('decayEnabled');
+    s.predEnabled = !!fd.get('predEnabled');
+    for (const k of ['predStart', 'predWeekly', 'predDaily', 'predMin', 'predMax']) s[k] = Math.round(+fd.get(k) || 0);
     if (!(s.spread > 0)) throw new Error('Масштаб должен быть больше нуля');
     s.marginBonus = !!fd.get('marginBonus');
     s.clubName = fd.get('clubName').trim() || 'PongHub';
@@ -2055,6 +2202,7 @@ function afterRender(r) {
   fitNicks();
   document.fonts?.ready.then(fitNicks);
   if (r.name === 'me') renderPushBox();
+  if (r.name === 'predict') renderPredBoard();
   if (r.name === 'admin' && r.args[0] === 'log') renderAudit();
   if (r.name === 'admin' && r.args[0] === 'data') renderBackups();
   const f = document.querySelector('[data-form=settings]');

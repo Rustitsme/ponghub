@@ -660,3 +660,39 @@ textarea { width: 100%; padding: 11px 12px; border-radius: 10px; border: 1px sol
 .sys-seg label { cursor: pointer; color: var(--muted); font-weight: 600; display: block; text-align: center; padding: 8px 6px; border-radius: 9px; }
 .sys-seg label.on { background: var(--red); color: #fff; }
 form[data-sys="league"] .only-elo, form[data-sys="elo"] .only-league { display: none; }
+
+/* ── Прогнозы ── */
+.hero-links { justify-content: space-between; margin-top: 10px; }
+.coin-btn { background: linear-gradient(135deg, var(--wood-l), var(--wood)); color: #3b2410; border: 0; font-weight: 800; }
+.pred-home { border: 2px solid color-mix(in srgb, var(--wood) 60%, var(--line)); }
+.pr-row, .pr-hist { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.pr-row:last-child, .pr-hist:last-child { border-bottom: 0; }
+.pr-row .rn b { font-size: 14px; }
+.pr-my { font-size: 12px; font-weight: 700; color: #a5622a; text-align: right; }
+.pr-res { display: flex; flex-direction: column; padding: 8px 10px; border-radius: 10px; margin-bottom: 6px; background: var(--bg2); }
+.pr-res.won { background: color-mix(in srgb, var(--up) 14%, var(--surface)); }
+.pr-res.lost { background: color-mix(in srgb, var(--down) 10%, var(--surface)); }
+.coin-hero .coin-top { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; }
+.coin-hero .pc { font-size: 24px; opacity: .8; }
+.coin-stats { display: flex; gap: 8px; }
+.coin-stats > div { background: rgba(0, 0, 0, .22); border-radius: 10px; padding: 6px 10px; text-align: center; }
+.coin-stats b { display: block; font: 700 18px var(--display); }
+.coin-stats small { font-size: 10px; opacity: .8; }
+.pd-vs { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; text-align: center; }
+.pd-vs div { display: flex; flex-direction: column; }
+.pd-vs small { color: var(--muted); font-weight: 700; }
+.pd-vs > span { color: var(--muted); font: 800 18px var(--display); }
+.pd-bar { height: 8px; border-radius: 4px; background: #2c6ccb; overflow: hidden; }
+.pd-bar i { display: block; height: 100%; background: var(--red); }
+.pd-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pd-side { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px; border-radius: 14px; border: 2px solid var(--line); background: var(--surface); color: var(--text); cursor: pointer; font: 600 13px var(--font); }
+.pd-side b { font: 800 24px var(--display); }
+.pd-side.s1.on { background: var(--red); border-color: var(--red); color: #fff; }
+.pd-side.s2.on { background: #2c6ccb; border-color: #2c6ccb; color: #fff; }
+.pd-stakes { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pd-stakes .chip { cursor: pointer; font-weight: 700; }
+.pd-stakes .chip.on { background: var(--black); color: #fff; border-color: var(--black); }
+.pd-input { width: 90px; padding: 6px 8px; }
+.pd-sum { display: flex; flex-direction: column; padding: 10px; border-radius: 10px; background: var(--bg2); }
+.lv-pred { display: flex; align-items: center; gap: 10px; border: 2px solid color-mix(in srgb, var(--wood) 60%, var(--line)); }
+.lv-pred span { flex: 1; font-size: 13px; }
