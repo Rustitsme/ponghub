@@ -142,7 +142,7 @@ async function onChange(table: string, type: string, r: any, o: any, actor: stri
       ? `${nick(r.player1_id)} + ${nick(r.player3_id)} ${r.sets1}:${r.sets2} ${nick(r.player2_id)} + ${nick(r.player4_id)}`
       : `${nick(r.player1_id)} ${r.sets1}:${r.sets2} ${nick(r.player2_id)}`;
     if (type === 'INSERT' && r.status === 'pending')
-      return send(except(editors, r.submitted_by), { title: 'Результат ждёт подтверждения', body: score, url: '#/admin/matches', tag: 'pending' });
+      return send(except(admins, r.submitted_by), { title: 'Результат ждёт подтверждения', body: score, url: '#/admin/matches', tag: 'pending' });
     const becameApproved = r.status === 'approved' && (type === 'INSERT' || o?.status !== 'approved');
     if (becameApproved) {
       const players = dbl ? [r.player1_id, r.player2_id, r.player3_id, r.player4_id] : [r.player1_id, r.player2_id];

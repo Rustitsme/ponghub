@@ -696,3 +696,6 @@ form[data-sys="league"] .only-elo, form[data-sys="elo"] .only-league { display: 
 .pd-sum { display: flex; flex-direction: column; padding: 10px; border-radius: 10px; background: var(--bg2); }
 .lv-pred { display: flex; align-items: center; gap: 10px; border: 2px solid color-mix(in srgb, var(--wood) 60%, var(--line)); }
 .lv-pred span { flex: 1; font-size: 13px; }
+.first-match { text-align: center; }
+.first-match .fm-ic { font-size: 40px; }
+.first-match .row-btns { justify-content: center; }

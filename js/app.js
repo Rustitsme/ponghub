@@ -184,7 +184,7 @@ const icon = (n, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="
 
 function pendingCounts() {
   const users = isAdmin() ? S.data.profiles.filter(p => p.status === 'pending').length : 0;
-  const matches = isEditor() ? S.data.matches.filter(m => m.status === 'pending').length : 0;
+  const matches = isAdmin() ? S.data.matches.filter(m => m.status === 'pending').length : 0;
   return { users, matches, total: users + matches };
 }
 
@@ -373,7 +373,7 @@ function viewHome() {
   const nl = nextLeague(r);
   const pom = playerOfMonth(S.A, S.data.profiles);
   const pc = pendingCounts();
-  const recent = S.data.matches.filter(m => m.status === 'approved' && (isEditor() || players(m).includes(me.id))).sort((a, b) => ts(b) - ts(a)).slice(0, 6);
+  const recent = S.data.matches.filter(m => m.status === 'approved' && (isAdmin() || players(m).includes(me.id))).sort((a, b) => ts(b) - ts(a)).slice(0, 6);
   const upcoming = upcomingItems().slice(0, 3);
   const active = S.data.tournaments.filter(t => t.status === 'active');
   const mine = S.data.matches.filter(m => m.status === 'pending' && m.submitted_by === me.id);
@@ -421,8 +421,10 @@ function viewHome() {
   ${upcoming.length ? `<section class="card"><div class="card-h"><h3>Ближайшие события</h3><a href="#/calendar" class="link">Календарь →</a></div>${upcoming.map(eventRow).join('')}</section>` : ''}
 
   <section>
-    <div class="sec-h"><h3>${isEditor() ? 'Последние матчи' : 'Мои последние матчи'}</h3><a href="#/matches" class="link">Все →</a></div>
-    ${recent.map(m => matchCard(m)).join('') || '<div class="empty">Матчей пока нет. Нажмите «+», чтобы внести первый.</div>'}
+    <div class="sec-h"><h3>${isAdmin() ? 'Последние матчи' : 'Мои последние матчи'}</h3><a href="#/matches" class="link">Все →</a></div>
+    ${recent.map(m => matchCard(m)).join('') || `<div class="card first-match"><div class="fm-ic">🏓</div><b>Здесь появятся ваши матчи</b>
+      <p class="muted small">Сыграйте первую игру и внесите счёт — сразу появится рейтинг, история и статистика. Рейтинг клуба и игроков уже можно посмотреть.</p>
+      <div class="row-btns"><a href="#/rating" class="btn ghost">Рейтинг клуба</a><button class="btn primary" data-act="add-match">Внести первый матч</button></div></div>`}
   </section>`;
 }
 
@@ -441,7 +443,7 @@ function rankRow(x, i) {
 function viewRating(r) {
   const mode = r?.q.get('mode') === 'doubles' ? 'doubles' : 'singles';
   const tabs = `<div class="seg"><a href="#/rating" class="${mode === 'singles' ? 'on' : ''}">Одиночный 1×1</a><a href="#/rating?mode=doubles" class="${mode === 'doubles' ? 'on' : ''}">Парный 2×2</a></div>`;
-  const head = `<div class="page-h"><h1>Рейтинг</h1><div class="row-inline"><a href="#/seasons" class="link">🏆 Сезоны</a><a href="#/rules" class="link">Как считается?</a></div></div>${tabs}`;
+  const head = `<div class="page-h"><h1>Рейтинг</h1><div class="row-inline"><a href="#/seasons" class="link">🏆 Сезоны</a>${isAdmin() ? '<a href="#/rules" class="link">Как считается?</a>' : ''}</div></div>${tabs}`;
   if (mode === 'doubles') {
     const list = rankingDoubles(S.D, S.data.profiles);
     return `${head}<p class="muted small">Отдельный рейтинг только по парным играм. У всех стартует с ${S.D.S.initialRating}.</p>
@@ -732,6 +734,7 @@ function viewCalendar() {
 
 // ───────────── Правила рейтинга ─────────────
 function viewRules() {
+  if (!isAdmin()) return '<div class="empty">Раздел доступен только владельцу клуба</div>';
   const s = settings();
   const diffs = [-30, -15, 0, 15, 30];
   const row = (k, label) => `<tr><td class="l">${label}</td>${diffs.map(d => { const e = expected(0, d, s.spread); return `<td><span class="up">+${(k * (1 - e)).toFixed(2)}</span><br><span class="down">−${(k * e).toFixed(2)}</span></td>`; }).join('')}</tr>`;
@@ -1299,7 +1302,7 @@ function viewHelp() {
   ${!isAdmin() ? '' : sec('👥 Роли <span class="muted small">· видите только вы</span>', `<ul><li><b>👑 Владелец</b> — принимает заявки, назначает помощников, меняет настройки рейтинга.</li>
     <li><b>✍️ Помощник</b> — вносит результаты, ведёт турниры, подтверждает матчи. Назначается в «Управление → Игроки».</li>
     <li><b>Игрок</b> — смотрит статистику и может отправить свой результат на подтверждение.</li></ul>`)}
-  <a href="#/rules" class="card menu-item">📐 <span>Как считается рейтинг</span><span>→</span></a>`;
+  ${isAdmin() ? '<a href="#/rules" class="card menu-item">📐 <span>Как считается рейтинг</span><span>→</span></a>' : ''}`;
 }
 
 // ───────────── Профиль / настройки ─────────────
@@ -1311,12 +1314,12 @@ function viewMe() {
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
   return `<div class="page-h"><h1>Профиль</h1></div>
   <a href="#/player/${me.id}" class="card me-card">${ava(me, 'md')}<div><b>${esc(me.nickname)}</b> ${roleBadge(me)}<div class="muted small">${esc(me.full_name || '')}</div></div><span>→</span></a>
-  ${isEditor() ? `<a href="#/admin" class="card menu-item">🛠️ <span>${isAdmin() ? 'Управление клубом' : 'Подтверждение результатов'}</span>${pendingCounts().total ? `<i class="dot inline">${pendingCounts().total}</i>` : ''}<span>→</span></a>` : ''}
+  ${isAdmin() ? `<a href="#/admin" class="card menu-item">🛠️ <span>Управление клубом</span>${pendingCounts().total ? `<i class="dot inline">${pendingCounts().total}</i>` : ''}<span>→</span></a>` : ''}
   <section class="card menu">
     <button class="menu-item" data-act="edit-profile">✏️ <span>Редактировать профиль</span></button>
     ${predOn() ? '<a class="menu-item" href="#/predict">🎯 <span>Прогнозы</span></a>' : ''}
     <a class="menu-item" href="#/help">❓ <span>Как пользоваться</span></a>
-    <a class="menu-item" href="#/rules">📐 <span>Как считается рейтинг</span></a>
+    ${isAdmin() ? '<a class="menu-item" href="#/rules">📐 <span>Как считается рейтинг</span></a>' : ''}
     <a class="menu-item" href="#/calendar">📅 <span>Календарь игр</span></a>
     <a class="menu-item" href="#/h2h/${me.id}">⚔️ <span>Личные встречи</span></a>
     ${S.store.mode === 'supabase' ? '<button class="menu-item" data-act="change-pass">🔑 <span>Сменить пароль</span></button>' : ''}
@@ -1338,7 +1341,7 @@ function viewMe() {
 
 // ───────────── Админка ─────────────
 function viewAdmin(r) {
-  if (!isEditor()) return '<div class="empty">Нет доступа</div>';
+  if (!isAdmin()) return '<div class="empty">Управление клубом доступно только владельцу</div>';
   const tabs = isAdmin() ? [['reqs', 'Заявки'], ['matches', 'Матчи'], ['players', 'Игроки'], ['log', 'Журнал'], ['rating', 'Рейтинг'], ['data', 'Данные']] : [['matches', 'Матчи']];
   const tab = tabs.some(t => t[0] === r.args[0]) ? r.args[0] : tabs[0][0];
   const pc = pendingCounts();
@@ -1710,7 +1713,7 @@ function openMatchDetail(id) {
         ${m.status === 'approved' ? `<button class="btn ghost" data-act="share-match" data-id="${m.id}">📤 Поделиться</button>` : ''}
         ${canEdit && isEditor() ? `<button class="btn" data-act="edit-match" data-id="${m.id}">✏️ Изменить</button>` : ''}
         ${canEdit && !isEditor() ? `<button class="btn danger ghost" data-act="withdraw-match" data-id="${m.id}">Отозвать</button>` : ''}
-        ${isEditor() && m.status === 'pending' ? `<button class="btn primary" data-act="approve-match" data-id="${m.id}">Подтвердить</button>` : ''}
+        ${isAdmin() && m.status === 'pending' ? `<button class="btn primary" data-act="approve-match" data-id="${m.id}">Подтвердить</button>` : ''}
       </div>
     </div>`);
 }
@@ -1732,7 +1735,7 @@ function openDoublesDetail(m) {
       ${m.status === 'approved' ? `<button class="btn ghost" data-act="share-match" data-id="${m.id}">📤 Поделиться</button>` : ''}
       ${canEdit && isEditor() ? `<button class="btn" data-act="edit-match" data-id="${m.id}">✏️ Изменить</button>` : ''}
       ${canEdit && !isEditor() ? `<button class="btn danger ghost" data-act="withdraw-match" data-id="${m.id}">Отозвать</button>` : ''}
-      ${isEditor() && m.status === 'pending' ? `<button class="btn primary" data-act="approve-match" data-id="${m.id}">Подтвердить</button>` : ''}
+      ${isAdmin() && m.status === 'pending' ? `<button class="btn primary" data-act="approve-match" data-id="${m.id}">Подтвердить</button>` : ''}
     </div></div>`);
 }
 
