@@ -258,13 +258,13 @@ class SupaStore {
   // ── клубы ──
   async createClub(c) { return this.rpc('create_club', { p_name: c.name, p_city: c.city || null, p_address: c.address || null, p_lat: c.lat ?? null, p_lng: c.lng ?? null, p_visible: c.visible !== false, p_description: c.description || null }); }
   async updateClub(cid, patch) { return this.rpc('update_club', { cid, patch }); }
-  async joinByInvite(code) { return this.rpc('join_by_invite', { p_code: code }); }
-  async requestJoin(cid) { return this.rpc('request_join', { cid }); }
+  async clubByInvite(code) { return this.rpc('club_by_invite', { p_code: code }); }
+  async requestJoin(cid, code = null) { return this.rpc('request_join', { cid, p_code: code }); }
   async cancelRequest(cid) { return this.rpc('cancel_request', { cid }); }
   async leaveClub(cid) { return this.rpc('leave_club', { cid }); }
   async transferClub(cid, uid) { return this.rpc('transfer_club', { cid, uid }); }
   async directory(q = '') { return (await this.rpc('club_directory', { q })) || []; }
-  async clubPublic(cid) { return this.rpc('club_public', { cid }); }
+  async clubPublic(cid, code = null) { return this.rpc('club_public', { cid, p_code: code }); }
   async inviteCode(cid) {
     const { data, error } = await this.sb.from('club_invites').select('code').eq('club_id', cid).maybeSingle();
     if (error) throw translateError(error);
@@ -409,18 +409,19 @@ class LocalStore {
     if (this.role(cid) !== 'owner' && !this.founder()) throw new Error('Недостаточно прав для этого действия');
     Object.assign(this.db.clubs.find(c => c.id === cid), patch); this.save();
   }
-  async joinByInvite(code) {
+  inviteOk(cid, code) { return !!code && this.db.invites[cid] === String(code).toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+  async clubByInvite(code) {
     const k = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
     const cid = Object.keys(this.db.invites).find(id => this.db.invites[id] === k && !this.db.clubs.find(c => c.id === id)?.blocked);
     if (!cid) throw new Error('Код приглашения не найден или устарел');
-    const m = this.mem(cid, this.db.session);
-    if (m) Object.assign(m, { status: 'active', via: 'invite' }); else this.db.club_members.push({ club_id: cid, user_id: this.db.session, role: 'player', status: 'active', via: 'invite', joined_at: new Date().toISOString() });
-    this.save(); return cid;
+    return cid;
   }
-  async requestJoin(cid) {
-    const m = this.mem(cid, this.db.session);
+  async requestJoin(cid, code = null) {
+    const c = this.db.clubs.find(x => x.id === cid), inv = this.inviteOk(cid, code);
+    if (!c || c.blocked || !(c.visible || inv)) throw new Error('Клуб не найден');
+    const m = this.mem(cid, this.db.session), via = inv ? 'invite' : 'request';
     if (m?.status === 'active' || m?.status === 'pending') return;
-    if (m) Object.assign(m, { status: 'pending', via: 'request' }); else this.db.club_members.push({ club_id: cid, user_id: this.db.session, role: 'player', status: 'pending', via: 'request', joined_at: new Date().toISOString() });
+    if (m) Object.assign(m, { status: 'pending', via }); else this.db.club_members.push({ club_id: cid, user_id: this.db.session, role: 'player', status: 'pending', via, joined_at: new Date().toISOString() });
     this.save();
   }
   async cancelRequest(cid) { this.db.club_members = this.db.club_members.filter(m => !(m.club_id === cid && m.user_id === this.db.session && m.status === 'pending')); this.save(); }
@@ -443,9 +444,9 @@ class LocalStore {
       .filter(c => !t || c.name.toLowerCase().includes(t) || (c.city || '').toLowerCase().includes(t) || c.code.toLowerCase() === t || c.code.toLowerCase() === 'ph-' + t)
       .map(c => this.clubRow(c)).sort((a, b) => b.players - a.players);
   }
-  async clubPublic(cid) {
+  async clubPublic(cid, code = null) {
     const c = this.db.clubs.find(x => x.id === cid);
-    if (!c || c.blocked || !(c.visible || this.role(cid) || this.founder())) throw new Error('Клуб не найден');
+    if (!c || c.blocked || !(c.visible || this.role(cid) || this.founder() || this.inviteOk(cid, code))) throw new Error('Клуб не найден');
     const players = this.db.club_members.filter(m => m.club_id === cid && m.status !== 'pending').map(m => {
       const p = this.db.profiles.find(x => x.id === m.user_id);
       return p && !p.is_test && { id: p.id, nickname: p.nickname, avatar: p.avatar, color: p.color, photo_url: p.photo_url, initial_rating: m.initial_rating, created_at: p.created_at, status: m.status === 'active' ? 'approved' : m.status === 'archived' ? 'archived' : 'deleted' };

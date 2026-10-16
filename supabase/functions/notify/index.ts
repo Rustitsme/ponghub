@@ -106,11 +106,9 @@ async function onChange(table: string, type: string, r: any, o: any, actor: stri
     const who = ps.find((p) => p.id === r.user_id)?.nickname
       ?? (await sb.from('profiles').select('nickname').eq('id', r.user_id).maybeSingle()).data?.nickname ?? 'Игрок';
     if (r.status === 'pending' && (type === 'INSERT' || o?.status !== 'pending'))
-      return send(admins, { title: 'Новая заявка в клуб', body: `${who} хочет вступить в «${cl.name}»`, url: '#/admin/reqs', tag: 'reqs' });
+      return send(admins, { title: 'Новая заявка в клуб', body: `${who} хочет вступить в «${cl.name}»${r.via === 'invite' ? ' (по приглашению)' : ''}`, url: '#/admin/reqs', tag: 'reqs' });
     if (type === 'UPDATE' && o?.status === 'pending' && r.status === 'active')
       return send([r.user_id], { title: `Добро пожаловать в «${cl.name}»! 🏓`, body: 'Заявка одобрена — заходите', url: '#/home' });
-    if (type === 'INSERT' && r.status === 'active' && r.via === 'invite')
-      return send(except(admins, r.user_id), { title: 'Новый участник 🎉', body: `${who} вступил в «${cl.name}» по приглашению`, url: '#/rating' });
     if (type === 'UPDATE' && o?.role !== 'helper' && r.role === 'helper')
       return send([r.user_id], { title: 'Вы теперь помощник ✍️', body: `В клубе «${cl.name}» можете сразу вносить результаты своих матчей`, url: '#/home' });
     if (type === 'UPDATE' && o?.role !== 'owner' && r.role === 'owner')

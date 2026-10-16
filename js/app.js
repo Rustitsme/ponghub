@@ -143,12 +143,11 @@ async function reload() {
   if (!S.user) { S.ctx = null; S.club = null; S.data = EMPTY(); derive(); return; }
   try {
     S.ctx = await S.store.loadContext();
-    // пришёл по ссылке-приглашению до входа — вступаем после входа
+    // пришёл по ссылке-приглашению до входа — после входа открываем страницу клуба
     const pendingJoin = lsGet('ponghub_join');
     if (pendingJoin && S.ctx?.me) {
       lsSet('ponghub_join', '');
-      try { const cid = await S.store.joinByInvite(pendingJoin); lsSet('ponghub_club', cid); S.ctx = await S.store.loadContext(); toast('Вы вступили в клуб 🎉'); }
-      catch (e) { toast(e.message, 'err'); }
+      setTimeout(() => openInvite(pendingJoin), 0);
     }
     pickClub();
     S.data = S.club ? await S.store.loadAll() : EMPTY();
@@ -251,7 +250,7 @@ function authView(r) {
   const mode = r.name === 'join' ? 'register' : ['register', 'forgot'].includes(r.name) ? r.name : 'login';
   const demo = S.store.mode === 'demo';
   const head = `<div class="auth-hero"><img src="${logo()}" alt="" width="84" height="84"><h1>PongHub</h1><p>Клубы настольного тенниса: рейтинг, матчи, турниры</p></div>
-    ${lsGet('ponghub_join') ? '<div class="auth-card invite-note">✉️ Вас пригласили в клуб. Зарегистрируйтесь или войдите — и вы сразу в клубе.</div>' : ''}`;
+    ${lsGet('ponghub_join') ? '<div class="auth-card invite-note">✉️ Вас пригласили в клуб. Зарегистрируйтесь или войдите — и откроется страница клуба, где можно отправить заявку.</div>' : ''}`;
   let form;
   if (mode === 'register') form = `
     <form data-form="register" class="stack">
@@ -261,7 +260,7 @@ function authView(r) {
       <label>Email<input name="email" type="email" required autocomplete="email"></label>
       <label>Пароль<input name="password" type="password" required minlength="6" autocomplete="new-password"></label>
       <button class="btn primary big">Зарегистрироваться</button>
-      <p class="muted small center">${lsGet('ponghub_join') ? 'После регистрации вы сразу попадёте в клуб, куда вас пригласили.' : 'После регистрации вы сможете вступить в клуб по приглашению, найти клуб или создать свой.'}</p>
+      <p class="muted small center">${lsGet('ponghub_join') ? 'После регистрации откроется клуб, куда вас пригласили, — останется отправить заявку.' : 'После регистрации вы сможете вступить в клуб по приглашению, найти клуб или создать свой.'}</p>
       <a href="#/login" class="link center">Уже есть аккаунт? Войти</a>
     </form>`;
   else if (mode === 'forgot') form = `
@@ -1467,7 +1466,7 @@ function viewClubs() {
       <div class="req-btns"><button class="btn ghost sm" data-act="cancel-request" data-id="${c.id}">Отозвать</button></div></div>`).join('')}</section>` : ''}
     <form class="card stack" data-form="join-code"><div class="card-h"><h3>✉️&nbsp; У меня есть приглашение</h3></div>
       <label>Код приглашения<input name="code" required minlength="6" maxlength="20" placeholder="Например, K7Q2M9XA" autocapitalize="characters" autocomplete="off"></label>
-      <button class="btn primary">Вступить</button></form>
+      <button class="btn primary">Найти клуб</button></form>
     <section class="card"><div class="card-h"><h3>🔍&nbsp; Найти клуб</h3></div>
       <input type="search" data-input="dir-search" placeholder="Название, город или ID клуба (PH-…)" autocomplete="off">
       <div id="dir-box" class="dir-box"><div class="muted small">Загружаю…</div></div></section>
@@ -1479,7 +1478,7 @@ function viewClubs() {
 function dirButton(c) {
   if (c.my_status === 'active') return `<button class="btn sm" data-act="switch-club" data-id="${c.id}">Открыть</button>`;
   if (c.my_status === 'pending') return '<span class="badge warn">заявка отправлена</span>';
-  return `<button class="btn primary sm" data-act="request-join" data-id="${c.id}">Подать заявку</button>`;
+  return `<button class="btn primary sm" data-act="request-join" data-id="${c.id}">Отправить заявку</button>`;
 }
 function dirItem(c) {
   return `<div class="dir-item"><a href="#/club/${c.id}" class="rn"><b>${esc(c.name)}</b><small class="muted">${clubPlace(c) || esc(c.code)} · ${c.players} ${plural(c.players, 'игрок', 'игрока', 'игроков')}</small></a>${dirButton(c)}</div>`;
@@ -1574,7 +1573,7 @@ function viewInvite(r) {
   const c = S.store.club || S.club;
   return `<div class="page-h"><a href="#/me" class="back">← Профиль</a></div>
     ${r.q.get('new') ? `<section class="hero table-card club-hero"><h2>Клуб создан 🎉</h2><p>${esc(c.name)}${c.city ? ' · ' + esc(c.city) : ''}</p></section>` : '<div class="page-h"><h1>Пригласить в клуб</h1></div>'}
-    <p class="muted small">Кто пришёл по приглашению, сразу попадает в клуб — без заявки. Отправьте ссылку в рабочий чат, продиктуйте код или повесьте QR-код у стола.</p>
+    <p class="muted small">По ссылке, коду или QR-коду человек попадает на страницу клуба и нажимает «Отправить заявку». В клуб он попадёт, только когда вы её примете — во вкладке «Заявки». Отправьте ссылку в рабочий чат, продиктуйте код или повесьте QR-код у стола.</p>
     <section class="card stack" id="invite-box"><div class="muted small">Загружаю приглашение…</div></section>
     <section class="card"><div class="card-h"><h3>ID клуба для поиска</h3><span class="badge">${esc(c.code)}</span></div>
       <p class="muted small">По этому ID клуб находят в поиске и подают заявку — её подтверждаете вы.</p></section>
@@ -1593,7 +1592,7 @@ async function renderInvite() {
       <div class="center"><b class="small">QR-код для стенда у стола</b><div id="qr" class="qr-box"></div>
         <button class="btn" data-act="print-qr" data-link="${esc(link)}">🖨 Плакат для печати</button></div>
       <button class="btn ghost sm" data-act="rotate-invite">Сменить ссылку и код</button>
-      <small class="muted">После смены старая ссылка, код и QR перестанут работать. Участники клуба останутся.</small>`;
+      <small class="muted">Если код попал не туда — смените его. Старые ссылка, код и QR перестанут работать, участники клуба останутся.</small>`;
     await drawQr(document.getElementById('qr'), link, 6);
   } catch (e) { box.innerHTML = `<div class="empty small">${esc(e.message)}</div>`; }
 }
@@ -1652,11 +1651,11 @@ function renderMapList(q) {
 function viewClubPage(r) {
   return bare(`<div id="club-page"><div class="empty">Загружаю клуб…</div></div>`, S.club ? '#/home' : '#/map');
 }
-async function renderClubPage(id) {
+async function renderClubPage(id, code = null) {
   const box = document.getElementById('club-page');
   if (!box) return;
   let d;
-  try { d = await S.store.clubPublic(id); } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  try { d = await S.store.clubPublic(id, code); } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
   if (!box.isConnected) return;
   const st = { ...DEFAULT_SETTINGS, ...(d.settings || {}) };
   const pool = d.players.filter(p => ['approved', 'archived', 'deleted'].includes(p.status));
@@ -1668,7 +1667,7 @@ async function renderClubPage(id) {
   const active = d.players.filter(p => p.status === 'approved').length;
   const btn = d.my_status === 'active' ? `<button class="btn primary big full" data-act="switch-club" data-id="${c.id}">Открыть клуб</button>`
     : d.my_status === 'pending' ? `<div class="card row-btns"><span>⏳ Заявка отправлена</span><button class="btn ghost sm" data-act="cancel-request" data-id="${c.id}">Отозвать</button></div>`
-    : `<button class="btn primary big full" data-act="request-join" data-id="${c.id}">Подать заявку</button>`;
+    : `${code ? '<p class="muted small center">✉️ Вас пригласили в этот клуб. Отправьте заявку — в клуб вы попадёте, когда её примут.</p>' : ''}<button class="btn primary big full" data-act="request-join" data-id="${c.id}" data-code="${esc(code || '')}">Отправить заявку</button>`;
   const fin = d.tournaments.filter(t => t.status === 'finished' && t.results?.gold).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const nick = pid => d.players.find(p => p.id === pid)?.nickname || 'Игрок';
   box.innerHTML = `<section class="hero table-card club-hero"><h2>${esc(c.name)}</h2><p>${clubPlace(c)}</p>
@@ -1686,16 +1685,14 @@ async function renderClubPage(id) {
 
 // ── вход по ссылке-приглашению ──
 function viewJoin() {
-  return `<div class="auth-wrap"><div class="auth-card center"><div class="gate-emoji">✉️</div><h2>Вступаем в клуб…</h2><div class="spin big"></div></div></div>`;
+  return `<div class="auth-wrap"><div class="auth-card center"><div class="gate-emoji">✉️</div><h2>Ищем клуб…</h2><div class="spin big"></div></div></div>`;
 }
-async function joinFlow(code) {
+// ссылка / код / QR только находят клуб — заявку человек отправляет сам
+async function openInvite(code) {
   try {
-    const cid = await S.store.joinByInvite(code);
-    lsSet('ponghub_club', cid);
-    await reload();
-    toast('Добро пожаловать в клуб 🎉');
-  } catch (e) { toast(e.message, 'err'); }
-  location.replace('#/home');
+    const cid = await S.store.clubByInvite(code);
+    location.replace(`#/club/${cid}?code=${encodeURIComponent(code)}`);
+  } catch (e) { toast(e.message, 'err'); location.replace(S.club ? '#/home' : '#/clubs'); }
 }
 
 // ── панель основателя ──
@@ -1765,7 +1762,7 @@ const CLUB_FREE = { clubs: viewClubs, club: viewClubPage, map: viewMap, newclub:
 const CLUB_ACT = {
   'club-menu': () => openClubMenu(),
   'switch-club': el => switchClub(el.dataset.id),
-  'request-join': el => busy(el, async () => { await S.store.requestJoin(el.dataset.id); S.ctx = await S.store.loadContext(); toast('Заявка отправлена — клуб рассмотрит её'); render(); }),
+  'request-join': el => busy(el, async () => { await S.store.requestJoin(el.dataset.id, el.dataset.code || null); S.ctx = await S.store.loadContext(); toast('Заявка отправлена — клуб рассмотрит её'); render(); }),
   'cancel-request': el => busy(el, async () => { await S.store.cancelRequest(el.dataset.id); S.ctx = await S.store.loadContext(); toast('Заявка отозвана'); render(); }),
   'leave-club': async () => {
     if (!(await confirmDialog(`Покинуть клуб «${settings().clubName}»? Ваши матчи останутся в истории клуба. Вернуться можно по приглашению.`, 'Покинуть', true))) return;
@@ -1828,7 +1825,7 @@ const clubFields = fd => ({
   lat: fd.get('lat') ? +fd.get('lat') : null, lng: fd.get('lng') ? +fd.get('lng') : null, visible: fd.get('visible') === 'on',
 });
 const CLUB_FORMS = {
-  'join-code': async (f, fd) => { const cid = await S.store.joinByInvite(fd.get('code')); lsSet('ponghub_club', cid); await reload(); location.hash = '#/home'; render(); toast('Добро пожаловать в клуб 🎉'); },
+  'join-code': async (f, fd) => { await openInvite(fd.get('code').trim()); },
   'new-club': async (f, fd) => {
     const cid = await S.store.createClub(clubFields(fd));
     lsSet('ponghub_club', cid);
@@ -2682,7 +2679,7 @@ const WHATS_NEW = {
   items: [
     ['🏓', 'Ваш клуб на месте', 'Все матчи, рейтинг, турниры и пинг-коины сохранились — ничего делать не нужно.'],
     ['⇄', 'Несколько клубов', 'Можно состоять в нескольких клубах: в каждом свой рейтинг и свои пинг-коины. Переключение — нажмите на название клуба вверху.'],
-    ['✉️', 'Позовите друзей', 'Вступить в клуб можно по приглашению: ссылка, код или QR-код у стола.'],
+    ['✉️', 'Позовите друзей', 'Пригласить можно ссылкой, кодом или QR-кодом у стола: новичок откроет страницу клуба и отправит заявку, а его примут.'],
     ['🗺', 'Клубы на карте', 'Найдите клубы рядом или создайте свой — бесплатно.'],
   ],
   cta: ['Посмотреть карту клубов', '#/map'],
@@ -2792,9 +2789,9 @@ function afterRender(r) {
   if (document.getElementById('pick-map')) mountPickMap();
   if (r.name === 'invite') renderInvite();
   if (r.name === 'map') renderMap();
-  if (r.name === 'club' && r.args[0]) renderClubPage(r.args[0]);
+  if (r.name === 'club' && r.args[0]) renderClubPage(r.args[0], r.q.get('code'));
   if (r.name === 'founder') renderFounder();
-  if (r.name === 'join' && r.args[0] && S.user) joinFlow(r.args[0]);
+  if (r.name === 'join' && r.args[0] && S.user) openInvite(r.args[0]);
   const f = document.querySelector('[data-form=settings]');
   if (f) updateCalc(f);
 }

@@ -446,37 +446,42 @@ begin
   return c;
 end $$;
 
--- вход по приглашению: сразу участник
-create or replace function public.join_by_invite(p_code text) returns uuid
-language plpgsql security definer set search_path = public as $$
-declare cid uuid; m club_members; me profiles;
+-- приглашение (ссылка, код, QR) только находит клуб — даже скрытый с карты.
+-- Заявку человек отправляет сам кнопкой; в клуб попадает, когда владелец клуба её примет.
+drop function if exists public.join_by_invite(text);
+create or replace function public.club_by_invite(p_code text) returns uuid
+language plpgsql stable security definer set search_path = public as $$
+declare cid uuid;
 begin
-  select * into me from profiles where id = auth.uid();
-  if not found or me.status in ('deleted', 'rejected') then raise exception 'not allowed'; end if;
+  if auth.uid() is null then raise exception 'not allowed'; end if;
   select i.club_id into cid from club_invites i join clubs c on c.id = i.club_id
     where i.code = upper(regexp_replace(coalesce(p_code, ''), '[^A-Za-z0-9]', '', 'g')) and not c.blocked;
   if cid is null then raise exception 'Код приглашения не найден или устарел'; end if;
-  select * into m from club_members where club_id = cid and user_id = auth.uid();
-  if found and m.status = 'active' then return cid; end if;
-  insert into club_members (club_id, user_id, role, status, via) values (cid, auth.uid(), 'player', 'active', 'invite')
-    on conflict (club_id, user_id) do update set status = 'active', via = 'invite', joined_at = now();
   return cid;
 end $$;
 
+create or replace function public.invite_ok(cid uuid, p_code text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select p_code is not null and exists (select 1 from club_invites
+    where club_id = cid and code = upper(regexp_replace(p_code, '[^A-Za-z0-9]', '', 'g')));
+$$;
+revoke all on function public.invite_ok(uuid, text) from public, anon, authenticated;
+
 -- заявка (клуб найден поиском или на карте)
-create or replace function public.request_join(cid uuid) returns void
+drop function if exists public.request_join(uuid);
+create or replace function public.request_join(cid uuid, p_code text default null) returns void
 language plpgsql security definer set search_path = public as $$
-declare c clubs; m club_members; me profiles;
+declare c clubs; m club_members; me profiles; inv boolean := public.invite_ok(cid, p_code);
 begin
   select * into me from profiles where id = auth.uid();
   if not found or me.status in ('deleted', 'rejected') then raise exception 'not allowed'; end if;
   select * into c from clubs where id = cid;
-  if not found or c.blocked or not c.visible then raise exception 'Клуб не найден'; end if;
+  if not found or c.blocked or not (c.visible or inv) then raise exception 'Клуб не найден'; end if;
   select * into m from club_members where club_id = cid and user_id = auth.uid();
-  if found and m.status = 'active' then return; end if;
-  if found and m.status = 'pending' then return; end if;
-  insert into club_members (club_id, user_id, role, status, via) values (cid, auth.uid(), 'player', 'pending', 'request')
-    on conflict (club_id, user_id) do update set status = 'pending', via = 'request', joined_at = now();
+  if found and m.status in ('active', 'pending') then return; end if;
+  insert into club_members (club_id, user_id, role, status, via)
+    values (cid, auth.uid(), 'player', 'pending', case when inv then 'invite' else 'request' end)
+    on conflict (club_id, user_id) do update set status = 'pending', via = excluded.via, joined_at = now();
 end $$;
 
 create or replace function public.cancel_request(cid uuid) returns void
@@ -579,13 +584,14 @@ begin
 end $$;
 
 -- публичная страница клуба: только ники, рейтинг (считается в приложении), турниры. Без почты и имён.
-create or replace function public.club_public(cid uuid) returns jsonb
+drop function if exists public.club_public(uuid);
+create or replace function public.club_public(cid uuid, p_code text default null) returns jsonb
 language plpgsql stable security definer set search_path = public as $$
 declare c clubs; res jsonb;
 begin
   if auth.uid() is null then raise exception 'not allowed'; end if;
   select * into c from clubs where id = cid;
-  if not found or c.blocked or not (c.visible or public.is_member(cid) or public.is_founder()) then
+  if not found or c.blocked or not (c.visible or public.is_member(cid) or public.is_founder() or public.invite_ok(cid, p_code)) then
     raise exception 'Клуб не найден';
   end if;
   select jsonb_build_object(
@@ -1038,9 +1044,9 @@ declare f text;
 begin
   foreach f in array array[
     'create_club(text, text, text, double precision, double precision, boolean, text)', 'update_club(uuid, jsonb)',
-    'rotate_invite(uuid)', 'join_by_invite(text)', 'request_join(uuid)', 'cancel_request(uuid)',
+    'rotate_invite(uuid)', 'club_by_invite(text)', 'request_join(uuid, text)', 'cancel_request(uuid)',
     'set_member(uuid, uuid, text, text, numeric, boolean)', 'remove_member(uuid, uuid)', 'leave_club(uuid)',
-    'transfer_club(uuid, uuid)', 'club_directory(text)', 'club_public(uuid)',
+    'transfer_club(uuid, uuid)', 'club_directory(text)', 'club_public(uuid, text)',
     'founder_clubs()', 'founder_stats()', 'founder_block_club(uuid, boolean)', 'founder_delete_club(uuid, text)',
     'founder_unassigned()', 'founder_add_members(uuid, uuid[])', 'founder_transfer_history(uuid)'] loop
     execute format('revoke all on function public.%s from public, anon', f);
