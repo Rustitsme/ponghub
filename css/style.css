@@ -716,3 +716,7 @@ form[data-sys="league"] .only-elo, form[data-sys="elo"] .only-league { display: 
 .pn .pn-ic { font-size: 52px; line-height: 1; }
 .pn p { margin: 0; font-size: 15px; line-height: 1.5; }
 .pn .wn-btns { width: 100%; }
+.live-btn.alt { background: var(--surface); color: var(--text); border: 2px solid var(--black); }
+.lv-sets-score.ns { font-size: 20px; }
+.ns-info { text-align: center; font-size: 14px; color: var(--muted); }
+.lv-panel .lv-who b { font-size: 24px; }

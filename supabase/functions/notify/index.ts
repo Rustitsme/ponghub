@@ -102,7 +102,7 @@ async function onChange(table: string, type: string, r: any, o: any, actor: stri
     const name = (side: number) => side === 1
       ? [r.player1_id, r.player3_id].filter(Boolean).map(nick).join(' + ')
       : [r.player2_id, r.player4_id].filter(Boolean).map(nick).join(' + ');
-    return send(except(all, ...players, r.created_by), { title: '🎯 Можно сделать прогноз', body: `${name(1)} ×${r.odds1} — ${name(2)} ×${r.odds2}. Успейте до первого очка!`, url: '#/predict', tag: 'pred-' + r.id });
+    return send(except(all, ...players, r.created_by), { title: '🎯 Можно сделать прогноз', body: `${name(1)} ×${r.odds1} — ${name(2)} ×${r.odds2}. ${r.closes_at ? 'Игра началась — приём прогнозов несколько минут!' : 'Успейте до первого очка!'}`, url: '#/predict', tag: 'pred-' + r.id });
   }
 
   if (table === 'predictions' && type === 'UPDATE' && o?.status === 'open') {

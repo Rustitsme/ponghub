@@ -1,6 +1,6 @@
 // Service worker: приложение открывается быстро, работает как установленное и принимает push-уведомления.
 // Стратегия «сначала сеть»: всегда берём свежую версию, кэш — только если нет интернета.
-const CACHE = 'ponghub-v15';
+const CACHE = 'ponghub-v16';
 const SHELL = ['./', './index.html', './css/style.css', './js/app.js', './js/engine.js', './js/tourney.js', './js/store.js', './js/config.js',
   './icons/hub.svg', './icons/table.svg', './manifest-hub.webmanifest', './manifest-table.webmanifest'];
 

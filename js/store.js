@@ -350,12 +350,13 @@ class LocalStore {
       if (!srcRow) return null;
       const c = Math.min(0.95, Math.max(0.05, a.chance));
       const ev = { id: uid(), source: a.src, source_id: a.src_id, kind: srcRow.kind || 'singles', player1_id: srcRow.player1_id || srcRow.from_id, player2_id: srcRow.player2_id || srcRow.to_id, player3_id: srcRow.player3_id || null, player4_id: srcRow.player4_id || null,
-        tournament_id: srcRow.tournament_id || null, chance1: c, odds1: Math.min(10, Math.round(100 / c) / 100), odds2: Math.min(10, Math.round(100 / (1 - c)) / 100), status: 'open', bets_count: 0, pool1: 0, pool2: 0, is_test: !!srcRow.is_test, created_by: me, created_at: new Date().toISOString() };
+        tournament_id: srcRow.tournament_id || null, closes_at: srcRow.scoring === false ? new Date(Date.now() + this.predSetting('predWindowMin', 3) * 6e4).toISOString() : null, chance1: c, odds1: Math.min(10, Math.round(100 / c) / 100), odds2: Math.min(10, Math.round(100 / (1 - c)) / 100), status: 'open', bets_count: 0, pool1: 0, pool2: 0, is_test: !!srcRow.is_test, created_by: me, created_at: new Date().toISOString() };
       this.db.pred_events.push(ev); this.save(); return ev.id;
     }
     if (name === 'place_prediction') {
       const e = this.db.pred_events.find(x => x.id === a.eid);
       if (!e || e.status !== 'open') throw new Error('Приём прогнозов закрыт');
+      if (e.closes_at && Date.now() > Date.parse(e.closes_at)) { e.status = 'closed'; this.save(); throw new Error('Время приёма прогнозов вышло'); }
       if ([e.player1_id, e.player2_id, e.player3_id, e.player4_id].includes(me)) throw new Error('На свой матч прогноз сделать нельзя');
       if (e.source === 'live') { const l = (this.db.live_matches || []).find(x => x.id === e.source_id); if (!l || l.status !== 'live' || (l.log || []).length) { e.status = 'closed'; this.save(); throw new Error('Игра уже началась — приём прогнозов закрыт'); } }
       if (this.db.predictions.some(p => p.event_id === e.id && p.user_id === me)) throw new Error('Вы уже сделали прогноз на этот матч');

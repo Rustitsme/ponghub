@@ -805,14 +805,14 @@ function predRow(e) {
   const my = myPred(e), mine = evPlayers(e).includes(S.me.id);
   const right = my ? `<span class="pr-my">ваш: ${esc(evName(e, my.side))} · ${my.stake}</span>`
     : mine ? '<span class="muted small">ваш матч</span>'
-      : e.status === 'open' ? `<button class="btn sm primary" data-act="predict" data-id="${e.id}">Прогноз</button>` : '<span class="muted small">приём закрыт</span>';
+      : evOpen(e) ? `<button class="btn sm primary" data-act="predict" data-id="${e.id}">Прогноз</button>` : '<span class="muted small">приём закрыт</span>';
   return `<div class="pr-row"><div class="rn"><b>${esc(evName(e, 1))} <span class="muted">×${e.odds1}</span></b><b>${esc(evName(e, 2))} <span class="muted">×${e.odds2}</span></b>
-    <small class="muted">${e.source === 'live' ? '● идёт к столу' : '⚔️ вызов принят'} · прогнозов: ${e.bets_count}</small></div>${right}</div>`;
+    <small class="muted">${e.source === 'live' ? (e.closes_at ? `● игра идёт · приём ещё ${evLeft(e)} мин` : '● идёт к столу') : '⚔️ вызов принят'} · прогнозов: ${e.bets_count}</small></div>${right}</div>`;
 }
 
 function predHomeBlock() {
   if (!predOn()) return '';
-  const open = S.data.predEvents.filter(e => ['open'].includes(e.status));
+  const open = S.data.predEvents.filter(evOpen);
   const recent = S.data.predictions.filter(p => p.user_id === S.me.id && ['won', 'lost', 'refunded'].includes(p.status) && Date.now() - Date.parse(p.settled_at || p.created_at) < 3 * DAY).slice(0, 2);
   if (!open.length && !recent.length) return '';
   const res = p => { const e = S.data.predEvents.find(x => x.id === p.event_id); return `<div class="pr-res ${p.status}"><b>${p.status === 'won' ? `Прогноз сыграл <span class="up">+${p.payout} PC</span>` : p.status === 'lost' ? `Не сыграл <span class="down">−${p.stake} PC</span>` : `Возврат ${p.stake} PC`}</b><small class="muted">${e ? `${esc(evName(e, 1))} — ${esc(evName(e, 2))}` : ''}</small></div>`; };
@@ -873,7 +873,7 @@ function predAchievements() {
 
 function viewPredict() {
   if (!predOn()) return '<div class="empty">Прогнозы выключены владельцем клуба</div>';
-  const open = S.data.predEvents.filter(e => e.status === 'open');
+  const open = S.data.predEvents.filter(evOpen);
   const mine = S.data.predictions.filter(p => p.user_id === S.me.id);
   const active = mine.filter(p => p.status === 'open');
   const history = mine.filter(p => p.status !== 'open').slice(0, 30);
@@ -962,16 +962,43 @@ const sideName = (l, side) => sideIds(l, side).map(id => P(id).nickname).join(' 
 function liveBlock() {
   if (!S.data.live.length) return '';
   return `<section class="card live-now"><div class="card-h"><h3><span class="live">●</span> Сейчас играют</h3></div>
-    ${S.data.live.map(l => { const g = replayLive(liveLog(l), l.best_of, l.points_to, l.first_server); return `<a href="#/live/${l.id}" class="live-row">
+    ${S.data.live.map(l => { if (l.scoring === false) return `<a href="#/live/${l.id}" class="live-row">
+      <span class="lr-name">${esc(sideName(l, 0))}</span><span class="lr-score"><small>идёт</small><b>⏱ ${minsAgo(l.created_at)}′</b></span><span class="lr-name right">${esc(sideName(l, 1))}</span></a>`;
+      const g = replayLive(liveLog(l), l.best_of, l.points_to, l.first_server); return `<a href="#/live/${l.id}" class="live-row">
       <span class="lr-name ${g.cur[0] > g.cur[1] ? 'lead' : ''}">${esc(sideName(l, 0))}</span>
       <span class="lr-score"><small>${g.won[0]}:${g.won[1]}</small><b>${g.cur[0]}:${g.cur[1]}</b></span>
       <span class="lr-name right ${g.cur[1] > g.cur[0] ? 'lead' : ''}">${esc(sideName(l, 1))}</span></a>`; }).join('')}
   </section>`;
 }
 
+const minsAgo = iso => Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 60000));
+const evOpen = e => e && e.status === 'open' && (!e.closes_at || Date.now() < Date.parse(e.closes_at));
+const evLeft = e => (e?.closes_at ? Math.max(0, Math.ceil((Date.parse(e.closes_at) - Date.now()) / 60000)) : null);
+
+function viewLiveNoScore(l) {
+  const ev = S.data.predEvents.find(e => e.source_id === l.id);
+  const ids = [l.player1_id, l.player2_id, l.player3_id, l.player4_id];
+  const imPlayer = ids.includes(S.me.id);
+  const canFinish = imPlayer || l.started_by === S.me.id || isAdmin();
+  const myP = ev && S.data.predictions.find(p => p.event_id === ev.id);
+  const t = l.tournament_id ? tById(l.tournament_id) : null;
+  const card = side => `<div class="lv-panel p${side}"><div class="lv-who">${sideIds(l, side).map(id => ava(P(id), 'sm')).join('')}<b>${esc(sideName(l, side))}</b></div></div>`;
+  const need = winsNeeded(l.best_of);
+  return `<div class="page-h"><a href="#/home" class="back">← Главная</a><span class="live">● LIVE</span></div>
+    <div class="lv-meta">${l.kind === 'doubles' ? 'Пары 2×2' : t ? '🏆 ' + esc(t.name) : 'Свободная игра'} · до ${need} ${plural(need, 'победы', 'побед', 'побед')} · партия до ${l.points_to}</div>
+    <div class="lv-board">${card(0)}<div class="lv-sets-score ns">⏱ ${minsAgo(l.created_at)} мин</div>${card(1)}</div>
+    <div class="card ns-info">Игра идёт без ведения счёта. Итоговый счёт внесут после игры.</div>
+    ${ev ? `<div class="card lv-pred">🎯 <span>${myP ? `Ваш прогноз: <b>${esc(sideName(l, myP.side - 1))}</b> · ${myP.stake} PC × ${myP.odds}` : evOpen(ev) ? `Приём прогнозов ещё ${evLeft(ev)} мин · уже ${ev.bets_count}` : `Прогнозов: ${ev.bets_count} · приём закрыт`}</span>
+      ${!myP && !imPlayer && evOpen(ev) ? `<button class="btn sm primary" data-act="predict" data-id="${ev.id}">×${ev.odds1} / ×${ev.odds2}</button>` : ''}</div>` : ''}
+    ${canFinish ? `<div class="stack"><button class="btn primary big" data-act="live-final" data-id="${l.id}">🏁 Внести итоговый счёт</button>
+      <button class="btn ghost danger" data-act="live-cancel" data-id="${l.id}">Отменить игру</button></div>`
+      : '<p class="muted small center">Итоговый счёт внесёт кто-то из игроков.</p>'}`;
+}
+
 function viewLive(r) {
   const l = S.data.live.find(x => x.id === r.args[0]);
   if (!l) return `<div class="page-h"><a href="#/home" class="back">← Главная</a></div><div class="empty">Эта игра уже завершена или отменена.</div>`;
+  if (l.scoring === false) return viewLiveNoScore(l);
   const log = liveLog(l);
   const g = replayLive(log, l.best_of, l.points_to, l.first_server);
   const scorer = l.scorer_id === S.me.id;
@@ -1422,6 +1449,7 @@ function viewAdmin(r) {
       ${f('predDaily', 'Ежедневная помощь при нуле, PC', 'Чтобы никто не выпадал из игры', 10)}
       ${f('predMin', 'Минимальная ставка, PC', '', 5)}
       ${f('predMax', 'Максимальная ставка, PC', '', 50)}
+      ${f('predWindowMin', 'Приём прогнозов в игре без счёта, мин', 'Сколько минут после старта можно ставить, если счёт не ведут', 1)}
       <hr>
       <div><b class="small">Иконка приложения</b><div class="icon-pick">${Object.entries(ICON_VARIANTS).map(([k, l]) => `<label><input type="radio" name="icon" value="${k}" ${iconChoice() === k ? 'checked' : ''}><img src="icons/${k}.svg" alt="" width="64" height="64"><span>${l}</span></label>`).join('')}</div>
         <small class="muted">Меняется в приложении сразу. На главном экране телефона иконка обновится после переустановки.</small></div>
@@ -1508,8 +1536,8 @@ function openMatchForm(opts = {}) {
     s1: m0?.sets1 ?? '', s2: m0?.sets2 ?? '',
     date: toLocalInput(m0?.played_at || new Date()),
     note: m0?.note || '',
-    kind: m0?.kind || 'singles',
-    p3: m0?.player3_id || '', p4: m0?.player4_id || '',
+    kind: m0?.kind || fx.kind || 'singles',
+    p3: m0?.player3_id || fx.player3_id || '', p4: m0?.player4_id || fx.player4_id || '',
     rated: m0 ? m0.rated !== false : true,
   };
   const lockPlayers = !!(fx.player1_id || m0?.tournament_id);
@@ -1517,7 +1545,7 @@ function openMatchForm(opts = {}) {
   const team = n => (st.kind === 'doubles'
     ? [n === 1 ? st.p1 : st.p2, n === 1 ? st.p3 : st.p4].filter(Boolean).map(id => P(id).nickname).join(' + ') || `Команда ${n}`
     : (n === 1 ? st.p1 : st.p2) ? P(n === 1 ? st.p1 : st.p2).nickname : `Игрок ${n}`);
-  const lockFormat = !!(fx.tournament_id || m0?.tournament_id);
+  const lockFormat = !!(fx.tournament_id || m0?.tournament_id || fx.liveId);
   const lockP1 = !editor;
   const tour = tById(fx.tournament_id || m0?.tournament_id);
 
@@ -1541,12 +1569,12 @@ function openMatchForm(opts = {}) {
       ${canDoubles && !m0 ? `<div class="seg"><button type="button" data-k="kind" data-v="singles" class="${st.kind === 'singles' ? 'on' : ''}">🏓 1×1</button><button type="button" data-k="kind" data-v="doubles" class="${st.kind === 'doubles' ? 'on' : ''}">👥 Пары 2×2</button></div>` : ''}
       ${st.kind === 'doubles' ? `<div class="teams">
           <div class="team-box"><small>Команда 1</small>
-            <select name="p1" ${lockP1 ? 'disabled' : ''}><option value="">Игрок</option>${playerOptions(st.p1, [st.p2, st.p3, st.p4])}</select>
-            <select name="p3"><option value="">Партнёр</option>${playerOptions(st.p3, [st.p1, st.p2, st.p4])}</select></div>
+            <select name="p1" ${lockP1 || lockPlayers ? 'disabled' : ''}><option value="">Игрок</option>${playerOptions(st.p1, [st.p2, st.p3, st.p4])}</select>
+            <select name="p3" ${lockPlayers ? 'disabled' : ''}><option value="">Партнёр</option>${playerOptions(st.p3, [st.p1, st.p2, st.p4])}</select></div>
           <span class="vs">vs</span>
           <div class="team-box"><small>Команда 2</small>
-            <select name="p2"><option value="">Игрок</option>${playerOptions(st.p2, [st.p1, st.p3, st.p4])}</select>
-            <select name="p4"><option value="">Партнёр</option>${playerOptions(st.p4, [st.p1, st.p2, st.p3])}</select></div>
+            <select name="p2" ${lockPlayers ? 'disabled' : ''}><option value="">Игрок</option>${playerOptions(st.p2, [st.p1, st.p3, st.p4])}</select>
+            <select name="p4" ${lockPlayers ? 'disabled' : ''}><option value="">Партнёр</option>${playerOptions(st.p4, [st.p1, st.p2, st.p3])}</select></div>
         </div>
         <label class="switch"><input type="checkbox" name="rated" ${st.rated ? 'checked' : ''}><i></i><span>Учитывать в парном рейтинге</span></label>
         <p class="hint">Парные игры идут в <b>отдельный парный рейтинг</b> и не влияют на одиночный. Выключите, если игра была просто «для разминки».</p>`
@@ -1570,7 +1598,10 @@ function openMatchForm(opts = {}) {
       <label>Комментарий<input name="note" value="${esc(st.note)}" maxlength="140" placeholder="необязательно"></label>
       <div class="mf-err"></div>
       <div class="row-btns">${m0 && editor ? '<button type="button" class="btn danger ghost" data-mf="delete">Удалить</button>' : ''}<button type="button" class="btn primary" data-mf="save">${editor ? 'Сохранить' : isEditor() ? 'Внести' : 'Отправить'}</button></div>
-      ${!m0 && (editor || !lockFormat) ? `<div class="live-start"><span class="muted small">Игра только начинается и есть кому считать?</span><button type="button" class="btn full live-btn" data-mf="live">▶ Игра началась — вести счёт</button></div>` : ''}`;
+      ${!m0 && !fx.liveId && (editor || !lockFormat) ? `<div class="live-start"><span class="muted small">Игра только начинается?</span>
+        <button type="button" class="btn full live-btn" data-mf="live">▶ Игра началась — вести счёт</button>
+        <button type="button" class="btn full live-btn alt" data-mf="live-noscore">⏱ Игра началась — счёт в конце</button>
+        <span class="muted small">Всем придёт уведомление, можно будет сделать прогноз. Без счётчика итог внесёте после игры.</span></div>` : ''}`;
   };
 
   openModal('<div class="mf-body"></div>', sh => {
@@ -1580,7 +1611,8 @@ function openMatchForm(opts = {}) {
       if (b && !b.disabled) { const k = b.dataset.k; st[k] = k === 'type' || k === 'kind' ? b.dataset.v : +b.dataset.v; if (k === 'kind' && st.kind === 'doubles' && st.bestOf === 5) st.bestOf = 3; draw(sh); return; }
       const act = e.target.closest('[data-mf]')?.dataset.mf;
       if (act === 'save') saveMatch(e.target.closest('button'));
-      if (act === 'live') startLive(e.target.closest('button'));
+      if (act === 'live') startLive(e.target.closest('button'), true);
+      if (act === 'live-noscore') startLive(e.target.closest('button'), false);
       if (act === 'delete') {
         const reason = await askReason('Удалить матч?', 'Рейтинг будет пересчитан. Укажите причину.');
         if (reason) await busy(null, async () => { await S.store.deleteMatch(m0.id, reason); toast('Матч удалён'); await refresh(); });
@@ -1619,7 +1651,7 @@ function openMatchForm(opts = {}) {
     return true;
   }
 
-  async function startLive(btn) {
+  async function startLive(btn, scoring = true) {
     const err = msg => { $modal.querySelector('.mf-err').textContent = msg; return false; };
     if (checkPlayers(err) !== true) return;
     const dbl = st.kind === 'doubles';
@@ -1628,7 +1660,7 @@ function openMatchForm(opts = {}) {
       player1_id: st.p1, player2_id: st.p2, player3_id: dbl ? st.p3 : null, player4_id: dbl ? st.p4 : null,
       best_of: st.bestOf, points_to: st.pointsTo, rated: dbl ? st.rated : true,
       tournament_id: fx.tournament_id ?? null, stage: fx.stage ?? null, grp: fx.grp ?? null, round: fx.round ?? null, slot: fx.slot ?? null,
-      challenge_id: fx.challengeId ?? null, first_server: 0, log: [], status: 'live', scorer_id: S.me.id, started_by: S.me.id,
+      challenge_id: fx.challengeId ?? null, first_server: 0, log: [], status: 'live', scorer_id: S.me.id, started_by: S.me.id, scoring,
       ...testFlag(),
     };
     await busy(btn, async () => {
@@ -1683,6 +1715,7 @@ function openMatchForm(opts = {}) {
       else {
         const saved = await S.store.insert('matches', { ...row, submitted_by: S.me.id, ...testFlag() });
         if (fx.challengeId) await S.store.update('challenges', fx.challengeId, { status: 'done', match_id: saved.id }).catch(() => {});
+        if (fx.liveId) { await S.store.update('live_matches', fx.liveId, { status: 'finished', match_id: saved.id }).catch(() => {}); delete S.liveLocal[fx.liveId]; }
       }
       closeModal();
       toast(row.status === 'approved' ? 'Матч сохранён, рейтинг пересчитан' : 'Результат отправлен владельцу на подтверждение');
@@ -1915,6 +1948,12 @@ const ACT = {
     await busy(el, async () => { await S.store.update('live_matches', el.dataset.id, { status: 'cancelled' }); delete S.liveLocal[el.dataset.id]; await refresh(); go('#/home'); });
   },
   'live-save': el => saveLive(S.data.live.find(x => x.id === el.dataset.id), el),
+  'live-final': el => {
+    const l = S.data.live.find(x => x.id === el.dataset.id);
+    openMatchForm({ fixed: { player1_id: l.player1_id, player2_id: l.player2_id, player3_id: l.player3_id, player4_id: l.player4_id, kind: l.kind,
+      type: l.type, tournament_id: l.tournament_id, stage: l.stage, grp: l.grp, round: l.round, slot: l.slot, best_of: l.best_of, points_to: l.points_to,
+      challengeId: l.challenge_id, liveId: l.id } });
+  },
   challenge: el => openChallengeForm(el.dataset.id),
   'ch-accept': el => busy(el, async () => {
     const c = await S.store.update('challenges', el.dataset.id, { status: 'accepted', responded_at: new Date().toISOString() });
@@ -2077,7 +2116,7 @@ const FORMS = {
     s.system = fd.get('system') === 'elo' ? 'elo' : 'league';
     s.decayEnabled = !!fd.get('decayEnabled');
     s.predEnabled = !!fd.get('predEnabled');
-    for (const k of ['predStart', 'predWeekly', 'predDaily', 'predMin', 'predMax']) s[k] = Math.round(+fd.get(k) || 0);
+    for (const k of ['predStart', 'predWeekly', 'predDaily', 'predMin', 'predMax', 'predWindowMin']) s[k] = Math.round(+fd.get(k) || 0);
     if (!(s.spread > 0)) throw new Error('Масштаб должен быть больше нуля');
     s.marginBonus = !!fd.get('marginBonus');
     s.clubName = fd.get('clubName').trim() || 'PongHub';
