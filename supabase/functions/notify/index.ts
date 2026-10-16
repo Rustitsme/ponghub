@@ -44,7 +44,7 @@ async function initVapid(): Promise<string> {
 
 type Msg = { title: string; body: string; url?: string; tag?: string };
 
-async function send(userIds: (string | null | undefined)[], msg: Msg): Promise<number> {
+async function sendPush(userIds: (string | null | undefined)[], msg: Msg): Promise<number> {
   const ids = [...new Set(userIds.filter(Boolean))] as string[];
   if (!ids.length) return 0;
   await initVapid();
@@ -67,19 +67,34 @@ async function send(userIds: (string | null | undefined)[], msg: Msg): Promise<n
   return sent;
 }
 
-async function profiles() {
-  const { data } = await sb.from('profiles').select('id, nickname, role, status, is_test');
-  return (data ?? []).filter((p) => !p.is_test);
+// участники клуба в привычном виде: роль admin/editor/player, статус approved/pending/archived
+const ROLE: Record<string, string> = { owner: 'admin', helper: 'editor', player: 'player' };
+const STATUS: Record<string, string> = { active: 'approved', pending: 'pending', archived: 'archived', former: 'archived' };
+async function members(clubId: string) {
+  const { data } = await sb.from('club_members').select('role, status, initial_rating, profile:profiles(*)').eq('club_id', clubId);
+  // deno-lint-ignore no-explicit-any
+  return (data ?? []).filter((m: any) => m.profile && !m.profile.is_test).map((m: any) => ({
+    ...m.profile, role: ROLE[m.role] ?? 'player', initial_rating: m.initial_rating,
+    status: m.profile.status === 'deleted' ? 'deleted' : STATUS[m.status] ?? 'archived',
+  }));
 }
 
-async function timezone(): Promise<string> {
-  const { data } = await sb.from('settings').select('data').eq('id', 1).maybeSingle();
-  return data?.data?.timezone || 'Europe/Moscow';
+async function club(clubId: string) {
+  const { data } = await sb.from('clubs').select('id, name, settings, blocked').eq('id', clubId).maybeSingle();
+  return data;
 }
+
+// ссылка из уведомления открывает нужный клуб
+const inClub = (url: string, clubId: string) => url + (url.includes('?') ? '&' : '?') + 'club=' + clubId;
 
 // deno-lint-ignore no-explicit-any
 async function onChange(table: string, type: string, r: any, o: any, actor: string | null = null, reason: string | null = null) {
-  const ps = await profiles();
+  const clubId: string | null = r?.club_id ?? o?.club_id ?? null;
+  if (!clubId) return;  // данные вне клуба (до переноса истории) — без уведомлений
+  const cl = await club(clubId);
+  if (!cl || cl.blocked) return;
+  const ps = await members(clubId);
+  const send = (ids: (string | null | undefined)[], msg: Msg) => sendPush(ids, { ...msg, url: inClub(msg.url ?? '#/home', clubId) });
   const nick = (id: string) => ps.find((p) => p.id === id)?.nickname ?? 'Игрок';
   const approved = ps.filter((p) => p.status === 'approved');
   const admins = approved.filter((p) => p.role === 'admin').map((p) => p.id);
@@ -87,13 +102,19 @@ async function onChange(table: string, type: string, r: any, o: any, actor: stri
   const all = approved.map((p) => p.id);
   const except = (ids: string[], ...skip: (string | null)[]) => ids.filter((id) => !skip.includes(id));
 
-  if (table === 'profiles') {
-    if (type === 'INSERT' && r.status === 'pending')
-      return send(admins, { title: 'Новая заявка', body: `${r.nickname} хочет вступить в клуб`, url: '#/admin/reqs', tag: 'reqs' });
-    if (type === 'UPDATE' && o?.status !== 'approved' && r.status === 'approved')
-      return send([r.id], { title: 'Добро пожаловать в PongHub! 🏓', body: 'Ваша заявка одобрена — заходите', url: '#/home' });
-    if (type === 'UPDATE' && o?.role !== 'editor' && r.role === 'editor')
-      return send([r.id], { title: 'Вы теперь помощник ✍️', body: 'Можете вносить результаты и вести турниры', url: '#/admin' });
+  if (table === 'club_members') {
+    const who = ps.find((p) => p.id === r.user_id)?.nickname
+      ?? (await sb.from('profiles').select('nickname').eq('id', r.user_id).maybeSingle()).data?.nickname ?? 'Игрок';
+    if (r.status === 'pending' && (type === 'INSERT' || o?.status !== 'pending'))
+      return send(admins, { title: 'Новая заявка в клуб', body: `${who} хочет вступить в «${cl.name}»`, url: '#/admin/reqs', tag: 'reqs' });
+    if (type === 'UPDATE' && o?.status === 'pending' && r.status === 'active')
+      return send([r.user_id], { title: `Добро пожаловать в «${cl.name}»! 🏓`, body: 'Заявка одобрена — заходите', url: '#/home' });
+    if (type === 'INSERT' && r.status === 'active' && r.via === 'invite')
+      return send(except(admins, r.user_id), { title: 'Новый участник 🎉', body: `${who} вступил в «${cl.name}» по приглашению`, url: '#/rating' });
+    if (type === 'UPDATE' && o?.role !== 'helper' && r.role === 'helper')
+      return send([r.user_id], { title: 'Вы теперь помощник ✍️', body: `В клубе «${cl.name}» можете сразу вносить результаты своих матчей`, url: '#/home' });
+    if (type === 'UPDATE' && o?.role !== 'owner' && r.role === 'owner')
+      return send([r.user_id], { title: 'Вам передали клуб 👑', body: `Теперь вы управляете клубом «${cl.name}»`, url: '#/admin' });
     return;
   }
 
@@ -114,7 +135,7 @@ async function onChange(table: string, type: string, r: any, o: any, actor: stri
   if (table === 'announcements' && type === 'INSERT') {
     const text = String(r.body ?? '');
     const to = Array.isArray(r.recipients) && r.recipients.length ? r.recipients : all;
-    return send(except(to, r.created_by), { title: r.title ? `📢 ${r.title}` : to === all ? '📢 Объявление клуба' : '✉️ Сообщение от владельца', body: text.length > 180 ? text.slice(0, 177) + '…' : text, url: '#/inbox', tag: 'ann-' + r.id });
+    return send(except(to, r.created_by), { title: r.title ? `📢 ${r.title}` : to === all ? `📢 Объявление · ${cl.name}` : `✉️ Сообщение · ${cl.name}`, body: text.length > 180 ? text.slice(0, 177) + '…' : text, url: '#/inbox', tag: 'ann-' + r.id });
   }
 
   if (table === 'challenges') {
@@ -165,50 +186,61 @@ async function onChange(table: string, type: string, r: any, o: any, actor: stri
 
   if (table === 'events' && type === 'INSERT') {
     const when = new Date(r.starts_at).toLocaleString('ru-RU', {
-      timeZone: await timezone(), weekday: 'short', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
+      timeZone: cl.settings?.timezone || 'Europe/Moscow', weekday: 'short', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
     });
     return send(except(all, r.created_by), { title: `📅 ${r.title}`, body: `${when}${r.place ? ' · ' + r.place : ''}`, url: '#/calendar' });
   }
 }
 
-// ───────────── Задачи по расписанию ─────────────
-async function loadAll() {
-  const [p, m, s] = await Promise.all([
-    sb.from('profiles').select('*'), sb.from('matches').select('*'), sb.from('settings').select('data').eq('id', 1).maybeSingle(),
-  ]);
+// ───────────── Задачи по расписанию (по каждому клубу отдельно) ─────────────
+async function clubsList() {
+  const { data } = await sb.from('clubs').select('id, name, settings').eq('blocked', false);
+  return data ?? [];
+}
+
+async function loadClub(c: { id: string; settings: Record<string, unknown> }) {
+  const [profiles, m] = await Promise.all([members(c.id), sb.from('matches').select('*').eq('club_id', c.id)]);
   // тестовые данные владельца в итоги не попадают
-  return { profiles: (p.data ?? []).filter((x) => !x.is_test), matches: (m.data ?? []).filter((x) => !x.is_test), settings: s.data?.data ?? {} };
+  return { profiles, matches: (m.data ?? []).filter((x) => !x.is_test), settings: c.settings ?? {} };
 }
 
 async function weeklyDigest() {
-  const { profiles, matches, settings } = await loadAll();
-  const pool = profiles.filter((p) => ['approved', 'archived', 'deleted'].includes(p.status));
-  const A = analyze(pool, matches, settings), D = analyzeDoubles(pool, matches, settings);
-  const w = weekSummary(A, D, profiles);
-  if (!w.matches) return 0;
-  const nick = (id: string) => profiles.find((p) => p.id === id)?.nickname ?? 'Игрок';
-  const parts = [`${w.matches} ${w.matches % 10 === 1 && w.matches % 100 !== 11 ? 'матч' : 'матчей'}`];
-  if (w.top) parts.push(`рост недели — ${nick(w.top.id)} (+${w.top.g.toFixed(1)})`);
-  if (w.active) parts.push(`больше всех сыграл ${nick(w.active.id)}`);
-  if (w.upset) parts.push(`сенсация: ${nick(w.upset.w)} обыграл ${nick(w.upset.l)}`);
-  const all = profiles.filter((p) => p.status === 'approved').map((p) => p.id);
-  return send(all, { title: '📊 Итоги недели', body: parts.join(' · '), url: '#/home', tag: 'weekly' });
+  let total = 0;
+  for (const c of await clubsList()) {
+    const { profiles, matches, settings } = await loadClub(c);
+    const pool = profiles.filter((p) => ['approved', 'archived', 'deleted'].includes(p.status));
+    const A = analyze(pool, matches, settings), D = analyzeDoubles(pool, matches, settings);
+    const w = weekSummary(A, D, profiles);
+    if (!w.matches) continue;
+    const nick = (id: string) => profiles.find((p) => p.id === id)?.nickname ?? 'Игрок';
+    const parts = [`${w.matches} ${w.matches % 10 === 1 && w.matches % 100 !== 11 ? 'матч' : 'матчей'}`];
+    if (w.top) parts.push(`рост недели — ${nick(w.top.id)} (+${w.top.g.toFixed(1)})`);
+    if (w.active) parts.push(`больше всех сыграл ${nick(w.active.id)}`);
+    if (w.upset) parts.push(`сенсация: ${nick(w.upset.w)} обыграл ${nick(w.upset.l)}`);
+    const all = profiles.filter((p) => p.status === 'approved').map((p) => p.id);
+    total += await sendPush(all, { title: `📊 Итоги недели · ${c.name}`, body: parts.join(' · '), url: inClub('#/home', c.id), tag: 'weekly-' + c.id });
+  }
+  return total;
 }
 
 async function seasonDigest() {
-  const { profiles, matches, settings } = await loadAll();
-  const pool = profiles.filter((p) => ['approved', 'archived', 'deleted'].includes(p.status));
-  const A = analyze(pool, matches, settings);
-  const key = monthKey(Date.now() - 864e5);  // прошлый месяц
-  const t = seasonTable(A, profiles, key);
-  if (!t.champion) return 0;
-  const nick = (id: string) => profiles.find((p) => p.id === id)?.nickname ?? 'Игрок';
-  const all = profiles.filter((p) => p.status === 'approved').map((p) => p.id);
-  return send(all, { title: `🏆 Сезон: ${monthName(key)}`, body: `Чемпион — ${nick(t.champion.id)} (+${t.champion.gain.toFixed(1)} за месяц). Новый сезон уже начался!`, url: '#/seasons', tag: 'season' });
+  let total = 0;
+  for (const c of await clubsList()) {
+    const { profiles, matches, settings } = await loadClub(c);
+    const pool = profiles.filter((p) => ['approved', 'archived', 'deleted'].includes(p.status));
+    const A = analyze(pool, matches, settings);
+    const key = monthKey(Date.now() - 864e5);  // прошлый месяц
+    const t = seasonTable(A, profiles, key);
+    if (!t.champion) continue;
+    const nick = (id: string) => profiles.find((p) => p.id === id)?.nickname ?? 'Игрок';
+    const all = profiles.filter((p) => p.status === 'approved').map((p) => p.id);
+    total += await sendPush(all, { title: `🏆 Сезон: ${monthName(key)} · ${c.name}`, body: `Чемпион — ${nick(t.champion.id)} (+${t.champion.gain.toFixed(1)} за месяц). Новый сезон уже начался!`, url: inClub('#/seasons', c.id), tag: 'season-' + c.id });
+  }
+  return total;
 }
 
 async function backup(): Promise<string> {
-  const tables = ['profiles', 'matches', 'tournaments', 'events', 'challenges', 'settings'];
+  const tables = ['clubs', 'club_members', 'profiles', 'matches', 'tournaments', 'events', 'challenges', 'settings', 'coin_tx'];
   const out: Record<string, unknown> = { created_at: new Date().toISOString() };
   for (const t of tables) out[t] = (await sb.from(t).select('*')).data ?? [];
   const name = `backup-${new Date().toISOString().slice(0, 16).replace(':', '-')}.json`;
@@ -225,8 +257,8 @@ async function isAdminRequest(req: Request) {
   const jwt = req.headers.get('Authorization')?.replace('Bearer ', '') ?? '';
   const { data } = await sb.auth.getUser(jwt);
   if (!data.user) return null;
-  const { data: p } = await sb.from('profiles').select('role, status').eq('id', data.user.id).maybeSingle();
-  return p?.role === 'admin' && p?.status === 'approved' ? data.user : null;
+  const { data: p } = await sb.from('profiles').select('is_founder').eq('id', data.user.id).maybeSingle();
+  return p?.is_founder ? data.user : null;
 }
 
 Deno.serve(async (req) => {
@@ -248,7 +280,7 @@ Deno.serve(async (req) => {
     const jwt = req.headers.get('Authorization')?.replace('Bearer ', '') ?? '';
     const { data } = await sb.auth.getUser(jwt);
     if (!data.user) return json({ error: 'unauthorized' }, 401);
-    const sent = await send([data.user.id], { title: 'PongHub', body: 'Уведомления работают! 🏓', url: '#/me' });
+    const sent = await sendPush([data.user.id], { title: 'PongHub', body: 'Уведомления работают! 🏓', url: '#/me' });
     return json({ sent });
   }
 

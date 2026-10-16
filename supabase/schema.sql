@@ -1238,3 +1238,1068 @@ begin
 exception when unique_violation then
   raise exception 'Вы уже сделали прогноз на этот матч';
 end $$;
+
+-- ═══ Миграция 11 (платформа клубов) ═══
+-- PongHub — миграция 11: платформа клубов.
+--
+-- • Аккаунт отдельно от клуба. Регистрация больше не требует одобрения.
+-- • Клуб создаёт любой; роли — внутри клуба: owner (владелец клуба) / helper (помощник) / player.
+-- • Основатель (profiles.is_founder) управляет платформой: видит все клубы, блокирует,
+--   добавляет участников без клуба, один раз переносит историю коворкинга в клуб.
+-- • Все данные (матчи, турниры, события, вызовы, живые игры, объявления, прогнозы, пинг-коины, журнал)
+--   принадлежат клубу (club_id). Старые данные получают club_id = null до переноса основателем.
+-- • Пинг-коины — отдельно в каждом клубе.
+-- Скрипт можно запускать повторно.
+
+-- ═════════════ Основатель и признак «был до клубов» ═════════════
+alter table public.profiles add column if not exists is_founder boolean not null default false;
+alter table public.profiles add column if not exists legacy boolean not null default false;
+do $$
+begin
+  if not exists (select 1 from public.profiles where is_founder) then
+    update public.profiles set is_founder = true where role = 'admin' and status = 'approved';
+    update public.profiles set legacy = true where not is_test and status in ('approved', 'archived', 'pending');
+  end if;
+end $$;
+
+create or replace function public.is_founder() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from profiles where id = auth.uid() and is_founder);
+$$;
+
+-- ═════════════ Клубы ═════════════
+create table if not exists public.clubs (
+  id uuid primary key default gen_random_uuid(),
+  code text not null unique,                 -- публичный ID для поиска: PH-7K2Q
+  name text not null check (length(trim(name)) between 2 and 60),
+  city text,
+  address text,
+  lat double precision,
+  lng double precision,
+  description text,
+  visible boolean not null default true,     -- показывать на карте и в поиске
+  blocked boolean not null default false,    -- заблокирован основателем
+  owner_id uuid references public.profiles(id) on delete set null,
+  settings jsonb not null default '{}',      -- настройки рейтинга, прогнозов и т.д. (бывшая таблица settings)
+  created_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+-- секретный код приглашения — отдельно, чтобы его видел только владелец клуба
+create table if not exists public.club_invites (
+  club_id uuid primary key references public.clubs(id) on delete cascade,
+  code text not null unique,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.club_members (
+  club_id uuid not null references public.clubs(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  role text not null default 'player' check (role in ('owner', 'helper', 'player')),
+  -- active — участник; pending — заявка; archived — скрыт из рейтинга; former — бывший (матчи остаются в истории)
+  status text not null default 'active' check (status in ('active', 'pending', 'archived', 'former')),
+  initial_rating numeric,
+  via text,                                   -- invite / request / created / founder / history
+  joined_at timestamptz not null default now(),
+  primary key (club_id, user_id)
+);
+create index if not exists club_members_user_idx on public.club_members (user_id);
+
+-- служебные флаги платформы (читают все вошедшие)
+create table if not exists public.platform (
+  key text primary key,
+  value jsonb not null
+);
+insert into public.platform (key, value) values ('migration_done', 'false') on conflict (key) do nothing;
+
+-- ═════════════ Проверки прав внутри клуба ═════════════
+create or replace function public.club_role(cid uuid) returns text
+language sql stable security definer set search_path = public as $$
+  select m.role from club_members m join clubs c on c.id = m.club_id
+  where m.club_id = cid and m.user_id = auth.uid() and m.status = 'active' and not c.blocked;
+$$;
+create or replace function public.is_member(cid uuid) returns boolean
+language sql stable security definer set search_path = public as $$ select public.club_role(cid) is not null; $$;
+create or replace function public.is_club_editor(cid uuid) returns boolean
+language sql stable security definer set search_path = public as $$ select coalesce(public.club_role(cid) in ('owner', 'helper'), false); $$;
+create or replace function public.is_club_admin(cid uuid) returns boolean
+language sql stable security definer set search_path = public as $$ select coalesce(public.club_role(cid) = 'owner', false); $$;
+
+-- все перечисленные игроки — участники клуба (активные или в архиве)
+create or replace function public.all_in_club(cid uuid, ids uuid[]) returns boolean
+language sql stable security definer set search_path = public as $$
+  select not exists (
+    select 1 from unnest(ids) x where x is not null
+      and not exists (select 1 from club_members m where m.club_id = cid and m.user_id = x and m.status in ('active', 'archived'))
+  );
+$$;
+
+-- старые функции ролей: теперь означают основателя / наличие клуба (на случай забытых мест)
+create or replace function public.is_admin() returns boolean
+language sql stable security definer set search_path = public as $$ select public.is_founder(); $$;
+create or replace function public.is_editor() returns boolean
+language sql stable security definer set search_path = public as $$ select public.is_founder(); $$;
+create or replace function public.is_approved() returns boolean
+language sql stable security definer set search_path = public as $$
+  select public.is_founder() or exists (select 1 from club_members where user_id = auth.uid() and status = 'active');
+$$;
+
+-- ═════════════ club_id во всех данных ═════════════
+do $$
+declare t text;
+begin
+  foreach t in array array['matches', 'tournaments', 'events', 'challenges', 'live_matches', 'announcements',
+                           'pred_events', 'predictions', 'coin_tx', 'audit_log'] loop
+    execute format('alter table public.%I add column if not exists club_id uuid references public.clubs(id) on delete cascade', t);
+    execute format('create index if not exists %I on public.%I (club_id)', t || '_club_idx', t);
+  end loop;
+end $$;
+
+-- ═════════════ Регистрация: аккаунт сразу активен, без одобрения ═════════════
+create or replace function public.handle_new_user() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare nick text;
+begin
+  nick := coalesce(nullif(trim(new.raw_user_meta_data ->> 'nickname'), ''), split_part(new.email, '@', 1));
+  if exists (select 1 from profiles where lower(nickname) = lower(nick)) then
+    nick := nick || '_' || substr(new.id::text, 1, 4);
+  end if;
+  insert into profiles (id, nickname, full_name, role, status)
+  values (new.id, nick, nullif(trim(new.raw_user_meta_data ->> 'full_name'), ''), 'player', 'approved');
+  return new;
+end $$;
+
+-- служебные поля профиля меняет только основатель
+create or replace function public.protect_profile() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then return new; end if;  -- изменения из панели Supabase / служебных функций
+  if not public.is_founder() then
+    new.role := old.role;
+    new.status := old.status;
+    new.initial_rating := old.initial_rating;
+    new.is_founder := old.is_founder;
+    new.legacy := old.legacy;
+    new.is_test := old.is_test;
+  end if;
+  if old.id = auth.uid() and old.is_founder then new.is_founder := true; end if;
+  new.id := old.id;
+  new.created_at := old.created_at;
+  return new;
+end $$;
+
+-- ═════════════ Права доступа ═════════════
+alter table public.clubs enable row level security;
+alter table public.club_invites enable row level security;
+alter table public.club_members enable row level security;
+alter table public.platform enable row level security;
+
+drop policy if exists platform_select on public.platform;
+create policy platform_select on public.platform for select to authenticated using (true);
+
+-- клуб видят его участники (и подавшие заявку) и основатель; остальные — через club_directory / club_public
+drop policy if exists clubs_select on public.clubs;
+create policy clubs_select on public.clubs for select using (
+  public.is_founder() or exists (select 1 from club_members m where m.club_id = clubs.id and m.user_id = auth.uid() and m.status in ('active', 'pending'))
+);
+drop policy if exists invites_select on public.club_invites;
+create policy invites_select on public.club_invites for select using (public.is_club_admin(club_id));
+
+drop policy if exists members_select on public.club_members;
+create policy members_select on public.club_members for select using (
+  user_id = auth.uid() or public.is_founder()
+  or (public.is_member(club_id) and (status <> 'pending' or public.is_club_admin(club_id)))
+);
+
+-- профили: свой; основатель; люди из общих клубов (заявки — только владельцу клуба; тестовые — только владельцу)
+drop policy if exists profiles_select on public.profiles;
+create policy profiles_select on public.profiles for select using (
+  id = auth.uid() or public.is_founder()
+  or exists (
+    select 1 from club_members a join club_members b on b.club_id = a.club_id
+    join clubs c on c.id = a.club_id and not c.blocked
+    where a.user_id = auth.uid() and a.status = 'active' and b.user_id = profiles.id
+      and (b.status <> 'pending' or a.role = 'owner')
+      and (not profiles.is_test or a.role = 'owner')
+  )
+);
+drop policy if exists profiles_update on public.profiles;
+create policy profiles_update on public.profiles for update
+  using (id = auth.uid() or public.is_founder()) with check (id = auth.uid() or public.is_founder());
+drop policy if exists profiles_delete on public.profiles;
+create policy profiles_delete on public.profiles for delete using (public.is_founder());
+
+-- старая общая таблица настроек — только основателю (настройки теперь у клуба)
+drop policy if exists settings_select on public.settings;
+create policy settings_select on public.settings for select using (public.is_founder());
+drop policy if exists settings_write on public.settings;
+create policy settings_write on public.settings for all using (public.is_founder()) with check (public.is_founder());
+
+-- матчи
+drop policy if exists matches_select on public.matches;
+create policy matches_select on public.matches for select
+  using (public.is_member(club_id) and (not is_test or public.is_club_admin(club_id)));
+drop policy if exists matches_insert on public.matches;
+create policy matches_insert on public.matches for insert with check (
+  public.all_in_club(club_id, array[player1_id, player2_id, player3_id, player4_id])
+  and (not is_test or public.is_club_admin(club_id)) and (
+    public.is_club_admin(club_id)
+    or (public.is_club_editor(club_id) and status = 'approved' and type = 'free' and tournament_id is null and submitted_by = auth.uid()
+        and auth.uid() in (player1_id, player2_id, player3_id, player4_id))
+    or (public.is_member(club_id) and status = 'pending' and type = 'free' and tournament_id is null and submitted_by = auth.uid())
+  )
+);
+drop policy if exists matches_update on public.matches;
+create policy matches_update on public.matches for update
+  using (public.is_club_admin(club_id)) with check (public.is_club_admin(club_id));
+drop policy if exists matches_delete on public.matches;
+create policy matches_delete on public.matches for delete
+  using (public.is_club_admin(club_id) or (public.is_member(club_id) and submitted_by = auth.uid() and status = 'pending'));
+
+-- турниры и календарь
+drop policy if exists tournaments_select on public.tournaments;
+create policy tournaments_select on public.tournaments for select
+  using (public.is_member(club_id) and (not is_test or public.is_club_admin(club_id)));
+drop policy if exists tournaments_write on public.tournaments;
+create policy tournaments_write on public.tournaments for all
+  using (public.is_club_admin(club_id)) with check (public.is_club_admin(club_id));
+drop policy if exists events_select on public.events;
+create policy events_select on public.events for select using (public.is_member(club_id));
+drop policy if exists events_write on public.events;
+create policy events_write on public.events for all
+  using (public.is_club_admin(club_id)) with check (public.is_club_admin(club_id));
+
+-- вызовы
+drop policy if exists challenges_select on public.challenges;
+create policy challenges_select on public.challenges for select
+  using (public.is_member(club_id) and (not is_test or public.is_club_admin(club_id)));
+drop policy if exists challenges_insert on public.challenges;
+create policy challenges_insert on public.challenges for insert with check (
+  public.is_member(club_id) and from_id = auth.uid() and status = 'pending' and public.all_in_club(club_id, array[to_id])
+  and (not is_test or public.is_club_admin(club_id))
+);
+drop policy if exists challenges_update on public.challenges;
+create policy challenges_update on public.challenges for update
+  using (public.is_member(club_id) and (auth.uid() in (from_id, to_id) or public.is_club_admin(club_id)))
+  with check (public.is_member(club_id) and (auth.uid() in (from_id, to_id) or public.is_club_admin(club_id)));
+drop policy if exists challenges_delete on public.challenges;
+create policy challenges_delete on public.challenges for delete
+  using (public.is_member(club_id) and (from_id = auth.uid() or public.is_club_admin(club_id)));
+
+-- живые игры
+drop policy if exists live_select on public.live_matches;
+create policy live_select on public.live_matches for select
+  using (public.is_member(club_id) and (not is_test or public.is_club_admin(club_id)));
+drop policy if exists live_insert on public.live_matches;
+create policy live_insert on public.live_matches for insert with check (
+  public.is_member(club_id) and started_by = auth.uid() and (type = 'free' or public.is_club_admin(club_id))
+  and (not is_test or public.is_club_admin(club_id))
+  and public.all_in_club(club_id, array[player1_id, player2_id, player3_id, player4_id])
+);
+drop policy if exists live_update on public.live_matches;
+create policy live_update on public.live_matches for update
+  using (public.is_member(club_id)) with check (public.is_member(club_id));
+drop policy if exists live_delete on public.live_matches;
+create policy live_delete on public.live_matches for delete
+  using (public.is_member(club_id) and (started_by = auth.uid() or public.is_club_editor(club_id)));
+
+-- объявления
+drop policy if exists ann_select on public.announcements;
+create policy ann_select on public.announcements for select using (
+  public.is_club_admin(club_id)
+  or (public.is_member(club_id) and not is_test and (recipients is null or auth.uid() = any(recipients)))
+);
+drop policy if exists ann_insert on public.announcements;
+create policy ann_insert on public.announcements for insert
+  with check (public.is_club_admin(club_id) and created_by = auth.uid());
+drop policy if exists ann_delete on public.announcements;
+create policy ann_delete on public.announcements for delete using (public.is_club_admin(club_id));
+
+-- прогнозы и пинг-коины (каждый видит свои; владелец клуба — все в своём клубе)
+drop policy if exists coin_tx_select on public.coin_tx;
+create policy coin_tx_select on public.coin_tx for select
+  using ((user_id = auth.uid() and public.is_member(club_id)) or public.is_club_admin(club_id));
+drop policy if exists pred_events_select on public.pred_events;
+create policy pred_events_select on public.pred_events for select
+  using (public.is_member(club_id) and (not is_test or public.is_club_admin(club_id)));
+drop policy if exists predictions_select on public.predictions;
+create policy predictions_select on public.predictions for select
+  using ((user_id = auth.uid() and public.is_member(club_id)) or public.is_club_admin(club_id));
+
+-- журнал: владелец клуба — свой клуб; основатель — записи вне клубов
+drop policy if exists audit_admin_read on public.audit_log;
+create policy audit_admin_read on public.audit_log for select
+  using (public.is_club_admin(club_id) or (club_id is null and public.is_founder()));
+
+-- копии и фото — основатель
+drop policy if exists backups_admin_read on storage.objects;
+create policy backups_admin_read on storage.objects for select to authenticated
+  using (bucket_id = 'backups' and public.is_founder());
+drop policy if exists avatars_admin_delete on storage.objects;
+create policy avatars_admin_delete on storage.objects for delete to authenticated
+  using (bucket_id = 'avatars' and public.is_founder());
+
+-- ═════════════ Журнал: с клубом; настройки клуба пишутся как раньше («settings») ═════════════
+create or replace function public.audit_trigger() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  o jsonb := case when tg_op in ('UPDATE', 'DELETE') then to_jsonb(old) end;
+  n jsonb := case when tg_op in ('INSERT', 'UPDATE') then to_jsonb(new) end;
+  cid uuid;
+  tname text := tg_table_name;
+begin
+  if current_setting('app.bulk', true) = '1' then return coalesce(new, old); end if;  -- перенос истории
+  if tg_table_name = 'profiles' and tg_op = 'UPDATE'
+     and (o->>'role', o->>'status', o->>'initial_rating', o->>'nickname')
+         is not distinct from (n->>'role', n->>'status', n->>'initial_rating', n->>'nickname') then
+    return new;
+  end if;
+  if tg_table_name = 'clubs' then
+    if (o->'settings') is not distinct from (n->'settings') then return new; end if;
+    cid := (n->>'id')::uuid; tname := 'settings';
+    o := jsonb_build_object('id', 1, 'data', o->'settings');
+    n := jsonb_build_object('id', 1, 'data', n->'settings');
+  elsif tg_table_name = 'club_members' then
+    cid := coalesce(n->>'club_id', o->>'club_id')::uuid;
+    if tg_op = 'UPDATE' and (o->>'role', o->>'status', o->>'initial_rating')
+       is not distinct from (n->>'role', n->>'status', n->>'initial_rating') then return new; end if;
+  else
+    cid := coalesce(n->>'club_id', o->>'club_id')::uuid;
+  end if;
+  insert into audit_log (club_id, actor_id, action, table_name, record_id, old_data, new_data, reason)
+  values (cid, auth.uid(), lower(tg_op), tname,
+          coalesce(n->>'id', o->>'id', n->>'user_id', o->>'user_id'), o, n,
+          nullif(current_setting('app.reason', true), ''));
+  return coalesce(new, old);
+end $$;
+
+drop trigger if exists clubs_audit on public.clubs;
+create trigger clubs_audit after update on public.clubs for each row execute function public.audit_trigger();
+drop trigger if exists club_members_audit on public.club_members;
+create trigger club_members_audit after insert or update or delete on public.club_members
+  for each row execute function public.audit_trigger();
+
+-- уведомления: при переносе истории в клуб — не рассылаем (сотни служебных изменений)
+create or replace function public.notify_change() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  fn_url text;
+  secret text;
+begin
+  if coalesce((to_jsonb(coalesce(new, old))->>'is_test')::boolean, false) then return coalesce(new, old); end if;
+  if current_setting('app.bulk', true) = '1' then return coalesce(new, old); end if;
+  select value into fn_url from app_secrets where key = 'functions_url';
+  select value into secret from app_secrets where key = 'webhook_secret';
+  if fn_url is null then return coalesce(new, old); end if;
+  perform net.http_post(
+    url := fn_url || '/notify',
+    body := jsonb_build_object(
+      'secret', secret, 'table', tg_table_name, 'type', tg_op,
+      'record', case when tg_op <> 'DELETE' then to_jsonb(new) end,
+      'old_record', case when tg_op in ('UPDATE', 'DELETE') then to_jsonb(old) end,
+      'actor', auth.uid(),
+      'reason', nullif(current_setting('app.reason', true), '')
+    ),
+    headers := '{"Content-Type": "application/json"}'::jsonb
+  );
+  return coalesce(new, old);
+end $$;
+
+-- уведомления о заявках/приёме в клуб
+drop trigger if exists club_members_notify on public.club_members;
+create trigger club_members_notify after insert or update on public.club_members
+  for each row execute function public.notify_change();
+
+-- ═════════════ Коды ═════════════
+create or replace function public.gen_code(len int) returns text
+language plpgsql volatile as $$
+declare abc text := 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; s text := ''; i int;
+begin
+  for i in 1..len loop s := s || substr(abc, 1 + floor(random() * length(abc))::int, 1); end loop;
+  return s;
+end $$;
+
+create or replace function public.new_club_code() returns text
+language plpgsql volatile set search_path = public as $$
+declare c text;
+begin
+  loop
+    c := 'PH-' || public.gen_code(4);
+    exit when not exists (select 1 from clubs where code = c);
+  end loop;
+  return c;
+end $$;
+
+create or replace function public.new_invite_code() returns text
+language plpgsql volatile set search_path = public as $$
+declare c text;
+begin
+  loop
+    c := public.gen_code(8);
+    exit when not exists (select 1 from club_invites where code = c);
+  end loop;
+  return c;
+end $$;
+
+-- ═════════════ Клуб: создание, приглашение, заявки, участники ═════════════
+create or replace function public.create_club(p_name text, p_city text, p_address text, p_lat double precision,
+                                              p_lng double precision, p_visible boolean, p_description text default null) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare cid uuid; me profiles;
+begin
+  select * into me from profiles where id = auth.uid();
+  if not found or me.status in ('deleted', 'rejected') then raise exception 'not allowed'; end if;
+  if length(trim(coalesce(p_name, ''))) < 2 then raise exception 'Введите название клуба'; end if;
+  if not me.is_founder and (select count(*) from clubs where owner_id = auth.uid()) >= 10 then
+    raise exception 'Можно быть владельцем не более 10 клубов';
+  end if;
+  insert into clubs (code, name, city, address, lat, lng, visible, description, owner_id, created_by)
+  values (public.new_club_code(), trim(p_name), nullif(trim(p_city), ''), nullif(trim(p_address), ''), p_lat, p_lng,
+          coalesce(p_visible, true), nullif(trim(p_description), ''), auth.uid(), auth.uid())
+  returning id into cid;
+  insert into club_invites (club_id, code) values (cid, public.new_invite_code());
+  insert into club_members (club_id, user_id, role, status, via) values (cid, auth.uid(), 'owner', 'active', 'created');
+  return cid;
+end $$;
+
+create or replace function public.update_club(cid uuid, patch jsonb) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not (public.is_club_admin(cid) or public.is_founder()) then raise exception 'not allowed'; end if;
+  update clubs set
+    name = case when patch ? 'name' and length(trim(patch->>'name')) >= 2 then trim(patch->>'name') else name end,
+    city = case when patch ? 'city' then nullif(trim(patch->>'city'), '') else city end,
+    address = case when patch ? 'address' then nullif(trim(patch->>'address'), '') else address end,
+    description = case when patch ? 'description' then nullif(trim(patch->>'description'), '') else description end,
+    lat = case when patch ? 'lat' then (patch->>'lat')::double precision else lat end,
+    lng = case when patch ? 'lng' then (patch->>'lng')::double precision else lng end,
+    visible = case when patch ? 'visible' then (patch->>'visible')::boolean else visible end,
+    settings = case when patch ? 'settings' then patch->'settings' else settings end
+  where id = cid;
+end $$;
+
+create or replace function public.rotate_invite(cid uuid) returns text
+language plpgsql security definer set search_path = public as $$
+declare c text := public.new_invite_code();
+begin
+  if not public.is_club_admin(cid) then raise exception 'not allowed'; end if;
+  insert into club_invites (club_id, code) values (cid, c)
+    on conflict (club_id) do update set code = excluded.code, created_at = now();
+  return c;
+end $$;
+
+-- вход по приглашению: сразу участник
+create or replace function public.join_by_invite(p_code text) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare cid uuid; m club_members; me profiles;
+begin
+  select * into me from profiles where id = auth.uid();
+  if not found or me.status in ('deleted', 'rejected') then raise exception 'not allowed'; end if;
+  select i.club_id into cid from club_invites i join clubs c on c.id = i.club_id
+    where i.code = upper(regexp_replace(coalesce(p_code, ''), '[^A-Za-z0-9]', '', 'g')) and not c.blocked;
+  if cid is null then raise exception 'Код приглашения не найден или устарел'; end if;
+  select * into m from club_members where club_id = cid and user_id = auth.uid();
+  if found and m.status = 'active' then return cid; end if;
+  insert into club_members (club_id, user_id, role, status, via) values (cid, auth.uid(), 'player', 'active', 'invite')
+    on conflict (club_id, user_id) do update set status = 'active', via = 'invite', joined_at = now();
+  return cid;
+end $$;
+
+-- заявка (клуб найден поиском или на карте)
+create or replace function public.request_join(cid uuid) returns void
+language plpgsql security definer set search_path = public as $$
+declare c clubs; m club_members; me profiles;
+begin
+  select * into me from profiles where id = auth.uid();
+  if not found or me.status in ('deleted', 'rejected') then raise exception 'not allowed'; end if;
+  select * into c from clubs where id = cid;
+  if not found or c.blocked or not c.visible then raise exception 'Клуб не найден'; end if;
+  select * into m from club_members where club_id = cid and user_id = auth.uid();
+  if found and m.status = 'active' then return; end if;
+  if found and m.status = 'pending' then return; end if;
+  insert into club_members (club_id, user_id, role, status, via) values (cid, auth.uid(), 'player', 'pending', 'request')
+    on conflict (club_id, user_id) do update set status = 'pending', via = 'request', joined_at = now();
+end $$;
+
+create or replace function public.cancel_request(cid uuid) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  delete from club_members where club_id = cid and user_id = auth.uid() and status = 'pending';
+end $$;
+
+-- владелец клуба меняет участника: роль / статус / стартовый рейтинг. status 'rejected' — отклонить заявку
+create or replace function public.set_member(cid uuid, uid uuid, p_role text default null, p_status text default null,
+                                             p_initial numeric default null, p_clear_initial boolean default false) returns void
+language plpgsql security definer set search_path = public as $$
+declare m club_members;
+begin
+  if not public.is_club_admin(cid) then raise exception 'not allowed'; end if;
+  select * into m from club_members where club_id = cid and user_id = uid;
+  if not found then raise exception 'Участник не найден'; end if;
+  if m.role = 'owner' and (p_role is not null and p_role <> 'owner' or p_status is not null and p_status <> 'active') then
+    raise exception 'Сначала передайте клуб другому участнику';
+  end if;
+  if p_role = 'owner' then raise exception 'Для этого есть «Передать клуб»'; end if;
+  if p_status = 'rejected' then
+    if m.status <> 'pending' then raise exception 'Это не заявка'; end if;
+    delete from club_members where club_id = cid and user_id = uid;
+    return;
+  end if;
+  update club_members set
+    role = coalesce(p_role, role),
+    status = coalesce(p_status, status),
+    initial_rating = case when p_clear_initial then null else coalesce(p_initial, initial_rating) end
+  where club_id = cid and user_id = uid;
+end $$;
+
+-- убрать из клуба (матчи остаются в истории, человек виден как бывший участник)
+create or replace function public.remove_member(cid uuid, uid uuid) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not (public.is_club_admin(cid) or uid = auth.uid() and public.is_member(cid)) then raise exception 'not allowed'; end if;
+  if exists (select 1 from club_members where club_id = cid and user_id = uid and role = 'owner') then
+    raise exception 'Сначала передайте клуб другому участнику';
+  end if;
+  if exists (select 1 from matches where club_id = cid and uid in (player1_id, player2_id, player3_id, player4_id)) then
+    update club_members set status = 'former', role = 'player' where club_id = cid and user_id = uid;
+  else
+    delete from club_members where club_id = cid and user_id = uid;
+  end if;
+end $$;
+
+create or replace function public.leave_club(cid uuid) returns void
+language plpgsql security definer set search_path = public as $$
+begin perform public.remove_member(cid, auth.uid()); end $$;
+
+-- передать клуб: новый владелец — участник клуба; прежний становится помощником
+create or replace function public.transfer_club(cid uuid, uid uuid) returns void
+language plpgsql security definer set search_path = public as $$
+declare old_owner uuid;
+begin
+  if not (public.is_club_admin(cid) or public.is_founder()) then raise exception 'not allowed'; end if;
+  if not exists (select 1 from club_members where club_id = cid and user_id = uid and status = 'active') then
+    raise exception 'Передать можно только участнику клуба';
+  end if;
+  select owner_id into old_owner from clubs where id = cid;
+  update club_members set role = 'helper' where club_id = cid and role = 'owner';
+  update club_members set role = 'owner' where club_id = cid and user_id = uid;
+  update clubs set owner_id = uid where id = cid;
+end $$;
+
+-- emails: владелец клуба видит почту участников и заявок своих клубов; основатель — всех
+create or replace function public.admin_emails() returns table (id uuid, email text)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if public.is_founder() then
+    return query select u.id, u.email::text from auth.users u;
+  else
+    return query select u.id, u.email::text from auth.users u
+      where exists (select 1 from club_members b join club_members a on a.club_id = b.club_id
+                    where b.user_id = u.id and a.user_id = auth.uid() and a.role = 'owner' and a.status = 'active');
+  end if;
+end $$;
+
+-- ═════════════ Витрина: поиск, карта, страница клуба ═════════════
+create or replace function public.club_directory(q text default null)
+returns table (id uuid, code text, name text, city text, address text, lat double precision, lng double precision,
+               description text, players int, matches int, created_at timestamptz, my_status text)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if auth.uid() is null then return; end if;
+  return query
+    select c.id, c.code, c.name, c.city, c.address, c.lat, c.lng, c.description,
+      (select count(*) from club_members m join profiles p on p.id = m.user_id where m.club_id = c.id and m.status = 'active' and not p.is_test)::int,
+      (select count(*) from matches x where x.club_id = c.id and x.status = 'approved' and not x.is_test)::int,
+      c.created_at,
+      (select m.status from club_members m where m.club_id = c.id and m.user_id = auth.uid())
+    from clubs c
+    where not c.blocked and (c.visible or exists (select 1 from club_members m where m.club_id = c.id and m.user_id = auth.uid()))
+      and (coalesce(trim(q), '') = '' or c.name ilike '%' || trim(q) || '%' or c.code = upper(trim(q))
+           or c.code = 'PH-' || upper(trim(q)) or c.city ilike '%' || trim(q) || '%')
+    order by 9 desc
+    limit 200;
+end $$;
+
+-- публичная страница клуба: только ники, рейтинг (считается в приложении), турниры. Без почты и имён.
+create or replace function public.club_public(cid uuid) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare c clubs; res jsonb;
+begin
+  if auth.uid() is null then raise exception 'not allowed'; end if;
+  select * into c from clubs where id = cid;
+  if not found or c.blocked or not (c.visible or public.is_member(cid) or public.is_founder()) then
+    raise exception 'Клуб не найден';
+  end if;
+  select jsonb_build_object(
+    'club', jsonb_build_object('id', c.id, 'code', c.code, 'name', c.name, 'city', c.city, 'address', c.address,
+                               'lat', c.lat, 'lng', c.lng, 'description', c.description, 'created_at', c.created_at),
+    'settings', c.settings,
+    'my_status', (select m.status from club_members m where m.club_id = cid and m.user_id = auth.uid()),
+    'players', coalesce((select jsonb_agg(jsonb_build_object(
+        'id', p.id, 'nickname', p.nickname, 'avatar', p.avatar, 'color', p.color, 'photo_url', p.photo_url,
+        'initial_rating', m.initial_rating, 'created_at', p.created_at,
+        'status', case m.status when 'active' then 'approved' when 'archived' then 'archived' else 'deleted' end))
+      from club_members m join profiles p on p.id = m.user_id
+      where m.club_id = cid and m.status in ('active', 'archived', 'former') and not p.is_test), '[]'),
+    'matches', coalesce((select jsonb_agg(jsonb_build_object(
+        'id', x.id, 'played_at', x.played_at, 'created_at', x.created_at, 'type', x.type, 'kind', x.kind,
+        'tournament_id', x.tournament_id, 'player1_id', x.player1_id, 'player2_id', x.player2_id,
+        'player3_id', x.player3_id, 'player4_id', x.player4_id, 'sets', x.sets, 'sets1', x.sets1, 'sets2', x.sets2,
+        'winner_id', x.winner_id, 'rated', x.rated, 'best_of', x.best_of, 'points_to', x.points_to, 'status', x.status))
+      from matches x where x.club_id = cid and x.status = 'approved' and not x.is_test), '[]'),
+    'tournaments', coalesce((select jsonb_agg(jsonb_build_object(
+        'id', t.id, 'name', t.name, 'date', t.date, 'status', t.status, 'results', t.results, 'created_at', t.created_at))
+      from tournaments t where t.club_id = cid and not t.is_test), '[]')
+  ) into res;
+  return res;
+end $$;
+
+-- ═════════════ Основатель ═════════════
+create or replace function public.founder_clubs()
+returns table (id uuid, code text, name text, city text, visible boolean, blocked boolean, owner_id uuid, owner_nick text,
+               players int, pending int, matches int, last_match timestamptz, created_at timestamptz)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_founder() then raise exception 'not allowed'; end if;
+  return query
+    select c.id, c.code, c.name, c.city, c.visible, c.blocked, c.owner_id, (select nickname from profiles where profiles.id = c.owner_id),
+      (select count(*) from club_members m join profiles p on p.id = m.user_id where m.club_id = c.id and m.status = 'active' and not p.is_test)::int,
+      (select count(*) from club_members m where m.club_id = c.id and m.status = 'pending')::int,
+      (select count(*) from matches x where x.club_id = c.id and not x.is_test)::int,
+      (select max(played_at) from matches x where x.club_id = c.id),
+      c.created_at
+    from clubs c order by c.created_at;
+end $$;
+
+create or replace function public.founder_stats() returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_founder() then raise exception 'not allowed'; end if;
+  return jsonb_build_object(
+    'clubs', (select count(*) from clubs),
+    'users', (select count(*) from profiles where not is_test and status not in ('deleted', 'rejected')),
+    'matches', (select count(*) from matches where not is_test),
+    'unassigned', (select count(*) from profiles p where not p.is_test and p.status not in ('deleted', 'rejected')
+                     and not exists (select 1 from club_members m where m.user_id = p.id and m.status in ('active', 'pending'))),
+    'legacy_rows', (select count(*) from matches where club_id is null) + (select count(*) from tournaments where club_id is null),
+    'migration_done', (select value from platform where key = 'migration_done')
+  );
+end $$;
+
+create or replace function public.founder_block_club(cid uuid, p_blocked boolean) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_founder() then raise exception 'not allowed'; end if;
+  update clubs set blocked = p_blocked where id = cid;
+end $$;
+
+create or replace function public.founder_delete_club(cid uuid, p_name text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_founder() then raise exception 'not allowed'; end if;
+  if not exists (select 1 from clubs where id = cid and name = p_name) then raise exception 'Название не совпадает'; end if;
+  delete from clubs where id = cid;
+end $$;
+
+-- участники без клуба (для первого заполнения клуба)
+create or replace function public.founder_unassigned()
+returns table (id uuid, nickname text, full_name text, avatar text, color text, photo_url text, old_role text, old_status text,
+               legacy boolean, created_at timestamptz)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_founder() then raise exception 'not allowed'; end if;
+  return query
+    select p.id, p.nickname, p.full_name, p.avatar, p.color, p.photo_url, p.role, p.status, p.legacy, p.created_at
+    from profiles p
+    where not p.is_test and p.status not in ('deleted', 'rejected')
+      and not exists (select 1 from club_members m where m.user_id = p.id and m.status in ('active', 'pending'))
+    order by p.legacy desc, lower(p.nickname);
+end $$;
+
+-- добавить людей в клуб; роль и стартовый рейтинг переносятся из старого профиля
+create or replace function public.founder_add_members(cid uuid, uids uuid[]) returns int
+language plpgsql security definer set search_path = public as $$
+declare n int;
+begin
+  if not public.is_founder() then raise exception 'not allowed'; end if;
+  if not exists (select 1 from clubs where id = cid) then raise exception 'Клуб не найден'; end if;
+  insert into club_members (club_id, user_id, role, status, initial_rating, via)
+    select cid, p.id,
+      case when p.role in ('editor', 'admin') then 'helper' else 'player' end,
+      case when p.status = 'archived' then 'archived' else 'active' end,
+      p.initial_rating, 'founder'
+    from profiles p where p.id = any(uids) and not p.is_test and p.status not in ('deleted', 'rejected')
+  on conflict (club_id, user_id) do update
+    set status = case when club_members.role = 'owner' then 'active' else excluded.status end,
+        role = case when club_members.role = 'owner' then 'owner' else excluded.role end,
+        initial_rating = coalesce(club_members.initial_rating, excluded.initial_rating),
+        via = case when club_members.via = 'created' then club_members.via else 'founder' end;
+  get diagnostics n = row_count;
+  return n;
+end $$;
+
+-- один раз: вся история коворкинга (матчи, турниры, рейтинг, пинг-коины, журнал, настройки) → в клуб
+create or replace function public.founder_transfer_history(cid uuid) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare nm int; nt int; s jsonb;
+begin
+  if not public.is_founder() then raise exception 'not allowed'; end if;
+  if (select value from platform where key = 'migration_done') = 'true'::jsonb then
+    raise exception 'История уже перенесена';
+  end if;
+  if not exists (select 1 from clubs where id = cid) then raise exception 'Клуб не найден'; end if;
+  perform set_config('app.bulk', '1', true);
+
+  update matches set club_id = cid where club_id is null; get diagnostics nm = row_count;
+  update tournaments set club_id = cid where club_id is null; get diagnostics nt = row_count;
+  update events set club_id = cid where club_id is null;
+  update challenges set club_id = cid where club_id is null;
+  update live_matches set club_id = cid where club_id is null;
+  update announcements set club_id = cid where club_id is null;
+  update pred_events set club_id = cid where club_id is null;
+  update predictions p set club_id = cid where club_id is null;
+  update coin_tx set club_id = cid where club_id is null;
+  update audit_log set club_id = cid where club_id is null;
+
+  select data into s from settings where id = 1;
+  update clubs set settings = coalesce(s, '{}') || coalesce(settings, '{}') where id = cid;
+
+  -- тестовые игроки владельца — тоже в клуб (видны только владельцу клуба)
+  insert into club_members (club_id, user_id, role, status, via)
+    select cid, p.id, 'player', 'active', 'history' from profiles p where p.is_test
+  on conflict do nothing;
+
+  -- все, кто есть в истории, но не добавлен (удалённые, ушедшие), — «бывшие участники», чтобы рейтинг считался как раньше
+  insert into club_members (club_id, user_id, role, status, initial_rating, via)
+    select cid, p.id, 'player', 'former', p.initial_rating, 'history' from profiles p
+    where not p.is_test and (
+      exists (select 1 from matches x where x.club_id = cid and p.id in (x.player1_id, x.player2_id, x.player3_id, x.player4_id))
+      or exists (select 1 from coin_tx t where t.club_id = cid and t.user_id = p.id))
+  on conflict do nothing;
+
+  update platform set value = 'true' where key = 'migration_done';
+  perform set_config('app.bulk', '', true);
+  insert into audit_log (club_id, actor_id, action, table_name, record_id, new_data, reason)
+  values (cid, auth.uid(), 'update', 'settings', 'history', jsonb_build_object('matches', nm, 'tournaments', nt), 'История коворкинга перенесена в клуб');
+  return jsonb_build_object('matches', nm, 'tournaments', nt);
+end $$;
+
+-- полностью удалить аккаунт (только основатель; матчи остаются как «Бывший игрок»)
+create or replace function public.admin_delete_player(target uuid) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_founder() then raise exception 'not allowed'; end if;
+  if target = auth.uid() then raise exception 'Нельзя удалить самого себя'; end if;
+  if exists (select 1 from club_members where user_id = target and role = 'owner') then
+    raise exception 'Человек — владелец клуба. Сначала передайте его клуб другому участнику';
+  end if;
+  delete from push_subscriptions where user_id = target;
+  update club_members set status = 'former', role = 'player' where user_id = target;
+  delete from club_members m where m.user_id = target
+    and not exists (select 1 from matches x where x.club_id = m.club_id and target in (x.player1_id, x.player2_id, x.player3_id, x.player4_id));
+  update profiles set
+    nickname = 'Бывший игрок ' || right(target::text, 4),
+    full_name = null, photo_url = null, bio = null, hand = null,
+    avatar = '👤', color = '#adb5bd', role = 'player', status = 'deleted'
+  where id = target;
+  delete from auth.users where id = target;
+end $$;
+
+-- ═════════════ Существующие функции — с учётом клуба ═════════════
+create or replace function public.toggle_rsvp(event_id uuid) returns void
+language plpgsql security definer set search_path = public as $$
+declare cid uuid;
+begin
+  select club_id into cid from events where id = event_id;
+  if not public.is_member(cid) then raise exception 'not allowed'; end if;
+  update events set attendees =
+    case when auth.uid() = any(attendees) then array_remove(attendees, auth.uid())
+         else array_append(attendees, auth.uid()) end
+  where id = event_id;
+end $$;
+
+create or replace function public.delete_match(mid uuid, reason text) returns void
+language plpgsql security definer set search_path = public as $$
+declare m matches;
+begin
+  select * into m from matches where id = mid;
+  if not found then return; end if;
+  if not (public.is_club_admin(m.club_id) or (public.is_member(m.club_id) and m.submitted_by = auth.uid() and m.status = 'pending')) then
+    raise exception 'not allowed';
+  end if;
+  perform set_config('app.reason', coalesce(nullif(trim(reason), ''), 'Без причины'), true);
+  delete from matches where id = mid;
+end $$;
+
+create or replace function public.delete_tournament(tid uuid, reason text) returns void
+language plpgsql security definer set search_path = public as $$
+declare cid uuid;
+begin
+  select club_id into cid from tournaments where id = tid;
+  if not public.is_club_admin(cid) then raise exception 'not allowed'; end if;
+  perform set_config('app.reason', coalesce(nullif(trim(reason), ''), 'Без причины'), true);
+  delete from tournaments where id = tid;
+end $$;
+
+create or replace function public.restore_match(log_id bigint) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare d jsonb; rid uuid; cid uuid;
+begin
+  select old_data, club_id into d, cid from audit_log where id = log_id and action = 'delete' and table_name = 'matches';
+  if d is null then raise exception 'Запись не найдена'; end if;
+  if not public.is_club_admin(cid) then raise exception 'not allowed'; end if;
+  perform set_config('app.reason', 'Восстановлен из журнала', true);
+  if d->>'tournament_id' is not null and not exists (select 1 from tournaments where id = (d->>'tournament_id')::uuid) then
+    d := d || '{"tournament_id": null, "stage": null, "grp": null, "round": null, "slot": null}'::jsonb;
+  end if;
+  d := d || jsonb_build_object('club_id', cid);
+  insert into matches select * from jsonb_populate_record(null::matches, d) on conflict (id) do nothing returning id into rid;
+  return rid;
+end $$;
+
+-- тестовые игроки — в конкретном клубе
+drop function if exists public.admin_create_test_players(int);
+create or replace function public.admin_create_test_players(cid uuid, n int) returns int
+language plpgsql security definer set search_path = public as $$
+declare i int := 0; k int := 0; nick text; pid uuid;
+  emo text[] := array['🧪', '🤖', '👾', '🦾', '🛸', '🎲', '🧩', '🪀'];
+  col text[] := array['#8ab4f8', '#c77dff', '#06d6a0', '#f4a261', '#ffd166', '#ff70a6', '#2a9d8f', '#adb5bd'];
+begin
+  if not public.is_club_admin(cid) then raise exception 'not allowed'; end if;
+  while i < least(greatest(n, 1), 8) and k < 500 loop
+    k := k + 1;
+    nick := 'Тест ' || k;
+    if not exists (select 1 from profiles where lower(nickname) = lower(nick)) then
+      pid := gen_random_uuid();
+      insert into profiles (id, nickname, full_name, avatar, color, role, status, is_test)
+      values (pid, nick, 'Тестовый игрок', emo[1 + (k - 1) % 8], col[1 + (k - 1) % 8], 'player', 'approved', true);
+      insert into club_members (club_id, user_id, role, status, via) values (cid, pid, 'player', 'active', 'test');
+      i := i + 1;
+    end if;
+  end loop;
+  return i;
+end $$;
+revoke all on function public.admin_create_test_players(uuid, int) from public, anon;
+grant execute on function public.admin_create_test_players(uuid, int) to authenticated;
+
+drop function if exists public.admin_purge_test();
+create or replace function public.admin_purge_test(cid uuid) returns void
+language plpgsql security definer set search_path = public as $$
+declare ids uuid[]; evs uuid[];
+begin
+  if not public.is_club_admin(cid) then raise exception 'not allowed'; end if;
+  select coalesce(array_agg(p.id), '{}') into ids from profiles p join club_members m on m.user_id = p.id and m.club_id = cid where p.is_test;
+  select coalesce(array_agg(id), '{}') into evs from pred_events
+    where club_id = cid and (is_test or player1_id = any(ids) or player2_id = any(ids) or player3_id = any(ids) or player4_id = any(ids));
+  delete from coin_tx where club_id = cid and (ref = any(evs) or user_id = any(ids));
+  delete from pred_events where id = any(evs);
+  delete from live_matches where club_id = cid and (is_test or player1_id = any(ids) or player2_id = any(ids) or player3_id = any(ids) or player4_id = any(ids));
+  delete from challenges where club_id = cid and (is_test or from_id = any(ids) or to_id = any(ids));
+  delete from matches where club_id = cid and (is_test or player1_id = any(ids) or player2_id = any(ids) or player3_id = any(ids) or player4_id = any(ids));
+  delete from tournaments where club_id = cid and is_test;
+  delete from announcements where club_id = cid and is_test;
+  delete from profiles where id = any(ids);
+  delete from audit_log where club_id = cid and (coalesce((new_data->>'is_test')::boolean, false) or coalesce((old_data->>'is_test')::boolean, false)
+    or new_data->>'player1_id' = any(ids::text[]) or old_data->>'player1_id' = any(ids::text[])
+    or new_data->>'player2_id' = any(ids::text[]) or old_data->>'player2_id' = any(ids::text[])
+    or record_id = any(ids::text[]) or new_data->>'user_id' = any(ids::text[]) or old_data->>'user_id' = any(ids::text[]));
+end $$;
+revoke all on function public.admin_purge_test(uuid) from public, anon;
+grant execute on function public.admin_purge_test(uuid) to authenticated;
+
+-- ═════════════ Прогнозы и пинг-коины — внутри клуба ═════════════
+drop function if exists public.pred_setting(text, int);
+create or replace function public.pred_setting(cid uuid, k text, def int) returns int
+language sql stable security definer set search_path = public as $$
+  select coalesce((select (settings->>k)::numeric::int from clubs where id = cid), def);
+$$;
+
+drop function if exists public.coin_balance(uuid);
+create or replace function public.coin_balance(uid uuid, cid uuid) returns int
+language sql stable security definer set search_path = public as $$
+  select coalesce(sum(amount), 0)::int from coin_tx where user_id = uid and club_id = cid;
+$$;
+
+drop function if exists public.ensure_wallet();
+create or replace function public.ensure_wallet(cid uuid) returns int
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.is_member(cid) then return 0; end if;
+  if not exists (select 1 from coin_tx where user_id = auth.uid() and club_id = cid) then
+    insert into coin_tx (club_id, user_id, amount, kind) values (cid, auth.uid(), public.pred_setting(cid, 'predStart', 1000), 'start');
+  end if;
+  return public.coin_balance(auth.uid(), cid);
+end $$;
+grant execute on function public.ensure_wallet(uuid) to authenticated;
+
+create or replace function public.create_pred_event(src text, src_id uuid, chance numeric) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare
+  eid uuid; c numeric := least(0.95, greatest(0.05, chance));
+  l live_matches; ch challenges; cid uuid;
+begin
+  if src = 'live' then select club_id into cid from live_matches where id = src_id;
+  elsif src = 'challenge' then select club_id into cid from challenges where id = src_id; end if;
+  if cid is null or not public.is_member(cid) then raise exception 'not allowed'; end if;
+  if coalesce((select (settings->>'predEnabled')::boolean from clubs where id = cid), true) = false then return null; end if;
+  select id into eid from pred_events where source_id = src_id;
+  if eid is not null then return eid; end if;
+  if src = 'live' then
+    select * into l from live_matches where id = src_id and status = 'live';
+    if not found or jsonb_array_length(l.log) > 0 then return null; end if;
+    insert into pred_events (club_id, source, source_id, kind, player1_id, player2_id, player3_id, player4_id, tournament_id, chance1, odds1, odds2, is_test, created_by, closes_at)
+    values (cid, 'live', src_id, l.kind, l.player1_id, l.player2_id, l.player3_id, l.player4_id, l.tournament_id, c,
+            least(10, round(1 / c, 2)), least(10, round(1 / (1 - c), 2)), l.is_test, auth.uid(),
+            case when l.scoring then null else now() + make_interval(mins => public.pred_setting(cid, 'predWindowMin', 3)) end)
+    returning id into eid;
+  elsif src = 'challenge' then
+    select * into ch from challenges where id = src_id and status = 'accepted';
+    if not found then return null; end if;
+    insert into pred_events (club_id, source, source_id, player1_id, player2_id, chance1, odds1, odds2, is_test, created_by)
+    values (cid, 'challenge', src_id, ch.from_id, ch.to_id, c, least(10, round(1 / c, 2)), least(10, round(1 / (1 - c), 2)), ch.is_test, auth.uid())
+    returning id into eid;
+  end if;
+  return eid;
+end $$;
+
+create or replace function public.place_prediction(eid uuid, pick int, amount int) returns int
+language plpgsql security definer set search_path = public as $$
+declare e pred_events; l live_matches; bal int;
+begin
+  select * into e from pred_events where id = eid for update;
+  if not found or not public.is_member(e.club_id) then raise exception 'not allowed'; end if;
+  if e.status <> 'open' then raise exception 'Приём прогнозов закрыт'; end if;
+  if e.is_test and not public.is_club_admin(e.club_id) then raise exception 'not allowed'; end if;
+  if e.closes_at is not null and now() > e.closes_at then
+    update pred_events set status = 'closed' where id = eid and status = 'open';
+    raise exception 'Время приёма прогнозов вышло';
+  end if;
+  if auth.uid() in (e.player1_id, e.player2_id, coalesce(e.player3_id, e.player1_id), coalesce(e.player4_id, e.player1_id)) then
+    raise exception 'На свой матч прогноз сделать нельзя';
+  end if;
+  if e.source = 'live' then
+    select * into l from live_matches where id = e.source_id;
+    if not found or l.status <> 'live' or jsonb_array_length(l.log) > 0 then
+      update pred_events set status = 'closed' where id = eid and status = 'open';
+      raise exception 'Игра уже началась — приём прогнозов закрыт';
+    end if;
+  end if;
+  if pick not in (1, 2) then raise exception 'Выберите победителя'; end if;
+  if amount < public.pred_setting(e.club_id, 'predMin', 10) or amount > public.pred_setting(e.club_id, 'predMax', 500) then
+    raise exception 'Ставка от % до % PC', public.pred_setting(e.club_id, 'predMin', 10), public.pred_setting(e.club_id, 'predMax', 500);
+  end if;
+  perform public.ensure_wallet(e.club_id);
+  bal := public.coin_balance(auth.uid(), e.club_id);
+  if bal < amount then raise exception 'Недостаточно пинг-коинов (у вас %)', bal; end if;
+  insert into predictions (club_id, event_id, user_id, side, stake, odds)
+  values (e.club_id, eid, auth.uid(), pick, amount, case when pick = 1 then e.odds1 else e.odds2 end);
+  insert into coin_tx (club_id, user_id, amount, kind, ref) values (e.club_id, auth.uid(), -amount, 'bet', eid);
+  update pred_events set bets_count = bets_count + 1,
+    pool1 = pool1 + case when pick = 1 then amount else 0 end,
+    pool2 = pool2 + case when pick = 2 then amount else 0 end
+  where id = eid;
+  return bal - amount;
+exception when unique_violation then
+  raise exception 'Вы уже сделали прогноз на этот матч';
+end $$;
+
+create or replace function public.settle_pred_event(eid uuid) returns void
+language plpgsql security definer set search_path = public as $$
+declare e pred_events; m matches; side int; p predictions;
+begin
+  select * into e from pred_events where id = eid for update;
+  if not found or e.status in ('settled', 'cancelled') or e.match_id is null then return; end if;
+  select * into m from matches where id = e.match_id;
+  if not found or m.status <> 'approved' then return; end if;
+  side := case when m.winner_id in (e.player1_id, coalesce(e.player3_id, e.player1_id)) then 1 else 2 end;
+  for p in select * from predictions where event_id = eid and status = 'open' loop
+    if p.side = side then
+      update predictions set status = 'won', payout = round(p.stake * p.odds), settled_at = now() where id = p.id;
+      insert into coin_tx (club_id, user_id, amount, kind, ref) values (e.club_id, p.user_id, round(p.stake * p.odds)::int, 'payout', eid);
+    else
+      update predictions set status = 'lost', payout = 0, settled_at = now() where id = p.id;
+    end if;
+  end loop;
+  update pred_events set status = 'settled', winner_side = side, settled_at = now() where id = eid;
+end $$;
+
+create or replace function public.cancel_pred_event(eid uuid) returns void
+language plpgsql security definer set search_path = public as $$
+declare p predictions; cid uuid;
+begin
+  select club_id into cid from pred_events where id = eid;
+  for p in select * from predictions where event_id = eid and status = 'open' loop
+    update predictions set status = 'refunded', payout = p.stake, settled_at = now() where id = p.id;
+    insert into coin_tx (club_id, user_id, amount, kind, ref) values (cid, p.user_id, p.stake, 'refund', eid);
+  end loop;
+  update pred_events set status = 'cancelled', settled_at = now() where id = eid and status in ('open', 'closed');
+end $$;
+
+drop function if exists public.coin_leaderboard(timestamptz);
+create or replace function public.coin_leaderboard(cid uuid, since timestamptz default null)
+returns table (user_id uuid, balance int, profit int, bets int, wins int)
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.is_member(cid) then return; end if;
+  return query
+    select m.user_id,
+      coalesce((select sum(amount) from coin_tx t where t.user_id = m.user_id and t.club_id = cid), 0)::int,
+      coalesce((select sum(amount) from coin_tx t where t.user_id = m.user_id and t.club_id = cid and t.kind in ('bet', 'payout', 'refund') and (since is null or t.created_at >= since)), 0)::int,
+      (select count(*) from predictions r where r.user_id = m.user_id and r.club_id = cid and r.status in ('won', 'lost') and (since is null or r.created_at >= since))::int,
+      (select count(*) from predictions r where r.user_id = m.user_id and r.club_id = cid and r.status = 'won' and (since is null or r.created_at >= since))::int
+    from club_members m join profiles p on p.id = m.user_id
+    where m.club_id = cid and m.status = 'active' and (not p.is_test or public.is_club_admin(cid))
+      and exists (select 1 from coin_tx t where t.user_id = m.user_id and t.club_id = cid);
+end $$;
+grant execute on function public.coin_leaderboard(uuid, timestamptz) to authenticated;
+
+-- бонусы: каждому активному участнику с кошельком — в каждом его клубе отдельно
+create or replace function public.coin_bonuses(what text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if what = 'weekly' then
+    insert into coin_tx (club_id, user_id, amount, kind)
+      select m.club_id, m.user_id, public.pred_setting(m.club_id, 'predWeekly', 100), 'weekly'
+      from club_members m join profiles p on p.id = m.user_id join clubs c on c.id = m.club_id
+      where m.status = 'active' and not p.is_test and not c.blocked
+        and exists (select 1 from coin_tx t where t.user_id = m.user_id and t.club_id = m.club_id);
+  elsif what = 'daily' then
+    insert into coin_tx (club_id, user_id, amount, kind)
+      select m.club_id, m.user_id, public.pred_setting(m.club_id, 'predDaily', 50), 'daily'
+      from club_members m join profiles p on p.id = m.user_id join clubs c on c.id = m.club_id
+      where m.status = 'active' and not p.is_test and not c.blocked
+        and exists (select 1 from coin_tx t where t.user_id = m.user_id and t.club_id = m.club_id)
+        and public.coin_balance(m.user_id, m.club_id) <= 0;
+  end if;
+end $$;
+revoke all on function public.coin_bonuses(text) from public, anon, authenticated;
+
+-- ═════════════ Права на вызов функций ═════════════
+do $$
+declare f text;
+begin
+  foreach f in array array[
+    'create_club(text, text, text, double precision, double precision, boolean, text)', 'update_club(uuid, jsonb)',
+    'rotate_invite(uuid)', 'join_by_invite(text)', 'request_join(uuid)', 'cancel_request(uuid)',
+    'set_member(uuid, uuid, text, text, numeric, boolean)', 'remove_member(uuid, uuid)', 'leave_club(uuid)',
+    'transfer_club(uuid, uuid)', 'club_directory(text)', 'club_public(uuid)',
+    'founder_clubs()', 'founder_stats()', 'founder_block_club(uuid, boolean)', 'founder_delete_club(uuid, text)',
+    'founder_unassigned()', 'founder_add_members(uuid, uuid[])', 'founder_transfer_history(uuid)'] loop
+    execute format('revoke all on function public.%s from public, anon', f);
+    execute format('grant execute on function public.%s to authenticated', f);
+  end loop;
+end $$;
+revoke all on function public.gen_code(int) from public, anon, authenticated;
+revoke all on function public.new_club_code() from public, anon, authenticated;
+revoke all on function public.new_invite_code() from public, anon, authenticated;
+
+-- ═════════════ Живые обновления ═════════════
+do $$
+declare t text;
+begin
+  foreach t in array array['clubs', 'club_members', 'platform'] loop
+    if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t) then
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    end if;
+  end loop;
+end $$;

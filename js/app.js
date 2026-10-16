@@ -10,7 +10,7 @@ import {
 
 const $app = document.getElementById('app');
 const $modal = document.getElementById('modal');
-const S = { store: null, user: null, me: null, data: null, A: null, rank: [], byId: new Map(), emails: new Map(), recovery: false, installEvt: null };
+const S = { store: null, user: null, me: null, ctx: null, club: null, data: null, A: null, rank: [], byId: new Map(), emails: new Map(), recovery: false, installEvt: null };
 const DAY = 864e5;
 
 // ───────────── Утилиты ─────────────
@@ -23,8 +23,9 @@ const fmtDT = iso => new Date(iso).toLocaleString('ru-RU', { day: 'numeric', mon
 const pct = x => Math.round((x || 0) * 100) + '%';
 const plural = (n, a, b, c) => { const m = Math.abs(n) % 100, k = m % 10; return m > 10 && m < 20 ? c : k > 1 && k < 5 ? b : k === 1 ? a : c; };
 const toLocalInput = d => { const x = new Date(d); return new Date(x - x.getTimezoneOffset() * 6e4).toISOString().slice(0, 16); };
-const isAdmin = () => S.me?.role === 'admin' && S.me?.status === 'approved';
-const isEditor = () => (S.me?.role === 'editor' || S.me?.role === 'admin') && S.me?.status === 'approved';
+const isAdmin = () => !!S.club && S.me?.role === 'admin' && S.me?.status === 'approved';
+const isEditor = () => !!S.club && (S.me?.role === 'editor' || S.me?.role === 'admin') && S.me?.status === 'approved';
+const isFounder = () => !!S.ctx?.me?.is_founder;
 const ratingOf = id => S.A.rating.get(id) ?? S.A.S.initialRating;
 const settings = () => ({ ...DEFAULT_SETTINGS, ...(S.data?.settings || {}) });
 const tById = id => S.data.tournaments.find(t => t.id === id);
@@ -109,6 +110,7 @@ function derive() {
   if (!S.testMode && d.predictions) { const ok = new Set((d.predEvents || []).map(e => e.id)); d.predictions = d.predictions.filter(p => ok.has(p.event_id)); }
   S.byId = new Map(d.profiles.map(p => [p.id, p]));
   S.me = S.user ? S.byId.get(S.user.id) || null : null;
+  if (S.user && !S.club && S.ctx?.me) S.me = { ...S.ctx.me, role: 'player', status: 'noclub' };
   S.A = analyze(d.profiles.filter(p => ['approved', 'archived', 'deleted'].includes(p.status)), d.matches, d.settings);
   S.rank = ranking(S.A, d.profiles);
   S.D = analyzeDoubles(d.profiles.filter(p => ['approved', 'archived', 'deleted'].includes(p.status)), d.matches, d.settings);
@@ -118,17 +120,42 @@ function derive() {
   S.data.predEvents = S.data.predEvents || [];
   S.data.predictions = S.data.predictions || [];
   S.seasons = seasons(S.A, d.profiles);
-  document.title = settings().clubName || 'PongHub';
+  document.title = S.club ? settings().clubName || 'PongHub' : 'PongHub';
   if (S.data.settings && S.data.settings.icon) applyIcon();
 }
+const EMPTY = () => ({ profiles: [], matches: [], tournaments: [], events: [], settings: {} });
+// какой клуб открыт: из ссылки (?club=), из памяти или первый из моих
+function pickClub() {
+  const active = (S.ctx?.clubs || []).filter(c => c.my_status === 'active');
+  const want = route().q.get('club') || lsGet('ponghub_club');
+  S.club = active.find(c => c.id === want) || active[0] || null;
+  S.store.setClub(S.club);
+  if (S.club) lsSet('ponghub_club', S.club.id);
+}
+async function switchClub(id) {
+  lsSet('ponghub_club', id);
+  if (route().q.get('club')) history.replaceState(null, '', location.pathname + location.search + '#/home');
+  closeModal();
+  await reload();
+  if (location.hash !== '#/home') location.hash = '#/home'; else render();
+}
 async function reload() {
-  if (!S.user) { S.data = { profiles: [], matches: [], tournaments: [], events: [], settings: {} }; derive(); return; }
+  if (!S.user) { S.ctx = null; S.club = null; S.data = EMPTY(); derive(); return; }
   try {
-    S.data = await S.store.loadAll();
+    S.ctx = await S.store.loadContext();
+    // пришёл по ссылке-приглашению до входа — вступаем после входа
+    const pendingJoin = lsGet('ponghub_join');
+    if (pendingJoin && S.ctx?.me) {
+      lsSet('ponghub_join', '');
+      try { const cid = await S.store.joinByInvite(pendingJoin); lsSet('ponghub_club', cid); S.ctx = await S.store.loadContext(); toast('Вы вступили в клуб 🎉'); }
+      catch (e) { toast(e.message, 'err'); }
+    }
+    pickClub();
+    S.data = S.club ? await S.store.loadAll() : EMPTY();
     if (isAdmin()) S.emails = await S.store.adminEmails();
   } catch (e) {
     toast(e.message, 'err');
-    S.data = S.data || { profiles: [], matches: [], tournaments: [], events: [], settings: {} };
+    S.data = S.data || EMPTY();
   }
   derive();
   if (isAdmin() && !S.emails.size) S.emails = await S.store.adminEmails();
@@ -153,14 +180,13 @@ function render() {
   const y = scrollY;
   lastRoute = key;
   let html;
-  if (!S.user) html = authView(r);
+  if (!S.user) { if (r.name === 'join' && r.args[0]) lsSet('ponghub_join', r.args[0]); html = authView(r); }
   else if (S.recovery) html = recoveryView();
-  else if (!S.me) html = gateView('🤔', 'Профиль не найден', 'Аккаунт создан, но профиль в базе отсутствует. Напишите администратору.');
-  else if (S.me.status === 'pending') html = gateView('⏳', 'Заявка на рассмотрении', `Привет, <b>${esc(S.me.nickname)}</b>! Администратор клуба скоро подтвердит вашу регистрацию. Загляните позже.`, true);
-  else if (S.me.status === 'rejected') html = gateView('🚫', 'Заявка отклонена', 'Администратор отклонил регистрацию. Если это ошибка — свяжитесь с ним лично.');
-  else if (S.me.status === 'archived') html = gateView('📦', 'Профиль в архиве', 'Ваш профиль перенесён в архив. Свяжитесь с администратором.');
+  else if (!S.ctx?.me) html = gateView('🤔', 'Профиль не найден', 'Аккаунт создан, но профиль в базе отсутствует. Напишите администратору.', true);
+  else if (CLUB_FREE[r.name]) html = CLUB_FREE[r.name](r);
+  else if (!S.club) html = S.ctx.me.legacy && !S.ctx.platform?.migration_done && !isFounder() ? waitView() : viewClubs(r);
   else {
-    const views = { home: viewHome, rating: viewRating, matches: viewMatches, player: viewPlayer, h2h: viewH2H, tournaments: viewTournaments, tournament: viewTournament, calendar: viewCalendar, admin: viewAdmin, rules: viewRules, me: viewMe, help: viewHelp, seasons: viewSeasons, live: viewLive, inbox: viewInbox, predict: viewPredict };
+    const views = { invite: viewInvite, clubedit: viewClubEdit, home: viewHome, rating: viewRating, matches: viewMatches, player: viewPlayer, h2h: viewH2H, tournaments: viewTournaments, tournament: viewTournament, calendar: viewCalendar, admin: viewAdmin, rules: viewRules, me: viewMe, help: viewHelp, seasons: viewSeasons, live: viewLive, inbox: viewInbox, predict: viewPredict };
     const v = views[r.name] || viewHome;
     html = shell(r, v(r));
   }
@@ -194,7 +220,7 @@ function shell(r, body) {
   const club = settings().clubName || 'PongHub';
   return `
   <header class="top">
-    <a href="#/home" class="brand"><img src="${logo()}" alt="" width="30" height="30"><span>${esc(club)}</span></a>
+    <button class="brand club-switch" data-act="club-menu" aria-label="Мои клубы"><img src="${logo()}" alt="" width="30" height="30"><span>${esc(club)}</span><i class="caret">▾</i></button>
     <div class="top-actions">
       ${S.store.mode === 'demo' ? '<span class="demo-pill" title="Данные хранятся только в этом браузере">ДЕМО</span>' : ''}
       <a href="#/calendar" class="icon-btn" aria-label="Календарь">${icon('cal')}</a>
@@ -222,9 +248,10 @@ function gateView(emoji, title, text, refreshBtn = false) {
 
 // ───────────── Вход / регистрация ─────────────
 function authView(r) {
-  const mode = ['register', 'forgot'].includes(r.name) ? r.name : 'login';
+  const mode = r.name === 'join' ? 'register' : ['register', 'forgot'].includes(r.name) ? r.name : 'login';
   const demo = S.store.mode === 'demo';
-  const head = `<div class="auth-hero"><img src="${logo()}" alt="" width="84" height="84"><h1>PongHub</h1><p>Пинг-понг в нашем коворкинге: рейтинг, матчи, турниры</p></div>`;
+  const head = `<div class="auth-hero"><img src="${logo()}" alt="" width="84" height="84"><h1>PongHub</h1><p>Клубы настольного тенниса: рейтинг, матчи, турниры</p></div>
+    ${lsGet('ponghub_join') ? '<div class="auth-card invite-note">✉️ Вас пригласили в клуб. Зарегистрируйтесь или войдите — и вы сразу в клубе.</div>' : ''}`;
   let form;
   if (mode === 'register') form = `
     <form data-form="register" class="stack">
@@ -234,7 +261,7 @@ function authView(r) {
       <label>Email<input name="email" type="email" required autocomplete="email"></label>
       <label>Пароль<input name="password" type="password" required minlength="6" autocomplete="new-password"></label>
       <button class="btn primary big">Зарегистрироваться</button>
-      <p class="muted small center">После регистрации администратор клуба подтвердит вашу заявку.</p>
+      <p class="muted small center">${lsGet('ponghub_join') ? 'После регистрации вы сразу попадёте в клуб, куда вас пригласили.' : 'После регистрации вы сможете вступить в клуб по приглашению, найти клуб или создать свой.'}</p>
       <a href="#/login" class="link center">Уже есть аккаунт? Войти</a>
     </form>`;
   else if (mode === 'forgot') form = `
@@ -1343,6 +1370,13 @@ function viewMe() {
   <a href="#/player/${me.id}" class="card me-card">${ava(me, 'md')}<div><b>${esc(me.nickname)}</b> ${roleBadge(me)}<div class="muted small">${esc(me.full_name || '')}</div></div><span>→</span></a>
   ${isAdmin() ? `<a href="#/admin" class="card menu-item">🛠️ <span>Управление клубом</span>${pendingCounts().total ? `<i class="dot inline">${pendingCounts().total}</i>` : ''}<span>→</span></a>` : ''}
   <section class="card menu">
+    ${isAdmin() ? '<a class="menu-item" href="#/invite">✉️ <span>Пригласить в клуб</span></a><a class="menu-item" href="#/clubedit">🏠 <span>Клуб: название, адрес, карта</span></a>' : ''}
+    <a class="menu-item" href="#/clubs">🏓 <span>Мои клубы</span><small class="muted">${(S.ctx?.clubs || []).filter(c => c.my_status === 'active').length}</small></a>
+    <a class="menu-item" href="#/map">🗺 <span>Клубы на карте</span></a>
+    ${isFounder() ? '<a class="menu-item" href="#/founder">🛡 <span>Платформа PongHub</span></a>' : ''}
+    ${!isAdmin() ? '<button class="menu-item danger-text" data-act="leave-club">🚪 <span>Покинуть клуб</span></button>' : ''}
+  </section>
+  <section class="card menu">
     <button class="menu-item" data-act="edit-profile">✏️ <span>Редактировать профиль</span></button>
     ${predOn() ? '<a class="menu-item" href="#/predict">🎯 <span>Прогнозы</span></a>' : ''}
     <a class="menu-item" href="#/help">❓ <span>Как пользоваться</span></a>
@@ -1363,8 +1397,446 @@ function viewMe() {
     <p class="muted small">Сейчас вы вошли как демо-пользователь. Данные хранятся только в этом браузере.</p>
     <div class="row-btns"><button class="btn" data-act="logout">Сменить роль</button><button class="btn ghost" data-act="demo-reset">Сбросить демо-данные</button></div></section>` : ''}
   <button class="btn ghost full danger-text" data-act="logout">Выйти из аккаунта</button>
-  <p class="muted small center ver">PongHub · v1.1</p>`;
+  <p class="muted small center ver">PongHub · v2.0</p>`;
 }
+
+// ───────────── Клубы ─────────────
+const ROLE_LABEL = { owner: '👑 владелец', helper: '✍️ помощник', player: 'игрок' };
+const clubPlace = c => [c.city, c.address].filter(Boolean).map(esc).join(' · ');
+const inviteLink = code => `${location.origin}${location.pathname}#/join/${code}`;
+const KAZAN = [55.7963, 49.1088];
+
+function loadScript(src) {
+  return new Promise((res, rej) => {
+    const ex = document.querySelector(`script[src="${src}"]`);
+    if (ex) { if (ex.dataset.ok) res(); else ex.addEventListener('load', () => res()); return; }
+    const s = document.createElement('script');
+    s.src = src; s.onload = () => { s.dataset.ok = '1'; res(); }; s.onerror = () => rej(new Error('Не удалось загрузить карту. Проверьте интернет'));
+    document.head.appendChild(s);
+  });
+}
+function loadCss(href) {
+  if (document.querySelector(`link[href="${href}"]`)) return;
+  const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = href; document.head.appendChild(l);
+}
+async function leaflet() {
+  loadCss('https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css');
+  await loadScript('https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js');
+  return window.L;
+}
+async function makeMap(el, center, zoom) {
+  const L = await leaflet();
+  if (!el.isConnected) return null;
+  const map = L.map(el, { zoomControl: true, attributionControl: true }).setView(center, zoom);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+  setTimeout(() => map.invalidateSize(), 60);
+  return map;
+}
+const pinIcon = (mine = false) => window.L.divIcon({ className: 'club-pin' + (mine ? ' mine' : ''), html: '<span><i>🏓</i></span>', iconSize: [34, 34], iconAnchor: [17, 34], popupAnchor: [0, -30] });
+
+// каркас для экранов вне клуба (выбор клуба, карта, страница клуба, панель основателя)
+function bare(body, back = S.club ? '#/home' : '') {
+  return `<header class="top"><a href="${S.club ? '#/home' : '#/clubs'}" class="brand"><img src="${logo()}" alt="" width="30" height="30"><span>PongHub</span></a>
+    <div class="top-actions">${S.store.mode === 'demo' ? '<span class="demo-pill">ДЕМО</span>' : ''}${back ? `<a href="${back}" class="btn ghost sm">← ${back === '#/home' ? 'В клуб' : 'Назад'}</a>` : ''}</div></header>
+    <main class="page">${body}</main>`;
+}
+
+// пока основатель переносит клуб — для тех, кто был в PongHub до клубов
+function waitView() {
+  return `<div class="auth-wrap"><div class="auth-card center">
+    <div class="gate-emoji">🔄</div><h2>PongHub обновляется</h2>
+    <p class="muted">Теперь в приложении есть клубы. Ваш клуб уже переезжает: все матчи, рейтинг и пинг-коины сохранятся. Загляните через несколько минут.</p>
+    <div class="row-btns"><button class="btn primary" data-act="refresh">Проверить снова</button><button class="btn ghost" data-act="logout">Выйти</button></div>
+  </div></div>`;
+}
+
+function clubRow(c) {
+  const cur = S.club?.id === c.id;
+  return `<button class="club-row ${cur ? 'cur' : ''}" data-act="switch-club" data-id="${c.id}">
+    <span class="club-ic">🏓</span><span class="club-txt"><b>${esc(c.name)}</b><small class="muted">${clubPlace(c) || esc(c.code)}</small></span>
+    <span class="club-role">${cur ? '✓ ' : ''}${ROLE_LABEL[c.my_role] || ''}</span></button>`;
+}
+
+function viewClubs() {
+  const my = S.ctx?.clubs || [];
+  const active = my.filter(c => c.my_status === 'active'), pend = my.filter(c => c.my_status === 'pending');
+  return bare(`<div class="page-h"><h1>${active.length ? 'Мои клубы' : 'Выберите клуб'}</h1></div>
+    ${active.length ? '' : `<p class="muted">Привет, <b>${esc(S.ctx.me.nickname)}</b>! Вступите в клуб по приглашению, найдите свой клуб или создайте новый.</p>`}
+    ${active.length ? `<section class="card club-list">${active.map(clubRow).join('')}</section>` : ''}
+    ${pend.length ? `<section class="card"><div class="card-h"><h3>⏳ Заявки</h3></div>${pend.map(c => `<div class="req"><div class="rn"><b>${esc(c.name)}</b><small class="muted">Ждём решения клуба</small></div>
+      <div class="req-btns"><button class="btn ghost sm" data-act="cancel-request" data-id="${c.id}">Отозвать</button></div></div>`).join('')}</section>` : ''}
+    <form class="card stack" data-form="join-code"><div class="card-h"><h3>✉️&nbsp; У меня есть приглашение</h3></div>
+      <label>Код приглашения<input name="code" required minlength="6" maxlength="20" placeholder="Например, K7Q2M9XA" autocapitalize="characters" autocomplete="off"></label>
+      <button class="btn primary">Вступить</button></form>
+    <section class="card"><div class="card-h"><h3>🔍&nbsp; Найти клуб</h3></div>
+      <input type="search" data-input="dir-search" placeholder="Название, город или ID клуба (PH-…)" autocomplete="off">
+      <div id="dir-box" class="dir-box"><div class="muted small">Загружаю…</div></div></section>
+    <div class="row-btns"><a class="btn" href="#/map">🗺 Клубы на карте</a><a class="btn primary" href="#/newclub">＋ Создать клуб</a></div>
+    ${isFounder() ? '<a class="card menu-item" href="#/founder">🛡 <span>Платформа PongHub</span><span>→</span></a>' : ''}
+    ${S.club ? '' : '<button class="btn ghost full danger-text" data-act="logout">Выйти из аккаунта</button>'}`);
+}
+
+function dirButton(c) {
+  if (c.my_status === 'active') return `<button class="btn sm" data-act="switch-club" data-id="${c.id}">Открыть</button>`;
+  if (c.my_status === 'pending') return '<span class="badge warn">заявка отправлена</span>';
+  return `<button class="btn primary sm" data-act="request-join" data-id="${c.id}">Подать заявку</button>`;
+}
+function dirItem(c) {
+  return `<div class="dir-item"><a href="#/club/${c.id}" class="rn"><b>${esc(c.name)}</b><small class="muted">${clubPlace(c) || esc(c.code)} · ${c.players} ${plural(c.players, 'игрок', 'игрока', 'игроков')}</small></a>${dirButton(c)}</div>`;
+}
+let dirTimer;
+async function renderDirectory(q = '') {
+  const box = document.getElementById('dir-box');
+  if (!box) return;
+  try {
+    const rows = await S.store.directory(q);
+    if (!box.isConnected) return;
+    box.innerHTML = rows.length ? rows.slice(0, 30).map(dirItem).join('') : `<div class="empty small">${q ? 'Ничего не нашли. Проверьте название или попросите у клуба код приглашения' : 'Пока нет открытых клубов'}</div>`;
+  } catch (e) { box.innerHTML = `<div class="empty small">${esc(e.message)}</div>`; }
+}
+
+// ── создание и настройки клуба ──
+function clubForm(c = {}, edit = false) {
+  return `<label>Название клуба<input name="name" required minlength="2" maxlength="60" value="${esc(c.name || '')}" placeholder="Например, Коворкинг «Точка»"></label>
+    <label>Город<input name="city" maxlength="40" value="${esc(c.city || '')}" placeholder="Казань"></label>
+    <label>Адрес<input name="address" maxlength="100" value="${esc(c.address || '')}" placeholder="ул. Баумана, 44, 3 этаж"></label>
+    <div><b class="small">Где стоит стол — нажмите на карту</b>
+      <div class="geo-find"><input type="search" id="geo-q" placeholder="Найти адрес на карте" autocomplete="off"><button type="button" class="btn sm" data-act="geo-search">Найти</button></div>
+      <div id="geo-res" class="geo-res"></div>
+      <div id="pick-map" class="club-map" data-lat="${c.lat ?? ''}" data-lng="${c.lng ?? ''}"></div>
+      <small class="muted" id="pick-hint">${c.lat != null ? 'Точка выбрана. Можно передвинуть' : 'Точка не выбрана — клуб не появится на карте'}</small>
+      <input type="hidden" name="lat" value="${c.lat ?? ''}"><input type="hidden" name="lng" value="${c.lng ?? ''}"></div>
+    <label>Пара слов о клубе<textarea name="description" maxlength="300" rows="2" placeholder="Когда играете, как найти стол">${esc(c.description || '')}</textarea></label>
+    <label class="switch"><input type="checkbox" name="visible" ${c.visible !== false ? 'checked' : ''}><i></i><span>Показывать клуб на карте и в поиске</span></label>
+    <small class="muted">Если выключить — в клуб можно попасть только по приглашению.</small>
+    <button class="btn primary big">${edit ? 'Сохранить' : 'Создать клуб'}</button>`;
+}
+
+function viewNewClub() {
+  return bare(`<div class="page-h"><h1>Новый клуб</h1></div>
+    <p class="muted small">Создать клуб может любой — бесплатно. Вы станете его владельцем: принимаете участников, подтверждаете результаты, проводите турниры.</p>
+    <form class="card stack" data-form="new-club">${clubForm()}</form>`, '#/clubs');
+}
+
+function viewClubEdit() {
+  if (!isAdmin()) return '<div class="empty">Настройки клуба доступны только владельцу клуба</div>';
+  const c = S.store.club || S.club;
+  const others = S.data.profiles.filter(p => p.status === 'approved' && p.id !== S.me.id && !p.is_test).sort((a, b) => a.nickname.localeCompare(b.nickname));
+  return `<div class="page-h"><a href="#/me" class="back">← Профиль</a></div>
+    <div class="page-h"><h1>Клуб</h1><span class="badge">${esc(c.code)}</span></div>
+    <form class="card stack" data-form="club-edit">${clubForm(c, true)}</form>
+    <section class="card stack"><div class="card-h"><h3>👑 Передать клуб</h3></div>
+      <p class="muted small">Если вы уходите, передайте клуб другому участнику. Он получит все права, а вы станете помощником.</p>
+      <label>Кому<select id="tr-to"><option value="">— выберите участника —</option>${others.map(p => `<option value="${p.id}">${esc(p.nickname)}</option>`).join('')}</select></label>
+      <label>Для подтверждения введите название клуба<input id="tr-name" placeholder="${esc(c.name)}" autocomplete="off"></label>
+      <button class="btn danger" data-act="transfer-club">Передать клуб</button></section>`;
+}
+
+async function mountPickMap() {
+  const el = document.getElementById('pick-map');
+  if (!el || el.dataset.ready) return;
+  el.dataset.ready = '1';
+  const lat = parseFloat(el.dataset.lat), lng = parseFloat(el.dataset.lng);
+  const has = !Number.isNaN(lat) && !Number.isNaN(lng);
+  let map;
+  try { map = await makeMap(el, has ? [lat, lng] : KAZAN, has ? 16 : 11); } catch (e) { el.innerHTML = `<div class="empty small">${esc(e.message)}</div>`; return; }
+  if (!map) return;
+  const form = el.closest('form');
+  let marker = has ? window.L.marker([lat, lng], { icon: pinIcon(true), draggable: true }).addTo(map) : null;
+  const set = ll => {
+    if (!marker) marker = window.L.marker(ll, { icon: pinIcon(true), draggable: true }).addTo(map).on('dragend', () => set(marker.getLatLng()));
+    else marker.setLatLng(ll);
+    form.lat.value = ll.lat.toFixed(6); form.lng.value = ll.lng.toFixed(6);
+    document.getElementById('pick-hint').textContent = 'Точка выбрана. Можно передвинуть';
+  };
+  marker?.on('dragend', () => set(marker.getLatLng()));
+  map.on('click', e => set(e.latlng));
+  el._set = (ll, z) => { set(ll); map.setView(ll, z || 17); };
+  if (!has && navigator.geolocation) navigator.geolocation.getCurrentPosition(p => { if (!form.lat.value) map.setView([p.coords.latitude, p.coords.longitude], 14); }, () => {}, { timeout: 5000 });
+}
+
+async function geoSearch() {
+  const q = document.getElementById('geo-q')?.value.trim();
+  const box = document.getElementById('geo-res');
+  if (!q || !box) return;
+  box.innerHTML = '<div class="muted small">Ищу…</div>';
+  try {
+    const city = document.querySelector('[data-form] [name=city]')?.value.trim();
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=5&accept-language=ru&q=${encodeURIComponent([q, city].filter(Boolean).join(', '))}`);
+    const rows = await res.json();
+    box.innerHTML = rows.length ? rows.map(r => `<button type="button" class="geo-item" data-act="geo-pick" data-lat="${r.lat}" data-lng="${r.lon}">${esc(r.display_name)}</button>`).join('') : '<div class="muted small">Не нашли. Поставьте точку на карте вручную</div>';
+  } catch { box.innerHTML = '<div class="muted small">Поиск адреса сейчас недоступен — поставьте точку вручную</div>'; }
+}
+
+// ── приглашение ──
+function viewInvite(r) {
+  if (!isAdmin()) return '<div class="empty">Приглашать может владелец клуба</div>';
+  const c = S.store.club || S.club;
+  return `<div class="page-h"><a href="#/me" class="back">← Профиль</a></div>
+    ${r.q.get('new') ? `<section class="hero table-card club-hero"><h2>Клуб создан 🎉</h2><p>${esc(c.name)}${c.city ? ' · ' + esc(c.city) : ''}</p></section>` : '<div class="page-h"><h1>Пригласить в клуб</h1></div>'}
+    <p class="muted small">Кто пришёл по приглашению, сразу попадает в клуб — без заявки. Отправьте ссылку в рабочий чат, продиктуйте код или повесьте QR-код у стола.</p>
+    <section class="card stack" id="invite-box"><div class="muted small">Загружаю приглашение…</div></section>
+    <section class="card"><div class="card-h"><h3>ID клуба для поиска</h3><span class="badge">${esc(c.code)}</span></div>
+      <p class="muted small">По этому ID клуб находят в поиске и подают заявку — её подтверждаете вы.</p></section>
+    ${r.q.get('new') ? '<a class="btn primary full" href="#/home">Перейти в клуб →</a>' : ''}`;
+}
+
+async function renderInvite() {
+  const box = document.getElementById('invite-box');
+  if (!box) return;
+  try {
+    const code = await S.store.inviteCode(S.club.id);
+    const link = inviteLink(code);
+    box.innerHTML = `<div><b class="small">Ссылка-приглашение</b><div class="copy-row"><span class="mono">${esc(link)}</span></div>
+        <div class="row-btns"><button class="btn primary" data-act="share-invite" data-link="${esc(link)}">Поделиться</button><button class="btn" data-act="copy" data-text="${esc(link)}">Скопировать</button></div></div>
+      <div><b class="small">Код приглашения</b><div class="invite-code">${esc(code)}</div></div>
+      <div class="center"><b class="small">QR-код для стенда у стола</b><div id="qr" class="qr-box"></div>
+        <button class="btn" data-act="print-qr" data-link="${esc(link)}">🖨 Плакат для печати</button></div>
+      <button class="btn ghost sm" data-act="rotate-invite">Сменить ссылку и код</button>
+      <small class="muted">После смены старая ссылка, код и QR перестанут работать. Участники клуба останутся.</small>`;
+    await drawQr(document.getElementById('qr'), link, 6);
+  } catch (e) { box.innerHTML = `<div class="empty small">${esc(e.message)}</div>`; }
+}
+
+async function drawQr(el, text, cell) {
+  if (!el) return;
+  try {
+    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js');
+    const qr = window.qrcode(0, 'M'); qr.addData(text); qr.make();
+    el.innerHTML = qr.createSvgTag({ cellSize: cell, margin: 2, scalable: true });
+  } catch { el.innerHTML = '<div class="muted small">QR-код не загрузился</div>'; }
+}
+
+// ── карта клубов ──
+function viewMap() {
+  return bare(`<div class="page-h"><h1>Клубы на карте</h1><button class="btn ghost sm" data-act="map-locate">📍 Рядом</button></div>
+    <input type="search" data-input="map-search" placeholder="Название, город или ID клуба" autocomplete="off">
+    <div id="club-map" class="club-map big"></div>
+    <section class="card" id="map-list"><div class="muted small">Загружаю клубы…</div></section>`, S.club ? '#/home' : '#/clubs');
+}
+let mapState = null;
+async function renderMap() {
+  const el = document.getElementById('club-map');
+  if (!el || el.dataset.ready) return;
+  el.dataset.ready = '1';
+  let rows = [];
+  try { rows = await S.store.directory(''); } catch (e) { document.getElementById('map-list').innerHTML = `<div class="empty small">${esc(e.message)}</div>`; }
+  const geo = rows.filter(c => c.lat != null && c.lng != null);
+  let map;
+  try { map = await makeMap(el, geo.length ? [geo[0].lat, geo[0].lng] : KAZAN, 11); } catch (e) { el.innerHTML = `<div class="empty small">${esc(e.message)}</div>`; }
+  mapState = { rows, map, markers: new Map() };
+  if (map) {
+    for (const c of geo) {
+      const m = window.L.marker([c.lat, c.lng], { icon: pinIcon(c.my_status === 'active') }).addTo(map)
+        .bindPopup(`<b>${esc(c.name)}</b><br>${c.players} ${plural(c.players, 'игрок', 'игрока', 'игроков')} · ${c.matches} ${plural(c.matches, 'матч', 'матча', 'матчей')}<br><a href="#/club/${c.id}">Открыть страницу клуба →</a>`);
+      mapState.markers.set(c.id, m);
+    }
+    if (geo.length > 1) map.fitBounds(geo.map(c => [c.lat, c.lng]), { padding: [30, 30], maxZoom: 13 });
+  }
+  renderMapList('');
+}
+function renderMapList(q) {
+  const box = document.getElementById('map-list');
+  if (!box || !mapState) return;
+  const t = q.trim().toLowerCase();
+  const rows = mapState.rows.filter(c => !t || c.name.toLowerCase().includes(t) || (c.city || '').toLowerCase().includes(t) || c.code.toLowerCase() === t || c.code.toLowerCase() === 'ph-' + t);
+  box.innerHTML = rows.length ? rows.map(dirItem).join('') : '<div class="empty small">Клубов не найдено</div>';
+  if (t && rows.length && mapState.map) {
+    const g = rows.filter(c => c.lat != null);
+    if (g.length === 1) { mapState.map.setView([g[0].lat, g[0].lng], 15); mapState.markers.get(g[0].id)?.openPopup(); }
+    else if (g.length > 1) mapState.map.fitBounds(g.map(c => [c.lat, c.lng]), { padding: [30, 30], maxZoom: 14 });
+  }
+}
+
+// ── страница клуба (для всех вошедших; без почты и личных данных) ──
+function viewClubPage(r) {
+  return bare(`<div id="club-page"><div class="empty">Загружаю клуб…</div></div>`, S.club ? '#/home' : '#/map');
+}
+async function renderClubPage(id) {
+  const box = document.getElementById('club-page');
+  if (!box) return;
+  let d;
+  try { d = await S.store.clubPublic(id); } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  if (!box.isConnected) return;
+  const st = { ...DEFAULT_SETTINGS, ...(d.settings || {}) };
+  const pool = d.players.filter(p => ['approved', 'archived', 'deleted'].includes(p.status));
+  const A = analyze(pool, d.matches, st);
+  const rank = ranking(A, d.players).filter(x => x.g > 0);
+  const c = d.club;
+  const cd = new Date(c.created_at);
+  const since = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'][cd.getMonth()] + ' ' + cd.getFullYear();
+  const active = d.players.filter(p => p.status === 'approved').length;
+  const btn = d.my_status === 'active' ? `<button class="btn primary big full" data-act="switch-club" data-id="${c.id}">Открыть клуб</button>`
+    : d.my_status === 'pending' ? `<div class="card row-btns"><span>⏳ Заявка отправлена</span><button class="btn ghost sm" data-act="cancel-request" data-id="${c.id}">Отозвать</button></div>`
+    : `<button class="btn primary big full" data-act="request-join" data-id="${c.id}">Подать заявку</button>`;
+  const fin = d.tournaments.filter(t => t.status === 'finished' && t.results?.gold).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const nick = pid => d.players.find(p => p.id === pid)?.nickname || 'Игрок';
+  box.innerHTML = `<section class="hero table-card club-hero"><h2>${esc(c.name)}</h2><p>${clubPlace(c)}</p>
+      <p class="small">${active} ${plural(active, 'игрок', 'игрока', 'игроков')} · ${d.matches.length} ${plural(d.matches.length, 'матч', 'матча', 'матчей')} · с ${since}</p>
+      <span class="badge">${esc(c.code)}</span></section>
+    ${c.description ? `<p>${esc(c.description)}</p>` : ''}
+    ${btn}
+    <section class="card"><div class="card-h"><h3>Рейтинг клуба</h3></div>
+      ${rank.length ? rank.slice(0, 30).map((x, i) => `<div class="rk-row"><b class="rk-pos">${i < 3 ? ['🥇', '🥈', '🥉'][i] : i + 1}</b>${ava(x.p, 'sm')}<span class="rn"><b>${esc(x.p.nickname)}</b><small class="muted">${x.g} ${plural(x.g, 'игра', 'игры', 'игр')}</small></span><b class="pl-r">${fmtR(x.r)}</b></div>`).join('') : '<div class="empty small">Матчей пока нет</div>'}</section>
+    ${fin.length ? `<section class="card"><div class="card-h"><h3>Турниры</h3></div>${fin.slice(0, 10).map(t => `<div class="req"><div class="rn"><b>${esc(t.name)}</b><small class="muted">🥇 ${esc(nick(t.results.gold))}${t.results.silver ? ' · 🥈 ' + esc(nick(t.results.silver)) : ''}${t.date ? ' · ' + fmtDate(t.date) : ''}</small></div></div>`).join('')}</section>` : ''}
+    ${c.lat != null ? `<div id="club-mini-map" class="club-map" data-lat="${c.lat}" data-lng="${c.lng}"></div>` : ''}`;
+  const mm = document.getElementById('club-mini-map');
+  if (mm) { try { const map = await makeMap(mm, [c.lat, c.lng], 15); map && window.L.marker([c.lat, c.lng], { icon: pinIcon() }).addTo(map); } catch { mm.remove(); } }
+}
+
+// ── вход по ссылке-приглашению ──
+function viewJoin() {
+  return `<div class="auth-wrap"><div class="auth-card center"><div class="gate-emoji">✉️</div><h2>Вступаем в клуб…</h2><div class="spin big"></div></div></div>`;
+}
+async function joinFlow(code) {
+  try {
+    const cid = await S.store.joinByInvite(code);
+    lsSet('ponghub_club', cid);
+    await reload();
+    toast('Добро пожаловать в клуб 🎉');
+  } catch (e) { toast(e.message, 'err'); }
+  location.replace('#/home');
+}
+
+// ── панель основателя ──
+function viewFounder() {
+  if (!isFounder()) return bare('<div class="empty">Раздел только для основателя PongHub</div>');
+  return bare(`<div class="page-h"><h1>Платформа PongHub</h1></div><div id="founder-box"><div class="empty">Загружаю…</div></div>`);
+}
+async function renderFounder() {
+  const box = document.getElementById('founder-box');
+  if (!box) return;
+  try {
+    const [st, clubs, un] = await Promise.all([S.store.founderStats(), S.store.founderClubs(), S.store.founderUnassigned()]);
+    if (!box.isConnected) return;
+    const opts = clubs.filter(c => !c.blocked).map(c => `<option value="${c.id}" ${S.club?.id === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
+    const legacyRows = st.legacy_rows > 0 && !st.migration_done;
+    box.innerHTML = `<div class="stat-tiles">${[[st.clubs, plural(st.clubs, 'клуб', 'клуба', 'клубов')], [st.users, plural(st.users, 'игрок', 'игрока', 'игроков')], [st.matches, plural(st.matches, 'матч', 'матча', 'матчей')]].map(([v, l]) => `<div class="card tile"><b>${v}</b><small class="muted">${l}</small></div>`).join('')}</div>
+      ${!clubs.length ? `<section class="card stack step-card"><div class="card-h"><h3>Шаг 1. Создайте клуб</h3></div><p class="muted small">Сначала создайте клуб коворкинга — вы станете его владельцем. Потом вернитесь сюда, чтобы добавить ребят и перенести историю.</p><a class="btn primary" href="#/newclub">＋ Создать клуб</a></section>` : ''}
+      ${clubs.length && un.length ? `<section class="card stack step-card"><div class="card-h"><h3>Участники без клуба · ${un.length}</h3></div>
+        <p class="muted small">Отметьте, кого добавить. Роль помощника и стартовый рейтинг перенесутся. Тем, кто был заявкой и ещё не принят, галочка не стоит.</p>
+        <label class="switch"><input type="checkbox" data-act-change="founder-all"><i></i><span>Отметить всех</span></label>
+        <div class="un-list">${un.map(p => `<label class="un-row"><input type="checkbox" class="un-cb" value="${p.id}" ${p.legacy && p.old_status !== 'pending' ? 'checked' : ''}>${ava(p, 'sm')}<span class="rn"><b>${esc(p.nickname)}</b><small class="muted">${esc(p.full_name || '')}${p.old_role === 'editor' ? ' · помощник' : ''}${p.old_status === 'archived' ? ' · в архиве' : ''}${p.old_status === 'pending' ? ' · была заявка' : ''}${p.legacy ? '' : ' · новый'}</small></span></label>`).join('')}</div>
+        <label>В какой клуб<select id="un-club">${opts}</select></label>
+        <button class="btn primary" data-act="founder-add">Добавить отмеченных в клуб</button></section>` : ''}
+      ${clubs.length && legacyRows ? `<section class="card stack step-card"><div class="card-h"><h3>Перенести историю коворкинга</h3></div>
+        <p class="muted small">Все матчи, турниры, календарь, прогнозы, пинг-коины, журнал и настройки рейтинга, что были до клубов, перейдут в выбранный клуб. Это делается один раз. У ребят сохранятся рейтинг, места и коины.</p>
+        <label>В какой клуб<select id="hist-club">${opts}</select></label>
+        <button class="btn primary" data-act="founder-history">Перенести всю историю в этот клуб</button></section>` : ''}
+      ${!st.migration_done && !legacyRows && clubs.length ? '<section class="card"><p class="muted small">Истории до клубов нет — переносить нечего.</p></section>' : ''}
+      <section class="card"><div class="card-h"><h3>Все клубы</h3></div>
+        ${clubs.map(c => `<div class="pl-row ${c.blocked ? 'arch' : ''}"><div class="pl-top"><span class="rn"><b>${esc(c.name)}</b><small class="muted">${esc(c.code)} · ${esc(c.city || 'город не указан')} · владелец ${esc(c.owner_nick || '—')}</small>
+          <small class="muted">${c.players} ${plural(c.players, 'игрок', 'игрока', 'игроков')} · ${c.matches} ${plural(c.matches, 'матч', 'матча', 'матчей')}${c.pending ? ` · заявок: ${c.pending}` : ''}${c.last_match ? ' · последний матч ' + fmtDate(c.last_match) : ''}${c.visible ? '' : ' · скрыт с карты'}</small></span></div>
+          <div class="pl-ctl"><a class="btn xs ghost" href="#/club/${c.id}">Страница</a><button class="btn xs ghost" data-act="founder-block" data-id="${c.id}" data-v="${c.blocked ? '0' : '1'}">${c.blocked ? 'Разблокировать' : 'Заблокировать'}</button>
+          <button class="btn xs ghost danger" data-act="founder-delete" data-id="${c.id}" data-name="${esc(c.name)}">Удалить</button></div></div>`).join('') || '<div class="empty small">Клубов пока нет</div>'}</section>`;
+  } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+
+// меню клубов из шапки
+function openClubMenu() {
+  const my = S.ctx?.clubs || [];
+  const active = my.filter(c => c.my_status === 'active'), pend = my.filter(c => c.my_status === 'pending');
+  openModal(`<h3>Мои клубы</h3><div class="club-list">${active.map(clubRow).join('')}</div>
+    ${pend.length ? `<p class="muted small">⏳ Ждут решения: ${pend.map(c => esc(c.name)).join(', ')}</p>` : ''}
+    <div class="menu">
+      ${isAdmin() ? '<a class="menu-item" href="#/invite">✉️ <span>Пригласить в клуб</span></a>' : ''}
+      <a class="menu-item" href="#/clubs">🔍 <span>Вступить или найти клуб</span></a>
+      <a class="menu-item" href="#/newclub">＋ <span>Создать клуб</span></a>
+      <a class="menu-item" href="#/map">🗺 <span>Клубы на карте</span></a>
+      ${isFounder() ? '<a class="menu-item" href="#/founder">🛡 <span>Платформа PongHub</span></a>' : ''}
+    </div>`);
+}
+
+function printPoster(link) {
+  const c = S.store.club || S.club;
+  let el = document.getElementById('print-area');
+  if (!el) { el = document.createElement('div'); el.id = 'print-area'; document.body.appendChild(el); }
+  el.innerHTML = `<div class="poster"><img src="${logo()}" alt="" width="90" height="90"><h1>${esc(c.name)}</h1><p>Наведите камеру телефона, чтобы вступить в клуб настольного тенниса</p><div id="qr-print" class="qr-print"></div><p class="small">или откройте PongHub и введите код</p><b class="poster-code">${esc(link.split('/join/')[1] || '')}</b></div>`;
+  drawQr(document.getElementById('qr-print'), link, 10).then(() => setTimeout(() => window.print(), 300));
+}
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); toast('Скопировано'); }
+  catch { window.prompt('Скопируйте:', text); }
+}
+
+const CLUB_FREE = { clubs: viewClubs, club: viewClubPage, map: viewMap, newclub: viewNewClub, join: viewJoin, founder: viewFounder };
+
+const CLUB_ACT = {
+  'club-menu': () => openClubMenu(),
+  'switch-club': el => switchClub(el.dataset.id),
+  'request-join': el => busy(el, async () => { await S.store.requestJoin(el.dataset.id); S.ctx = await S.store.loadContext(); toast('Заявка отправлена — клуб рассмотрит её'); render(); }),
+  'cancel-request': el => busy(el, async () => { await S.store.cancelRequest(el.dataset.id); S.ctx = await S.store.loadContext(); toast('Заявка отозвана'); render(); }),
+  'leave-club': async () => {
+    if (!(await confirmDialog(`Покинуть клуб «${settings().clubName}»? Ваши матчи останутся в истории клуба. Вернуться можно по приглашению.`, 'Покинуть', true))) return;
+    await busy(null, async () => { await S.store.leaveClub(S.club.id); lsSet('ponghub_club', ''); await reload(); location.hash = '#/clubs'; render(); toast('Вы покинули клуб'); });
+  },
+  copy: el => copyText(el.dataset.text),
+  'share-invite': async el => {
+    const link = el.dataset.link, name = settings().clubName;
+    if (navigator.share) { try { await navigator.share({ title: name, text: `Вступай в клуб «${name}» в PongHub 🏓`, url: link }); return; } catch (e) { if (e.name === 'AbortError') return; } }
+    copyText(link);
+  },
+  'rotate-invite': async el => {
+    if (!(await confirmDialog('Сменить ссылку и код? Старые ссылка, код и QR перестанут работать.', 'Сменить'))) return;
+    await busy(el, async () => { await S.store.rotateInvite(S.club.id); await renderInvite(); toast('Новая ссылка готова'); });
+  },
+  'print-qr': el => printPoster(el.dataset.link),
+  'transfer-club': async el => {
+    const to = document.getElementById('tr-to').value, name = document.getElementById('tr-name').value.trim();
+    const c = S.store.club || S.club;
+    if (!to) return toast('Выберите, кому передать клуб', 'err');
+    if (name !== c.name) return toast('Название клуба введено неверно', 'err');
+    if (!(await confirmDialog(`Передать клуб «${c.name}» игроку ${P(to).nickname}? Вы станете помощником.`, 'Передать', true))) return;
+    await busy(el, async () => { await S.store.transferClub(c.id, to); await reload(); location.hash = '#/home'; render(); toast('Клуб передан'); });
+  },
+  'geo-search': () => geoSearch(),
+  'geo-pick': el => { document.getElementById('pick-map')?._set?.({ lat: +el.dataset.lat, lng: +el.dataset.lng }); document.getElementById('geo-res').innerHTML = ''; },
+  'map-locate': () => {
+    if (!navigator.geolocation || !mapState?.map) return toast('Не удалось определить местоположение', 'err');
+    navigator.geolocation.getCurrentPosition(p => mapState.map.setView([p.coords.latitude, p.coords.longitude], 13), () => toast('Разрешите доступ к геолокации', 'err'), { timeout: 8000 });
+  },
+  'founder-add': el => busy(el, async () => {
+    const ids = [...document.querySelectorAll('.un-cb:checked')].map(x => x.value);
+    const cid = document.getElementById('un-club').value;
+    if (!ids.length) throw new Error('Отметьте хотя бы одного человека');
+    const n = await S.store.founderAddMembers(cid, ids);
+    await reload(); render(); toast(`Добавлено в клуб: ${n}`);
+  }),
+  'founder-history': async el => {
+    const sel = document.getElementById('hist-club');
+    if (!(await confirmDialog(`Перенести всю историю (матчи, турниры, рейтинг, пинг-коины) в клуб «${sel.selectedOptions[0].textContent}»? Это делается один раз.`, 'Перенести'))) return;
+    await busy(el, async () => { const r = await S.store.founderTransferHistory(sel.value); await reload(); render(); toast(`Перенесено: ${r.matches} ${plural(r.matches, 'матч', 'матча', 'матчей')}, ${r.tournaments} ${plural(r.tournaments, 'турнир', 'турнира', 'турниров')}`); });
+  },
+  'founder-block': el => busy(el, async () => { await S.store.founderBlockClub(el.dataset.id, el.dataset.v === '1'); await renderFounder(); toast(el.dataset.v === '1' ? 'Клуб заблокирован' : 'Клуб разблокирован'); }),
+  'founder-delete': async el => {
+    const name = el.dataset.name;
+    openModal(`<h3>Удалить клуб?</h3><p class="muted">Клуб «${esc(name)}» будет удалён вместе со всеми матчами, турнирами и пинг-коинами. Отменить нельзя.</p>
+      <label>Для подтверждения введите название<input id="del-name" autocomplete="off"></label>
+      <div class="row-btns"><button class="btn ghost" data-act="close">Отмена</button><button class="btn danger" id="del-yes">Удалить навсегда</button></div>`, sh => {
+      sh.querySelector('#del-yes').onclick = () => busy(sh.querySelector('#del-yes'), async () => { await S.store.founderDeleteClub(el.dataset.id, sh.querySelector('#del-name').value.trim()); closeModal(); await reload(); render(); toast('Клуб удалён'); });
+    });
+  },
+};
+
+const CLUB_CHANGE = {
+  'founder-all': el => document.querySelectorAll('.un-cb').forEach(x => { x.checked = el.checked; }),
+};
+
+const clubFields = fd => ({
+  name: fd.get('name').trim(), city: fd.get('city').trim(), address: fd.get('address').trim(), description: fd.get('description').trim(),
+  lat: fd.get('lat') ? +fd.get('lat') : null, lng: fd.get('lng') ? +fd.get('lng') : null, visible: fd.get('visible') === 'on',
+});
+const CLUB_FORMS = {
+  'join-code': async (f, fd) => { const cid = await S.store.joinByInvite(fd.get('code')); lsSet('ponghub_club', cid); await reload(); location.hash = '#/home'; render(); toast('Добро пожаловать в клуб 🎉'); },
+  'new-club': async (f, fd) => {
+    const cid = await S.store.createClub(clubFields(fd));
+    lsSet('ponghub_club', cid);
+    await reload();
+    location.hash = '#/invite?new=1';
+  },
+  'club-edit': async (f, fd) => { await S.store.updateClub(S.club.id, clubFields(fd)); await reload(); render(); toast('Клуб сохранён'); },
+};
 
 // ───────────── Админка ─────────────
 function viewAdmin(r) {
@@ -1377,7 +1849,7 @@ function viewAdmin(r) {
   if (tab === 'reqs') {
     const pend = S.data.profiles.filter(p => p.status === 'pending');
     const rej = S.data.profiles.filter(p => p.status === 'rejected');
-    body = `<section class="card">${pend.map(p => `<div class="req">${ava(p, 'md')}<div class="rn"><b>${esc(p.nickname)}</b><small>${esc(p.full_name || '')}</small><small class="muted">${esc(S.emails.get(p.id) || '')} · ${fmtDate(p.created_at)}</small></div>
+    body = `<section class="card">${pend.map(p => `<div class="req">${ava(p, 'md')}<div class="rn"><b>${esc(p.nickname)}</b><small>${esc(p.full_name || '')}</small><small class="muted">${esc(S.emails.get(p.id) || '')} · ${fmtDate(p.joined_at || p.created_at)}</small></div>
       <div class="req-btns"><button class="btn primary sm" data-act="approve-user" data-id="${p.id}">Принять</button><button class="btn ghost sm" data-act="reject-user" data-id="${p.id}">Отклонить</button></div></div>`).join('') || '<div class="empty">Новых заявок нет 👌</div>'}</section>
       ${rej.length ? `<details class="card"><summary>Отклонённые (${rej.length})</summary>${rej.map(p => `<div class="req">${ava(p, 'sm')}<div class="rn"><b>${esc(p.nickname)}</b><small class="muted">${esc(S.emails.get(p.id) || '')}</small></div><div class="req-btns"><button class="btn sm" data-act="approve-user" data-id="${p.id}">Принять</button><button class="btn sm ghost danger" data-act="delete-user" data-id="${p.id}">Удалить</button></div></div>`).join('')}</details>` : ''}`;
   } else if (tab === 'matches') {
@@ -1393,14 +1865,14 @@ function viewAdmin(r) {
       ${S.testMode ? `<div class="row-btns"><button class="btn sm" data-act="test-create">+ Создать 4 тестовых игроков</button>${testCount ? `<button class="btn sm danger" data-act="test-purge">🗑️ Удалить все тестовые данные</button>` : ''}</div>
         ${testCount ? `<p class="muted small">Тестовых игроков: ${testCount}. Удаление сотрёт их, их матчи и турниры и записи о них в журнале — бесследно.</p>` : ''}` : ''}
     </section>
-    <p class="muted small">«Помощник» может вносить результаты, вести турниры и подтверждать матчи — например, когда вас нет. Права можно включить и выключить в любой момент.</p>
+    <p class="muted small">«Помощник» может сразу вносить результаты своих матчей — без подтверждения. Права можно включить и выключить в любой момент. Передать клуб другому участнику — в разделе <a class="link" href="#/clubedit">Клуб</a>.</p>
       <section class="card">${list.map(p => `<div class="pl-row ${p.status === 'archived' ? 'arch' : ''}">
         <div class="pl-top">${ava(p, 'sm')}<div class="rn"><b>${esc(p.nickname)}</b><small class="muted">${esc(p.full_name || '')} · ${esc(S.emails.get(p.id) || '')}</small></div><span class="pl-r">${fmtR(ratingOf(p.id))}</span></div>
         ${p.role === 'admin' ? '<div class="muted small">👑 Владелец клуба</div>' : `<div class="pl-ctl">
           <label class="switch"><input type="checkbox" data-act-change="toggle-editor" data-id="${p.id}" ${p.role === 'editor' ? 'checked' : ''} ${p.status === 'archived' ? 'disabled' : ''}><i></i><span>Помощник</span></label>
           <label class="init">Старт<input type="number" step="0.5" min="0" value="${p.initial_rating ?? ''}" placeholder="${settings().initialRating}" data-act-change="set-initial" data-id="${p.id}"></label>
           <button class="btn xs ghost" data-act="${p.status === 'archived' ? 'restore-user' : 'archive-user'}" data-id="${p.id}">${p.status === 'archived' ? 'Вернуть' : 'В архив'}</button>
-          <button class="btn xs ghost danger" data-act="delete-user" data-id="${p.id}">Удалить</button>
+          <button class="btn xs ghost danger" data-act="delete-user" data-id="${p.id}">Убрать из клуба</button>
         </div>`}</div>`).join('')}</section>
       <p class="muted small">«В архив» скрывает игрока из рейтинга, но сохраняет историю его матчей.</p>`;
   } else if (tab === 'log') {
@@ -1999,9 +2471,9 @@ const ACT = {
   'delete-user': async el => {
     const p = P(el.dataset.id);
     const games = S.A.games.get(p.id) || 0;
-    const ok = await confirmDialog(`Удалить «${p.nickname}» из клуба навсегда? Аккаунт, фото и имя будут удалены, войти он больше не сможет. ${games ? `Его ${games} ${plural(games, 'матч', 'матча', 'матчей')} останутся в истории под именем «Бывший игрок» — рейтинг соперников не изменится.` : ''} Отменить это нельзя.`, 'Удалить', true);
+    const ok = await confirmDialog(`Убрать «${p.nickname}» из клуба? Аккаунт останется — он сможет вступить снова по приглашению. ${games ? `Его ${games} ${plural(games, 'матч', 'матча', 'матчей')} останутся в истории, рейтинг остальных не изменится.` : ''}`, 'Убрать', true);
     if (!ok) return;
-    await busy(el, async () => { await S.store.adminDeletePlayer(p.id); await refresh(); toast('Игрок удалён'); });
+    await busy(el, async () => { await S.store.adminDeletePlayer(p.id); await refresh(); toast('Игрок убран из клуба'); });
   },
   'restore-user': el => busy(el, async () => { await S.store.update('profiles', el.dataset.id, { status: 'approved' }); await refresh(); }),
   'edit-profile': () => openProfileForm(),
@@ -2161,6 +2633,10 @@ const FORMS = {
   },
 };
 
+Object.assign(ACT, CLUB_ACT);
+Object.assign(CHANGE, CLUB_CHANGE);
+Object.assign(FORMS, CLUB_FORMS);
+
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');
   if (!el) { if (e.target === $modal) closeModal(); return; }
@@ -2176,6 +2652,12 @@ document.addEventListener('change', e => {
 document.addEventListener('input', e => {
   const f = e.target.closest('[data-form=settings]');
   if (f) updateCalc(f);
+  const inp = e.target.closest('[data-input]');
+  if (inp?.dataset.input === 'dir-search') { clearTimeout(dirTimer); dirTimer = setTimeout(() => renderDirectory(inp.value), 300); }
+  if (inp?.dataset.input === 'map-search') renderMapList(inp.value);
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.id === 'geo-q') { e.preventDefault(); geoSearch(); }
 });
 document.addEventListener('submit', async e => {
   const f = e.target.closest('[data-form]');
@@ -2195,19 +2677,19 @@ function b64ToBytes(b64) {
 }
 // ───────────── Окна при входе: «Что нового» и напоминание об уведомлениях ─────────────
 const WHATS_NEW = {
-  id: '2026-10-predictions',
-  title: 'Что нового в PongHub 🎉',
+  id: '2026-10-clubs',
+  title: 'Теперь в PongHub есть клубы 🎉',
   items: [
-    ['🎯', 'Прогнозы на матчи', 'Когда начинается живой счёт или принят вызов, можно поставить пинг-коины на победителя. Угадали — выигрыш по коэффициенту: чем неожиданнее победа, тем больше.'],
-    ['🪙', '1 000 PC уже на вашем счёте', 'Каждый понедельник всем +100 PC. А если баланс опустился до нуля — +50 PC каждый день, чтобы вы оставались в игре.'],
-    ['🏆', 'Лучшие прогнозисты', 'Отдельная таблица тех, кто точнее всех угадывает, и свои достижения: «Провидец», «Против толпы» и другие.'],
-    ['🤝', 'Только на интерес', 'Пинг-коины — игровые баллы: их нельзя купить, и они никак не влияют на рейтинг.'],
+    ['🏓', 'Ваш клуб на месте', 'Все матчи, рейтинг, турниры и пинг-коины сохранились — ничего делать не нужно.'],
+    ['⇄', 'Несколько клубов', 'Можно состоять в нескольких клубах: в каждом свой рейтинг и свои пинг-коины. Переключение — нажмите на название клуба вверху.'],
+    ['✉️', 'Позовите друзей', 'Вступить в клуб можно по приглашению: ссылка, код или QR-код у стола.'],
+    ['🗺', 'Клубы на карте', 'Найдите клубы рядом или создайте свой — бесплатно.'],
   ],
-  cta: ['Попробовать прогнозы', '#/predict'],
+  cta: ['Посмотреть карту клубов', '#/map'],
 };
 
 async function startupModals() {
-  if (!S.me || S.me.status !== 'approved' || S.startupDone === S.me.id) return;
+  if (!S.club || !S.me || S.me.status !== 'approved' || S.startupDone === S.me.id) return;
   S.startupDone = S.me.id;
   if (lsGet('ponghub_seen_news') !== WHATS_NEW.id) return showWhatsNew();
   await maybeAskPush();
@@ -2306,6 +2788,13 @@ function afterRender(r) {
   if (r.name === 'predict') renderPredBoard();
   if (r.name === 'admin' && r.args[0] === 'log') renderAudit();
   if (r.name === 'admin' && r.args[0] === 'data') renderBackups();
+  if (document.getElementById('dir-box')) renderDirectory('');
+  if (document.getElementById('pick-map')) mountPickMap();
+  if (r.name === 'invite') renderInvite();
+  if (r.name === 'map') renderMap();
+  if (r.name === 'club' && r.args[0]) renderClubPage(r.args[0]);
+  if (r.name === 'founder') renderFounder();
+  if (r.name === 'join' && r.args[0] && S.user) joinFlow(r.args[0]);
   const f = document.querySelector('[data-form=settings]');
   if (f) updateCalc(f);
 }

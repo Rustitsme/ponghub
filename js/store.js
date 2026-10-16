@@ -1,7 +1,21 @@
 // Слой данных: Supabase (боевой режим) или localStorage (демо-режим, если база не настроена).
 import { CONFIG } from './config.js';
 
-const TABLES = ['profiles', 'matches', 'tournaments', 'events', 'challenges', 'live_matches', 'announcements', 'pred_events', 'predictions', 'coin_tx'];
+const TABLES = ['profiles', 'matches', 'tournaments', 'events', 'challenges', 'live_matches', 'announcements', 'pred_events', 'predictions', 'coin_tx', 'clubs', 'club_members', 'platform'];
+// данные, которые принадлежат клубу (club_id подставляется автоматически)
+const CLUB_TABLES = ['matches', 'tournaments', 'events', 'challenges', 'live_matches', 'announcements', 'pred_events', 'predictions', 'coin_tx'];
+// роли и статусы участника клуба → в привычные приложению значения профиля
+const ROLE_OUT = { owner: 'admin', helper: 'editor', player: 'player' };
+const ROLE_IN = { admin: 'owner', editor: 'helper', player: 'player' };
+const STATUS_IN = { approved: 'active', archived: 'archived', rejected: 'rejected', pending: 'pending' };
+export function overlayMember(p, m) {
+  if (!m) return p;
+  const status = p.status === 'deleted' ? 'deleted'
+    : { active: 'approved', pending: 'pending', archived: 'archived', former: 'archived' }[m.status] || 'archived';
+  return { ...p, role: ROLE_OUT[m.role] || 'player', status, initial_rating: m.initial_rating, club_status: m.status, joined_at: m.joined_at };
+}
+// функции, которым нужен текущий клуб
+const RPC_CID = new Set(['ensure_wallet', 'coin_leaderboard']);
 
 export async function createStore() {
   if (CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY) {
@@ -82,35 +96,70 @@ class SupaStore {
     return data;
   }
 
-  async loadAll() {
-    const q = t => this.sb.from(t).select('*');
-    const [p, m, t, e, c, s, l, a, pe, pr] = await Promise.all([
-      q('profiles'), q('matches'), q('tournaments'), q('events'), q('challenges'),
-      this.sb.from('settings').select('data').eq('id', 1).maybeSingle(),
-      this.sb.from('live_matches').select('*').eq('status', 'live'),
-      this.sb.from('announcements').select('*').order('created_at', { ascending: false }).limit(100),
-      this.sb.from('pred_events').select('*').order('created_at', { ascending: false }).limit(150),
-      this.sb.from('predictions').select('*').order('created_at', { ascending: false }).limit(300),
+  // контекст: мой профиль, мои клубы, флаги платформы
+  async loadContext() {
+    const { data: { user } } = await this.sb.auth.getUser();
+    if (!user) return null;
+    const [me, mem, pl] = await Promise.all([
+      this.sb.from('profiles').select('*').eq('id', user.id).maybeSingle(),
+      this.sb.from('club_members').select('*, club:clubs(*)').eq('user_id', user.id),
+      this.sb.from('platform').select('*'),
     ]);
-    for (const r of [p, m, t, e, s]) if (r.error) throw translateError(r.error);
-    // вызовы появятся после обновления базы — без таблицы приложение тоже работает
-    return { profiles: p.data, matches: m.data, tournaments: t.data, events: e.data, challenges: c.error ? [] : c.data, live: l.error ? [] : l.data, announcements: a.error ? [] : a.data, predEvents: pe.error ? [] : pe.data, predictions: pr.error ? [] : pr.data, settings: s.data?.data || {} };
+    if (me.error) throw translateError(me.error);
+    const platform = Object.fromEntries((pl.data || []).map(r => [r.key, r.value]));
+    const clubs = (mem.data || []).filter(m => m.club && ['active', 'pending'].includes(m.status))
+      .map(m => ({ ...m.club, my_role: m.role, my_status: m.status }));
+    return { me: me.data, clubs, platform };
   }
 
+  setClub(club) { this.club = club || null; this.cid = club?.id || null; }
+
+  async loadAll() {
+    const cid = this.cid;
+    const q = t => this.sb.from(t).select('*').eq('club_id', cid);
+    const [mem, m, t, e, c, l, a, pe, pr, cl] = await Promise.all([
+      this.sb.from('club_members').select('*, profile:profiles(*)').eq('club_id', cid),
+      q('matches'), q('tournaments'), q('events'), q('challenges'),
+      q('live_matches').eq('status', 'live'),
+      q('announcements').order('created_at', { ascending: false }).limit(100),
+      q('pred_events').order('created_at', { ascending: false }).limit(150),
+      q('predictions').order('created_at', { ascending: false }).limit(300),
+      this.sb.from('clubs').select('*').eq('id', cid).maybeSingle(),
+    ]);
+    for (const r of [mem, m, t, e, cl]) if (r.error) throw translateError(r.error);
+    if (cl.data) this.club = cl.data;
+    const profiles = (mem.data || []).filter(x => x.profile).map(x => overlayMember(x.profile, x));
+    const settings = { ...(this.club?.settings || {}), clubName: this.club?.name };
+    return { profiles, matches: m.data, tournaments: t.data, events: e.data, challenges: c.error ? [] : c.data, live: l.error ? [] : l.data, announcements: a.error ? [] : a.data, predEvents: pe.error ? [] : pe.data, predictions: pr.error ? [] : pr.data, settings };
+  }
+
+  withClub(table, row) { return CLUB_TABLES.includes(table) && !row.club_id ? { ...row, club_id: this.cid } : row; }
+
   async insert(table, row) {
-    const { data, error } = await this.sb.from(table).insert(row).select().single();
+    const { data, error } = await this.sb.from(table).insert(this.withClub(table, row)).select().single();
     if (error) throw translateError(error);
     return data;
   }
 
   async insertMany(table, rows) {
     if (!rows.length) return [];
-    const { data, error } = await this.sb.from(table).insert(rows).select();
+    const { data, error } = await this.sb.from(table).insert(rows.map(r => this.withClub(table, r))).select();
     if (error) throw translateError(error);
     return data;
   }
 
   async update(table, id, patch) {
+    if (table === 'profiles') {
+      const { role, status, initial_rating, ...rest } = patch;
+      if (role !== undefined || status !== undefined || initial_rating !== undefined) {
+        await this.rpc('set_member', {
+          cid: this.cid, uid: id, p_role: role ? ROLE_IN[role] : null, p_status: status ? STATUS_IN[status] : null,
+          p_initial: initial_rating ?? null, p_clear_initial: initial_rating === null,
+        });
+      }
+      if (!Object.keys(rest).length) return { id, ...patch };
+      patch = rest;
+    }
     const { data, error } = await this.sb.from(table).update(patch).eq('id', id).select();
     if (error) throw translateError(error);
     if (!data.length) throw new Error('Недостаточно прав для этого действия');
@@ -123,8 +172,8 @@ class SupaStore {
   }
 
   async saveSettings(data) {
-    const { error } = await this.sb.from('settings').upsert({ id: 1, data });
-    if (error) throw translateError(error);
+    const { clubName, ...settings } = data;
+    await this.rpc('update_club', { cid: this.cid, patch: { settings, ...(clubName && clubName !== this.club?.name ? { name: clubName } : {}) } });
   }
 
   async toggleRsvp(eventId) {
@@ -133,19 +182,20 @@ class SupaStore {
   }
 
   async rpc(name, args = {}) {
+    if (RPC_CID.has(name)) args = { cid: this.cid, ...args };
     const { data, error } = await this.sb.rpc(name, args);
     if (error) throw translateError(error);
     return data;
   }
 
   async createTestPlayers(n) {
-    const { data, error } = await this.sb.rpc('admin_create_test_players', { n });
+    const { data, error } = await this.sb.rpc('admin_create_test_players', { cid: this.cid, n });
     if (error) throw translateError(error);
     return data;
   }
 
   async purgeTest() {
-    const { error } = await this.sb.rpc('admin_purge_test');
+    const { error } = await this.sb.rpc('admin_purge_test', { cid: this.cid });
     if (error) throw translateError(error);
   }
 
@@ -188,7 +238,11 @@ class SupaStore {
     return data.name;
   }
 
-  async adminDeletePlayer(id) {
+  // убрать из клуба (владелец клуба). Матчи остаются в истории
+  async adminDeletePlayer(id) { await this.rpc('remove_member', { cid: this.cid, uid: id }); }
+
+  // полностью удалить аккаунт (основатель)
+  async founderDeletePlayer(id) {
     const { data: files } = await this.sb.storage.from('avatars').list(id);
     if (files?.length) await this.sb.storage.from('avatars').remove(files.map(f => `${id}/${f.name}`));
     const { error } = await this.sb.rpc('admin_delete_player', { target: id });
@@ -200,6 +254,30 @@ class SupaStore {
     if (error) return new Map();
     return new Map((data || []).map(r => [r.id, r.email]));
   }
+
+  // ── клубы ──
+  async createClub(c) { return this.rpc('create_club', { p_name: c.name, p_city: c.city || null, p_address: c.address || null, p_lat: c.lat ?? null, p_lng: c.lng ?? null, p_visible: c.visible !== false, p_description: c.description || null }); }
+  async updateClub(cid, patch) { return this.rpc('update_club', { cid, patch }); }
+  async joinByInvite(code) { return this.rpc('join_by_invite', { p_code: code }); }
+  async requestJoin(cid) { return this.rpc('request_join', { cid }); }
+  async cancelRequest(cid) { return this.rpc('cancel_request', { cid }); }
+  async leaveClub(cid) { return this.rpc('leave_club', { cid }); }
+  async transferClub(cid, uid) { return this.rpc('transfer_club', { cid, uid }); }
+  async directory(q = '') { return (await this.rpc('club_directory', { q })) || []; }
+  async clubPublic(cid) { return this.rpc('club_public', { cid }); }
+  async inviteCode(cid) {
+    const { data, error } = await this.sb.from('club_invites').select('code').eq('club_id', cid).maybeSingle();
+    if (error) throw translateError(error);
+    return data?.code || null;
+  }
+  async rotateInvite(cid) { return this.rpc('rotate_invite', { cid }); }
+  async founderStats() { return this.rpc('founder_stats'); }
+  async founderClubs() { return (await this.rpc('founder_clubs')) || []; }
+  async founderUnassigned() { return (await this.rpc('founder_unassigned')) || []; }
+  async founderAddMembers(cid, uids) { return this.rpc('founder_add_members', { cid, uids }); }
+  async founderTransferHistory(cid) { return this.rpc('founder_transfer_history', { cid }); }
+  async founderBlockClub(cid, blocked) { return this.rpc('founder_block_club', { cid, p_blocked: blocked }); }
+  async founderDeleteClub(cid, name) { return this.rpc('founder_delete_club', { cid, p_name: name }); }
 
   async uploadAvatar(blob) {
     const { data: { user } } = await this.sb.auth.getUser();
@@ -235,7 +313,7 @@ class SupaStore {
   subscribe(cb) {
     let timer;
     const ch = this.sb.channel('ponghub-all');
-    for (const t of [...TABLES, 'settings'])
+    for (const t of TABLES)
       ch.on('postgres_changes', { event: '*', schema: 'public', table: t }, () => {
         clearTimeout(timer); timer = setTimeout(cb, 400);
       });
@@ -254,11 +332,11 @@ class LocalStore {
 
   constructor() {
     try { this.db = JSON.parse(localStorage.getItem(LS_KEY)); } catch { this.db = null; }
-    if (!this.db) { this.db = seedDemo(); this.save(); }
+    if (!this.db || !this.db.clubs) { this.db = seedDemo(); this.save(); }
   }
 
   save() { try { localStorage.setItem(LS_KEY, JSON.stringify(this.db)); } catch { /* приватный режим */ } }
-  reset() { this.db = seedDemo(); this.save(); }
+  reset(opts) { this.db = seedDemo(opts); this.save(); }
 
   async currentUser() {
     const id = this.db.session;
@@ -273,7 +351,7 @@ class LocalStore {
     if (!(await this.nicknameAvailable(nickname))) throw new Error('Такой ник уже занят');
     const id = uid();
     this.db.users.push({ id, email, password });
-    this.db.profiles.push({ id, nickname, full_name, avatar: '🏓', color: '#e63946', role: 'player', status: 'pending', initial_rating: null, created_at: new Date().toISOString() });
+    this.db.profiles.push({ id, nickname, full_name, avatar: '🏓', color: '#e63946', role: 'player', status: 'approved', initial_rating: null, created_at: new Date().toISOString() });
     this.db.session = id;
     this.save(); this.emit('SIGNED_IN');
     return { user: { id }, needsConfirm: false };
@@ -292,14 +370,153 @@ class LocalStore {
   async updatePassword(pw) { const u = this.db.users.find(x => x.id === this.db.session); if (u) u.password = pw; this.save(); }
   async nicknameAvailable(n) { return !this.db.profiles.some(p => p.nickname.toLowerCase() === n.trim().toLowerCase()); }
 
+  // ── клубы (упрощённая копия серверной логики) ──
+  mem(cid, uid) { return this.db.club_members.find(m => m.club_id === cid && m.user_id === uid); }
+  role(cid) { const c = this.db.clubs.find(x => x.id === cid); const m = this.mem(cid, this.db.session); return c && !c.blocked && m?.status === 'active' ? m.role : null; }
+  needAdmin(cid) { if (this.role(cid) !== 'owner') throw new Error('Недостаточно прав для этого действия'); }
+  founder() { return !!this.db.profiles.find(p => p.id === this.db.session)?.is_founder; }
+  needFounder() { if (!this.founder()) throw new Error('Недостаточно прав для этого действия'); }
+  code(n) { const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; for (let i = 0; i < n; i++) s += abc[Math.floor(Math.random() * abc.length)]; return s; }
+
+  async loadContext() {
+    const me = this.db.profiles.find(p => p.id === this.db.session);
+    if (!me) return null;
+    const clubs = this.db.club_members.filter(m => m.user_id === me.id && ['active', 'pending'].includes(m.status))
+      .map(m => ({ ...this.db.clubs.find(c => c.id === m.club_id), my_role: m.role, my_status: m.status })).filter(c => c.id);
+    return JSON.parse(JSON.stringify({ me, clubs, platform: this.db.platform }));
+  }
+  setClub(club) { this.club = club || null; this.cid = club?.id || null; }
+
   async loadAll() {
     const c = JSON.parse(JSON.stringify(this.db));
-    return { profiles: c.profiles, matches: c.matches, tournaments: c.tournaments, events: c.events, challenges: c.challenges || [], live: (c.live_matches || []).filter(x => x.status === 'live'), announcements: [...(c.announcements || [])].sort((x, y) => Date.parse(y.created_at) - Date.parse(x.created_at)),
-      predEvents: [...(c.pred_events || [])].reverse(), predictions: (c.predictions || []).filter(x => x.user_id === c.session).reverse(), settings: c.settings || {} };
+    const cid = this.cid, own = this.role(cid) === 'owner';
+    const inC = r => r.club_id === cid;
+    const club = c.clubs.find(x => x.id === cid) || {};
+    const profiles = c.club_members.filter(m => m.club_id === cid && (m.status !== 'pending' || own))
+      .map(m => overlayMember(c.profiles.find(p => p.id === m.user_id), m)).filter(p => p && p.id && (!p.is_test || own));
+    return { profiles, matches: c.matches.filter(inC), tournaments: c.tournaments.filter(inC), events: c.events.filter(inC), challenges: (c.challenges || []).filter(inC), live: (c.live_matches || []).filter(x => inC(x) && x.status === 'live'), announcements: [...(c.announcements || [])].filter(inC).reverse().filter(a => own || !a.recipients || a.recipients.includes(c.session)),
+      predEvents: [...(c.pred_events || [])].filter(inC).reverse(), predictions: (c.predictions || []).filter(x => inC(x) && x.user_id === c.session).reverse(), settings: { ...(club.settings || {}), clubName: club.name } };
+  }
+
+  async createClub(c) {
+    const id = uid();
+    this.db.clubs.push({ id, code: 'PH-' + this.code(4), name: c.name.trim(), city: c.city || null, address: c.address || null, lat: c.lat ?? null, lng: c.lng ?? null, description: c.description || null, visible: c.visible !== false, blocked: false, owner_id: this.db.session, settings: {}, created_at: new Date().toISOString() });
+    this.db.invites[id] = this.code(8);
+    this.db.club_members.push({ club_id: id, user_id: this.db.session, role: 'owner', status: 'active', via: 'created', joined_at: new Date().toISOString() });
+    this.save(); return id;
+  }
+  async updateClub(cid, patch) {
+    if (this.role(cid) !== 'owner' && !this.founder()) throw new Error('Недостаточно прав для этого действия');
+    Object.assign(this.db.clubs.find(c => c.id === cid), patch); this.save();
+  }
+  async joinByInvite(code) {
+    const k = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const cid = Object.keys(this.db.invites).find(id => this.db.invites[id] === k && !this.db.clubs.find(c => c.id === id)?.blocked);
+    if (!cid) throw new Error('Код приглашения не найден или устарел');
+    const m = this.mem(cid, this.db.session);
+    if (m) Object.assign(m, { status: 'active', via: 'invite' }); else this.db.club_members.push({ club_id: cid, user_id: this.db.session, role: 'player', status: 'active', via: 'invite', joined_at: new Date().toISOString() });
+    this.save(); return cid;
+  }
+  async requestJoin(cid) {
+    const m = this.mem(cid, this.db.session);
+    if (m?.status === 'active' || m?.status === 'pending') return;
+    if (m) Object.assign(m, { status: 'pending', via: 'request' }); else this.db.club_members.push({ club_id: cid, user_id: this.db.session, role: 'player', status: 'pending', via: 'request', joined_at: new Date().toISOString() });
+    this.save();
+  }
+  async cancelRequest(cid) { this.db.club_members = this.db.club_members.filter(m => !(m.club_id === cid && m.user_id === this.db.session && m.status === 'pending')); this.save(); }
+  async leaveClub(cid) { await this.adminDeletePlayer(this.db.session, cid, true); }
+  async transferClub(cid, to) {
+    if (this.role(cid) !== 'owner' && !this.founder()) throw new Error('Недостаточно прав для этого действия');
+    if (this.mem(cid, to)?.status !== 'active') throw new Error('Передать можно только участнику клуба');
+    this.db.club_members.filter(m => m.club_id === cid && m.role === 'owner').forEach(m => { m.role = 'helper'; });
+    this.mem(cid, to).role = 'owner'; this.db.clubs.find(c => c.id === cid).owner_id = to; this.save();
+  }
+  clubRow(c) {
+    return { id: c.id, code: c.code, name: c.name, city: c.city, address: c.address, lat: c.lat, lng: c.lng, description: c.description, created_at: c.created_at,
+      players: this.db.club_members.filter(m => m.club_id === c.id && m.status === 'active').length,
+      matches: this.db.matches.filter(m => m.club_id === c.id && m.status === 'approved' && !m.is_test).length,
+      my_status: this.mem(c.id, this.db.session)?.status || null };
+  }
+  async directory(q = '') {
+    const t = q.trim().toLowerCase();
+    return this.db.clubs.filter(c => !c.blocked && (c.visible || this.mem(c.id, this.db.session)))
+      .filter(c => !t || c.name.toLowerCase().includes(t) || (c.city || '').toLowerCase().includes(t) || c.code.toLowerCase() === t || c.code.toLowerCase() === 'ph-' + t)
+      .map(c => this.clubRow(c)).sort((a, b) => b.players - a.players);
+  }
+  async clubPublic(cid) {
+    const c = this.db.clubs.find(x => x.id === cid);
+    if (!c || c.blocked || !(c.visible || this.role(cid) || this.founder())) throw new Error('Клуб не найден');
+    const players = this.db.club_members.filter(m => m.club_id === cid && m.status !== 'pending').map(m => {
+      const p = this.db.profiles.find(x => x.id === m.user_id);
+      return p && !p.is_test && { id: p.id, nickname: p.nickname, avatar: p.avatar, color: p.color, photo_url: p.photo_url, initial_rating: m.initial_rating, created_at: p.created_at, status: m.status === 'active' ? 'approved' : m.status === 'archived' ? 'archived' : 'deleted' };
+    }).filter(Boolean);
+    return JSON.parse(JSON.stringify({ club: this.clubRow(c), settings: c.settings, my_status: this.mem(cid, this.db.session)?.status || null, players,
+      matches: this.db.matches.filter(m => m.club_id === cid && m.status === 'approved' && !m.is_test),
+      tournaments: this.db.tournaments.filter(t => t.club_id === cid && !t.is_test).map(t => ({ id: t.id, name: t.name, date: t.date, status: t.status, results: t.results, created_at: t.created_at })) }));
+  }
+  async inviteCode(cid) { this.needAdmin(cid); return this.db.invites[cid]; }
+  async rotateInvite(cid) { this.needAdmin(cid); this.db.invites[cid] = this.code(8); this.save(); return this.db.invites[cid]; }
+  unassigned() { return this.db.profiles.filter(p => !p.is_test && !['deleted', 'rejected'].includes(p.status) && !this.db.club_members.some(m => m.user_id === p.id && ['active', 'pending'].includes(m.status))); }
+  async founderStats() {
+    this.needFounder();
+    return { clubs: this.db.clubs.length, users: this.db.profiles.filter(p => !p.is_test && !['deleted', 'rejected'].includes(p.status)).length, matches: this.db.matches.filter(m => !m.is_test).length,
+      unassigned: this.unassigned().length, legacy_rows: this.db.matches.filter(m => !m.club_id).length + this.db.tournaments.filter(t => !t.club_id).length, migration_done: this.db.platform.migration_done };
+  }
+  async founderClubs() {
+    this.needFounder();
+    return this.db.clubs.map(c => ({ id: c.id, code: c.code, name: c.name, city: c.city, visible: c.visible, blocked: c.blocked, owner_id: c.owner_id, owner_nick: this.db.profiles.find(p => p.id === c.owner_id)?.nickname,
+      players: this.db.club_members.filter(m => m.club_id === c.id && m.status === 'active').length, pending: this.db.club_members.filter(m => m.club_id === c.id && m.status === 'pending').length,
+      matches: this.db.matches.filter(m => m.club_id === c.id && !m.is_test).length, last_match: this.db.matches.filter(m => m.club_id === c.id).map(m => m.played_at).sort().pop() || null, created_at: c.created_at }));
+  }
+  async founderUnassigned() {
+    this.needFounder();
+    return this.unassigned().map(p => ({ id: p.id, nickname: p.nickname, full_name: p.full_name, avatar: p.avatar, color: p.color, photo_url: p.photo_url, old_role: p.role, old_status: p.status, legacy: !!p.legacy, created_at: p.created_at }))
+      .sort((a, b) => (b.legacy - a.legacy) || a.nickname.localeCompare(b.nickname));
+  }
+  async founderAddMembers(cid, uids) {
+    this.needFounder();
+    let n = 0;
+    for (const id of uids) {
+      const p = this.db.profiles.find(x => x.id === id);
+      if (!p || p.is_test || ['deleted', 'rejected'].includes(p.status)) continue;
+      const role = ['editor', 'admin'].includes(p.role) ? 'helper' : 'player', status = p.status === 'archived' ? 'archived' : 'active';
+      const m = this.mem(cid, id);
+      if (m) { if (m.role !== 'owner') Object.assign(m, { role, status }); else m.status = 'active'; if (m.initial_rating == null) m.initial_rating = p.initial_rating; }
+      else this.db.club_members.push({ club_id: cid, user_id: id, role, status, initial_rating: p.initial_rating, via: 'founder', joined_at: new Date().toISOString() });
+      n++;
+    }
+    this.save(); return n;
+  }
+  async founderTransferHistory(cid) {
+    this.needFounder();
+    if (this.db.platform.migration_done) throw new Error('История уже перенесена');
+    let nm = 0, nt = 0;
+    for (const t of ['matches', 'tournaments', 'events', 'challenges', 'live_matches', 'announcements', 'pred_events', 'predictions', 'coin_tx', 'audit'])
+      for (const r of this.db[t] || []) if (!r.club_id) { r.club_id = cid; if (t === 'matches') nm++; if (t === 'tournaments') nt++; }
+    const club = this.db.clubs.find(c => c.id === cid);
+    club.settings = { ...(this.db.settings || {}), ...(club.settings || {}) };
+    const seen = new Set();
+    this.db.matches.filter(m => m.club_id === cid).forEach(m => [m.player1_id, m.player2_id, m.player3_id, m.player4_id].forEach(x => x && seen.add(x)));
+    for (const p of this.db.profiles) {
+      if (p.is_test) { if (!this.mem(cid, p.id)) this.db.club_members.push({ club_id: cid, user_id: p.id, role: 'player', status: 'active', via: 'history', joined_at: new Date().toISOString() }); continue; }
+      if (seen.has(p.id) && !this.mem(cid, p.id)) this.db.club_members.push({ club_id: cid, user_id: p.id, role: 'player', status: 'former', initial_rating: p.initial_rating, via: 'history', joined_at: new Date().toISOString() });
+    }
+    this.db.platform.migration_done = true;
+    this.save(); return { matches: nm, tournaments: nt };
+  }
+  async founderBlockClub(cid, blocked) { this.needFounder(); this.db.clubs.find(c => c.id === cid).blocked = blocked; this.save(); }
+  async founderDeleteClub(cid, name) {
+    this.needFounder();
+    const c = this.db.clubs.find(x => x.id === cid);
+    if (!c || c.name !== name) throw new Error('Название не совпадает');
+    this.db.clubs = this.db.clubs.filter(x => x.id !== cid);
+    this.db.club_members = this.db.club_members.filter(m => m.club_id !== cid);
+    for (const t of ['matches', 'tournaments', 'events', 'challenges', 'live_matches', 'announcements', 'pred_events', 'predictions', 'coin_tx', 'audit']) this.db[t] = (this.db[t] || []).filter(r => r.club_id !== cid);
+    this.save();
   }
 
   async insert(table, row) {
-    const r = { id: uid(), created_at: new Date().toISOString(), ...row };
+    const r = { id: uid(), created_at: new Date().toISOString(), ...(CLUB_TABLES.includes(table) ? { club_id: this.cid } : {}), ...row };
     (this.db[table] = this.db[table] || []).push(r); this.save();
     return r;
   }
@@ -307,6 +524,24 @@ class LocalStore {
   async insertMany(table, rows) { const out = []; for (const r of rows) out.push(await this.insert(table, r)); return out; }
 
   async update(table, id, patch) {
+    if (table === 'profiles') {
+      const { role, status, initial_rating, ...rest } = patch;
+      if (role !== undefined || status !== undefined || initial_rating !== undefined) {
+        this.needAdmin(this.cid);
+        const m = this.mem(this.cid, id);
+        if (!m) throw new Error('Участник не найден');
+        if (m.role === 'owner' && ((role && role !== 'admin') || (status && status !== 'approved'))) throw new Error('Сначала передайте клуб другому участнику');
+        if (status === 'rejected') this.db.club_members = this.db.club_members.filter(x => x !== m);
+        else {
+          if (role) m.role = ROLE_IN[role];
+          if (status) m.status = STATUS_IN[status];
+          if (initial_rating !== undefined) m.initial_rating = initial_rating;
+        }
+        this.save();
+      }
+      if (!Object.keys(rest).length) return { id, ...patch };
+      patch = rest;
+    }
     const r = this.db[table].find(x => x.id === id);
     if (!r) throw new Error('Запись не найдена');
     Object.assign(r, patch);
@@ -327,7 +562,13 @@ class LocalStore {
     this.save();
   }
 
-  async saveSettings(data) { this.db.settings = data; this.save(); }
+  async saveSettings(data) {
+    const { clubName, ...settings } = data;
+    this.needAdmin(this.cid);
+    const c = this.db.clubs.find(x => x.id === this.cid);
+    c.settings = settings; if (clubName) c.name = clubName;
+    this.save();
+  }
 
   async toggleRsvp(eventId) {
     const e = this.db.events.find(x => x.id === eventId);
@@ -337,19 +578,19 @@ class LocalStore {
   }
 
   // ── прогнозы в демо-режиме (упрощённая копия серверной логики) ──
-  coinBal(uid) { return (this.db.coin_tx || []).filter(t => t.user_id === uid).reduce((a, t) => a + t.amount, 0); }
-  tx(user_id, amount, kind, ref = null) { (this.db.coin_tx = this.db.coin_tx || []).push({ id: uid(), user_id, amount, kind, ref, created_at: new Date().toISOString() }); }
-  predSetting(k, d) { return this.db.settings?.[k] ?? d; }
+  coinBal(uid) { return (this.db.coin_tx || []).filter(t => t.user_id === uid && t.club_id === this.cid).reduce((a, t) => a + t.amount, 0); }
+  tx(user_id, amount, kind, ref = null) { (this.db.coin_tx = this.db.coin_tx || []).push({ id: uid(), club_id: this.cid, user_id, amount, kind, ref, created_at: new Date().toISOString() }); }
+  predSetting(k, d) { return this.db.clubs.find(c => c.id === this.cid)?.settings?.[k] ?? d; }
   async rpc(name, a = {}) {
     const me = this.db.session;
     this.db.pred_events = this.db.pred_events || []; this.db.predictions = this.db.predictions || [];
-    if (name === 'ensure_wallet') { if (!(this.db.coin_tx || []).some(t => t.user_id === me)) { this.tx(me, this.predSetting('predStart', 1000), 'start'); this.save(); } return this.coinBal(me); }
+    if (name === 'ensure_wallet') { if (!this.role(this.cid)) return 0; if (!(this.db.coin_tx || []).some(t => t.user_id === me && t.club_id === this.cid)) { this.tx(me, this.predSetting('predStart', 1000), 'start'); this.save(); } return this.coinBal(me); }
     if (name === 'create_pred_event') {
       const ex = this.db.pred_events.find(e => e.source_id === a.src_id); if (ex) return ex.id;
       const srcRow = a.src === 'live' ? (this.db.live_matches || []).find(x => x.id === a.src_id) : (this.db.challenges || []).find(x => x.id === a.src_id);
       if (!srcRow) return null;
       const c = Math.min(0.95, Math.max(0.05, a.chance));
-      const ev = { id: uid(), source: a.src, source_id: a.src_id, kind: srcRow.kind || 'singles', player1_id: srcRow.player1_id || srcRow.from_id, player2_id: srcRow.player2_id || srcRow.to_id, player3_id: srcRow.player3_id || null, player4_id: srcRow.player4_id || null,
+      const ev = { id: uid(), club_id: this.cid, source: a.src, source_id: a.src_id, kind: srcRow.kind || 'singles', player1_id: srcRow.player1_id || srcRow.from_id, player2_id: srcRow.player2_id || srcRow.to_id, player3_id: srcRow.player3_id || null, player4_id: srcRow.player4_id || null,
         tournament_id: srcRow.tournament_id || null, closes_at: srcRow.scoring === false ? new Date(Date.now() + this.predSetting('predWindowMin', 3) * 6e4).toISOString() : null, chance1: c, odds1: Math.min(10, Math.round(100 / c) / 100), odds2: Math.min(10, Math.round(100 / (1 - c)) / 100), status: 'open', bets_count: 0, pool1: 0, pool2: 0, is_test: !!srcRow.is_test, created_by: me, created_at: new Date().toISOString() };
       this.db.pred_events.push(ev); this.save(); return ev.id;
     }
@@ -364,15 +605,16 @@ class LocalStore {
       if (a.amount < min || a.amount > max) throw new Error(`Ставка от ${min} до ${max} PC`);
       await this.rpc('ensure_wallet');
       if (this.coinBal(me) < a.amount) throw new Error(`Недостаточно пинг-коинов (у вас ${this.coinBal(me)})`);
-      this.db.predictions.push({ id: uid(), event_id: e.id, user_id: me, side: a.pick, stake: a.amount, odds: a.pick === 1 ? e.odds1 : e.odds2, status: 'open', created_at: new Date().toISOString() });
+      this.db.predictions.push({ id: uid(), club_id: this.cid, event_id: e.id, user_id: me, side: a.pick, stake: a.amount, odds: a.pick === 1 ? e.odds1 : e.odds2, status: 'open', created_at: new Date().toISOString() });
       this.tx(me, -a.amount, 'bet', e.id);
       e.bets_count++; e['pool' + a.pick] += a.amount; this.save(); return this.coinBal(me);
     }
     if (name === 'coin_leaderboard') {
       const since = a.since ? Date.parse(a.since) : 0;
-      const ids = [...new Set((this.db.coin_tx || []).map(t => t.user_id))];
+      const cid = this.cid, mine = (this.db.coin_tx || []).filter(t => t.club_id === cid);
+      const ids = [...new Set(mine.map(t => t.user_id))].filter(id => this.mem(cid, id)?.status === 'active');
       return ids.map(id => {
-        const tx = this.db.coin_tx.filter(t => t.user_id === id), pr = this.db.predictions.filter(p => p.user_id === id && Date.parse(p.created_at) >= since);
+        const tx = mine.filter(t => t.user_id === id), pr = this.db.predictions.filter(p => p.club_id === cid && p.user_id === id && Date.parse(p.created_at) >= since);
         return { user_id: id, balance: tx.reduce((s, t) => s + t.amount, 0), profit: tx.filter(t => ['bet', 'payout', 'refund'].includes(t.kind) && Date.parse(t.created_at) >= since).reduce((s, t) => s + t.amount, 0),
           bets: pr.filter(p => ['won', 'lost'].includes(p.status)).length, wins: pr.filter(p => p.status === 'won').length };
       });
@@ -404,7 +646,9 @@ class LocalStore {
     while (made < n) {
       k++;
       if (this.db.profiles.some(p => p.nickname === 'Тест ' + k)) continue;
-      this.db.profiles.push({ id: uid(), nickname: 'Тест ' + k, full_name: 'Тестовый игрок', avatar: '🧪', color: '#8ab4f8', role: 'player', status: 'approved', is_test: true, created_at: new Date().toISOString() });
+      const id = uid();
+      this.db.profiles.push({ id, nickname: 'Тест ' + k, full_name: 'Тестовый игрок', avatar: '🧪', color: '#8ab4f8', role: 'player', status: 'approved', is_test: true, created_at: new Date().toISOString() });
+      this.db.club_members.push({ club_id: this.cid, user_id: id, role: 'player', status: 'active', via: 'test', joined_at: new Date().toISOString() });
       made++;
     }
     this.save(); return made;
@@ -414,11 +658,12 @@ class LocalStore {
     const touches = r => r.is_test || [r.player1_id, r.player2_id, r.player3_id, r.player4_id, r.from_id, r.to_id].some(x => ids.has(x));
     for (const t of ['matches', 'live_matches', 'challenges', 'tournaments', 'announcements']) this.db[t] = (this.db[t] || []).filter(r => !touches(r));
     this.db.profiles = this.db.profiles.filter(p => !p.is_test);
+    this.db.club_members = this.db.club_members.filter(m => !ids.has(m.user_id));
     this.db.audit = (this.db.audit || []).filter(e => !touches(e.old_data || {}) && !touches(e.new_data || {}));
     this.save();
   }
   log(action, table, old, neu, reason) {
-    (this.db.audit = this.db.audit || []).unshift({ id: (this.db.audit[0]?.id || 0) + 1, at: new Date().toISOString(), actor_id: this.db.session, action, table_name: table, record_id: (neu || old).id, old_data: old, new_data: neu, reason });
+    (this.db.audit = this.db.audit || []).unshift({ id: (this.db.audit[0]?.id || 0) + 1, club_id: this.cid, at: new Date().toISOString(), actor_id: this.db.session, action, table_name: table, record_id: (neu || old).id, old_data: old, new_data: neu, reason });
   }
   async deleteMatch(id, reason) {
     this.predCancel(e => e.match_id === id);
@@ -433,7 +678,7 @@ class LocalStore {
     if (t) this.log('delete', 'tournaments', t, null, reason);
     await this.remove('tournaments', id);
   }
-  async loadAudit() { return JSON.parse(JSON.stringify(this.db.audit || [])); }
+  async loadAudit() { return JSON.parse(JSON.stringify((this.db.audit || []).filter(e => e.club_id === this.cid))); }
   async restoreMatch(logId) {
     const e = (this.db.audit || []).find(x => x.id === logId);
     if (e && !this.db.matches.some(m => m.id === e.old_data.id)) { this.db.matches.push({ ...e.old_data }); this.log('insert', 'matches', null, e.old_data, 'Восстановлен из журнала'); this.save(); }
@@ -441,7 +686,17 @@ class LocalStore {
   async listBackups() { return []; }
   async backupUrl() { throw new Error('В демо-режиме резервных копий нет'); }
   async backupNow() { throw new Error('В демо-режиме резервных копий нет'); }
-  async adminDeletePlayer(id) {
+  async adminDeletePlayer(id, cid = this.cid, self = false) {
+    if (!self) this.needAdmin(cid);
+    const m = this.mem(cid, id);
+    if (!m) return;
+    if (m.role === 'owner') throw new Error('Сначала передайте клуб другому участнику');
+    const played = this.db.matches.some(x => x.club_id === cid && [x.player1_id, x.player2_id, x.player3_id, x.player4_id].includes(id));
+    if (played) Object.assign(m, { status: 'former', role: 'player' }); else this.db.club_members = this.db.club_members.filter(x => x !== m);
+    this.save();
+  }
+  async founderDeletePlayer(id) {
+    this.needFounder();
     const p = this.db.profiles.find(x => x.id === id);
     Object.assign(p, { nickname: 'Бывший игрок ' + id.slice(-4), full_name: null, photo_url: null, bio: null, hand: null, avatar: '👤', color: '#adb5bd', role: 'player', status: 'deleted' });
     this.db.users = this.db.users.filter(u => u.id !== id);
@@ -458,7 +713,7 @@ class LocalStore {
   subscribe() {}
 }
 
-function seedDemo() {
+function seedDemo(opts = {}) {
   // Детерминированный генератор, чтобы демо выглядело одинаково
   let seed = 42;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
@@ -555,5 +810,35 @@ function seedDemo() {
     { id: uid(), title: 'Вечерняя игра', starts_at: new Date(now + 2 * day).toISOString(), place: 'Офис, 3 этаж', note: 'Берите свои ракетки', attendees: ['demo-1', 'demo-2', 'demo-5'], created_by: 'demo-1', created_at: new Date().toISOString() },
     { id: uid(), title: 'Зимний кубок', starts_at: new Date(now + 12 * day).toISOString(), place: 'Спортклуб «Ракетка»', note: 'Олимпийская система, до 3 побед', attendees: ['demo-1'], created_by: 'demo-1', created_at: new Date().toISOString() },
   ];
-  return { users, profiles, matches, tournaments, events, challenges, audit: [], settings: {}, session: null };
+  profiles[0].is_founder = true;
+  // ещё два клуба — для карты и поиска
+  const extra = [['demo-x1', 'Gilm', '🦅', '#2563b8'], ['demo-x2', 'Arsen', '🐺', '#6a4c93'], ['demo-x3', 'Liya', '🌸', '#ff70a6']];
+  for (const [id, nickname, avatar, color] of extra) {
+    profiles.push({ id, nickname, full_name: '', avatar, color, role: 'player', status: 'approved', initial_rating: null, created_at: new Date(now - 40 * day).toISOString() });
+    users.push({ id, email: id + '@ponghub.app', password: 'demo123' });
+  }
+  const clubs = [
+    { id: 'demo-club', code: 'PH-7K2Q', name: 'Коворкинг «Точка»', city: 'Казань', address: 'ул. Баумана, 44', lat: 55.7887, lng: 49.1221, description: 'Стол на 3 этаже, играем в обед и после 18:00', visible: true, blocked: false, owner_id: 'demo-1', settings: {}, created_at: new Date(now - 80 * day).toISOString() },
+    { id: 'demo-club2', code: 'PH-3XM8', name: 'IT-Парк Пинг', city: 'Казань', address: 'ул. Петербургская, 52', lat: 55.7744, lng: 49.1426, description: '', visible: true, blocked: false, owner_id: 'demo-x1', settings: {}, created_at: new Date(now - 60 * day).toISOString() },
+    { id: 'demo-club3', code: 'PH-5RT1', name: 'СК «Ракетка»', city: 'Казань', address: 'пр. Победы, 78', lat: 55.7531, lng: 49.2163, description: '', visible: true, blocked: false, owner_id: 'demo-x3', settings: {}, created_at: new Date(now - 50 * day).toISOString() },
+  ];
+  const invites = { 'demo-club': 'K7Q2M9XA', 'demo-club2': 'P4W8N2TR', 'demo-club3': 'Z5H3L7QC' };
+  const club_members = [
+    { club_id: 'demo-club2', user_id: 'demo-x1', role: 'owner', status: 'active' }, { club_id: 'demo-club2', user_id: 'demo-x2', role: 'player', status: 'active' },
+    { club_id: 'demo-club3', user_id: 'demo-x3', role: 'owner', status: 'active' }, { club_id: 'demo-club3', user_id: 'demo-x2', role: 'player', status: 'active' },
+  ];
+  const xm = [];
+  for (let k = 0; k < 8; k++) { const a = k % 2 ? 'demo-x1' : 'demo-x2'; const m = makeMatch(a, a === 'demo-x1' ? 'demo-x2' : 'demo-x1', now - (20 - k) * day); m.club_id = 'demo-club2'; m.submitted_by = 'demo-x1'; xm.push(m); }
+  if (opts.legacy) {
+    // как до клубов: всё без клуба, основатель переносит сам
+    profiles.forEach(p => { if (!p.id.startsWith('demo-x')) p.legacy = true; });
+    return { users, profiles, matches: [...matches, ...xm], tournaments, events, challenges, audit: [], settings: { clubName: 'Коворкинг' }, clubs: clubs.slice(1), invites, club_members, platform: { migration_done: false }, session: null };
+  }
+  for (const r of [...matches, ...tournaments, ...events, ...challenges]) r.club_id = 'demo-club';
+  profiles.forEach(p => {
+    if (p.id.startsWith('demo-x')) return;
+    club_members.push({ club_id: 'demo-club', user_id: p.id, role: p.role === 'admin' ? 'owner' : p.role === 'editor' ? 'helper' : 'player', status: p.status === 'pending' ? 'pending' : 'active', initial_rating: p.initial_rating });
+  });
+  club_members.push({ club_id: 'demo-club2', user_id: 'demo-4', role: 'player', status: 'active' });
+  return { users, profiles, matches: [...matches, ...xm], tournaments, events, challenges, audit: [], settings: {}, clubs, invites, club_members, platform: { migration_done: true }, session: null };
 }
