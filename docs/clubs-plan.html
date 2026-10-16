@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>PongHub — платформа клубов</title>
+<style>
+@page { size: A4; margin: 14mm 13mm; }
+* { box-sizing: border-box; }
+body { font: 11pt/1.5 -apple-system, "Helvetica Neue", Arial, sans-serif; color: #0f2742; margin: 0; }
+h1 { font-size: 30pt; margin: 0 0 6pt; letter-spacing: -.5pt; }
+h2 { font-size: 18pt; margin: 0 0 8pt; color: #1c4f9c; border-bottom: 3px solid #e63946; padding-bottom: 4pt; }
+h3 { font-size: 13pt; margin: 12pt 0 5pt; }
+p { margin: 4pt 0; }
+.page { page-break-after: always; }
+.page:last-child { page-break-after: auto; }
+.muted { color: #5b7493; }
+.small { font-size: 9pt; }
+.cover { height: 260mm; display: flex; flex-direction: column; justify-content: center; background: linear-gradient(160deg, #3b7fd4, #1c4f9c); color: #fff; border-radius: 18px; padding: 30mm 18mm; border: 6px solid #fff; outline: 2px solid #1c4f9c; }
+.cover h1 { font-size: 40pt; }
+.cover .tag { display: inline-block; background: #c98a4b; color: #3b2410; padding: 3pt 10pt; border-radius: 12pt; font-weight: 700; font-size: 10pt; margin-bottom: 14pt; }
+.cover ul { font-size: 13pt; line-height: 1.8; }
+.box { border: 1px solid #c8d3e3; border-radius: 10px; padding: 9pt 11pt; margin: 6pt 0; background: #f6f9fe; break-inside: avoid; }
+.box.red { border-color: #e63946; background: #fff3f4; }
+.box.wood { border-color: #c98a4b; background: #fbf3e9; }
+.box.green { border-color: #12a061; background: #effaf4; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8pt; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8pt; }
+table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin: 6pt 0; break-inside: avoid; }
+th, td { border: 1px solid #c8d3e3; padding: 4pt 6pt; text-align: left; vertical-align: top; }
+th { background: #e9effa; }
+td.c, th.c { text-align: center; }
+.flow { display: flex; align-items: center; flex-wrap: wrap; gap: 4pt; margin: 6pt 0; }
+.st { border: 2px solid #1c4f9c; border-radius: 9px; padding: 5pt 8pt; background: #fff; font-size: 9.5pt; text-align: center; min-width: 26mm; }
+.st.r { border-color: #e63946; } .st.w { border-color: #c98a4b; } .st.g { border-color: #12a061; } .st.k { border-color: #16181d; background: #16181d; color: #fff; }
+.ar { font-size: 14pt; color: #5b7493; }
+.phone { width: 52mm; height: 98mm; border: 3px solid #16181d; border-radius: 14px; background: #e9effa; padding: 5pt; font-size: 7.5pt; overflow: hidden; display: flex; flex-direction: column; gap: 4pt; }
+.phones { display: flex; gap: 6mm; justify-content: space-between; margin: 6pt 0; break-inside: avoid; }
+.ph-cap { font-size: 8.5pt; text-align: center; margin-top: 3pt; width: 52mm; }
+.pc { background: #fff; border: 1px solid #c8d3e3; border-radius: 7px; padding: 4pt; }
+.pb { border-radius: 6px; padding: 4pt; text-align: center; font-weight: 700; }
+.red { background: #e63946; color: #fff; } .blue { background: #2c6ccb; color: #fff; } .blk { background: #16181d; color: #fff; } .wd { background: #c98a4b; color: #3b2410; }
+.row { display: flex; justify-content: space-between; align-items: center; gap: 4pt; }
+.lbl { font-size: 6.5pt; color: #5b7493; text-transform: uppercase; letter-spacing: .4pt; }
+.num { display: inline-flex; width: 18pt; height: 18pt; border-radius: 50%; background: #e63946; color: #fff; align-items: center; justify-content: center; font-weight: 700; font-size: 10pt; margin-right: 5pt; }
+.stage-head { display: flex; align-items: center; gap: 8pt; margin-bottom: 6pt; }
+.stage-head .big { font-size: 30pt; font-weight: 800; color: #e63946; line-height: 1; }
+.tbl-db td:first-child { font-family: Menlo, monospace; font-size: 8.5pt; white-space: nowrap; }
+.map { height: 50mm; border-radius: 10px; background: repeating-linear-gradient(45deg, #dbe9d4, #dbe9d4 6mm, #e5f0de 6mm, #e5f0de 12mm); position: relative; border: 1px solid #c8d3e3; overflow: hidden; }
+.road { position: absolute; background: #fff; }
+.pin { position: absolute; width: 16pt; height: 16pt; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: #e63946; border: 2px solid #fff; }
+.pin.b { background: #2c6ccb; }
+.pinlbl { position: absolute; background: #fff; border-radius: 6px; padding: 1pt 5pt; font-size: 7pt; font-weight: 700; border: 1px solid #c8d3e3; }
+.check li { list-style: none; margin-left: -14pt; }
+.check li::before { content: "✓ "; color: #12a061; font-weight: 700; }
+.todo li { list-style: none; margin-left: -14pt; }
+.todo li::before { content: "☐ "; color: #e63946; font-weight: 700; }
+.foot { font-size: 8pt; color: #5b7493; margin-top: 8pt; }
+</style></head><body>
+
+<!-- 1. Обложка -->
+<section class="page"><div class="cover">
+  <div><span class="tag">План развития · 16 октября 2026</span></div>
+  <h1>PongHub → платформа клубов</h1>
+  <p style="font-size:14pt;opacity:.9">Как одно приложение превращается в сеть отдельных клубов: каждый со своими людьми, рейтингом и правилами, плюс общая карта клубов.</p>
+  <ul>
+    <li>Что меняется и что остаётся</li>
+    <li>Роли и путь нового пользователя</li>
+    <li>4 этапа с макетами экранов</li>
+    <li>Перенос вашего коворкинга</li>
+    <li>Сроки, что нужно от вас, затраты</li>
+  </ul>
+  <p class="small" style="opacity:.8;margin-top:20pt">Документ для изучения. Ничего не создаётся до вашего согласия.</p>
+</div></section>
+
+<!-- 2. Было / станет -->
+<section class="page">
+<h2>1. Что меняется</h2>
+<div class="grid2">
+  <div class="box"><h3 style="margin-top:0">Сейчас</h3>
+    <p>Одно приложение = один клуб. Каждый, кто зарегистрировался, после вашего одобрения попадает в <b>общий рейтинг всех</b>.</p>
+    <div class="flow"><div class="st">Регистрация</div><span class="ar">→</span><div class="st w">Одобрение владельцем</div><span class="ar">→</span><div class="st">Единый клуб</div></div>
+    <p class="muted small">Если опубликовать в магазинах, туда начнут попадать незнакомые люди со всей страны.</p>
+  </div>
+  <div class="box green"><h3 style="margin-top:0">Станет</h3>
+    <p>Приложение = <b>платформа</b>. Внутри много закрытых клубов. Аккаунт один, клубов у человека сколько угодно.</p>
+    <div class="flow"><div class="st">Аккаунт</div><span class="ar">→</span><div class="st r">Свой клуб</div><span class="ar">или</span><div class="st">Вступить в клуб</div></div>
+    <p class="muted small">Каждая компания играет только со своими. Сверху — карта всех клубов.</p>
+  </div>
+</div>
+
+<h3>Что остаётся как есть</h3>
+<ul class="check">
+  <li>Все функции: матчи 1×1 и 2×2, живой счёт и «счёт в конце», турниры, вызовы, прогнозы и пинг-коины, сезоны, итоги недели, достижения, объявления, журнал, резервные копии.</li>
+  <li>Внешний вид, цвета, иконка.</li>
+  <li>Ваш коворкинг со всеми людьми, матчами и рейтингом — он станет клубом №1, людям ничего делать не нужно.</li>
+</ul>
+
+<h3>Что появляется</h3>
+<table>
+  <tr><th>Новое</th><th>Зачем</th></tr>
+  <tr><td>Создание клуба любым пользователем</td><td>Любая компания может завести свою зону за минуту</td></tr>
+  <tr><td>Приглашение по ссылке или коду</td><td>Владелец зовёт своих — они попадают в клуб сразу</td></tr>
+  <tr><td>Поиск клуба и заявка на вступление</td><td>Человек находит клуб по названию или ID, владелец одобряет</td></tr>
+  <tr><td>Переключатель клубов</td><td>Если человек в нескольких клубах (офис + городской)</td></tr>
+  <tr><td>Передача прав владельца</td><td>Если владелец уходит</td></tr>
+  <tr><td>Карта клубов и страница клуба</td><td>Видно, где играют, какие там игроки и рейтинги</td></tr>
+  <tr><td>Панель владельца платформы</td><td>Вы видите все клубы и можете убрать спам</td></tr>
+</table>
+</section>
+
+<!-- 3. Роли и путь -->
+<section class="page">
+<h2>2. Роли</h2>
+<p>Роль теперь своя <b>в каждом клубе</b>: в своём клубе человек владелец, в чужом — обычный игрок.</p>
+<table>
+  <tr><th></th><th class="c">Владелец платформы<br><span class="muted small">(вы)</span></th><th class="c">Владелец клуба</th><th class="c">Помощник клуба</th><th class="c">Игрок клуба</th></tr>
+  <tr><td>Видеть все клубы, блокировать спам</td><td class="c">✅</td><td class="c">—</td><td class="c">—</td><td class="c">—</td></tr>
+  <tr><td>Принимать заявки, приглашать</td><td class="c">в своих клубах</td><td class="c">✅</td><td class="c">—</td><td class="c">—</td></tr>
+  <tr><td>Подтверждать, править, удалять матчи</td><td class="c">в своих клубах</td><td class="c">✅</td><td class="c">—</td><td class="c">—</td></tr>
+  <tr><td>Турниры, календарь, объявления</td><td class="c">в своих клубах</td><td class="c">✅</td><td class="c">—</td><td class="c">—</td></tr>
+  <tr><td>Журнал, настройки рейтинга, тест</td><td class="c">в своих клубах</td><td class="c">✅</td><td class="c">—</td><td class="c">—</td></tr>
+  <tr><td>Назначать помощников, передать владение</td><td class="c">в своих клубах</td><td class="c">✅</td><td class="c">—</td><td class="c">—</td></tr>
+  <tr><td>Внести результат своего матча</td><td class="c">✅ сразу</td><td class="c">✅ сразу</td><td class="c">✅ сразу</td><td class="c">⏳ на подтверждение</td></tr>
+  <tr><td>Прогнозы, вызовы, живой счёт, рейтинг</td><td class="c">✅</td><td class="c">✅</td><td class="c">✅</td><td class="c">✅</td></tr>
+</table>
+
+<h2 style="margin-top:14pt">3. Путь нового пользователя</h2>
+<div class="flow">
+  <div class="st k">Скачал / открыл ссылку</div><span class="ar">→</span>
+  <div class="st">Регистрация<br><span class="small muted">ник, имя, почта, пароль</span></div><span class="ar">→</span>
+  <div class="st">Экран «Выберите клуб»</div>
+</div>
+<div class="grid3">
+  <div class="box red"><b>А. Создать клуб</b>
+    <div class="flow"><div class="st r">Название, город, точка на карте</div><span class="ar">→</span><div class="st w">Он владелец</div></div>
+    <p class="small">Сразу получает ссылку и код-приглашение для своих.</p></div>
+  <div class="box"><b>Б. По приглашению</b>
+    <div class="flow"><div class="st">Ссылка или код PH-7K2Q</div><span class="ar">→</span><div class="st g">Сразу в клубе</div></div>
+    <p class="small">Раз владелец сам дал ссылку — одобрение не нужно.</p></div>
+  <div class="box"><b>В. Найти и попроситься</b>
+    <div class="flow"><div class="st">Поиск: название / ID / карта</div><span class="ar">→</span><div class="st w">Заявка</div><span class="ar">→</span><div class="st g">Одобрил владелец</div></div>
+    <p class="small">Пока ждёт — видит экран «Заявка отправлена».</p></div>
+</div>
+<p class="small muted">Вступить можно в любое количество клубов — в каждый своим путём Б или В. Отдельно вступать в «платформу» не нужно: аккаунт работает сразу.</p>
+</section>
+
+<!-- 4. Этап 1 -->
+<section class="page">
+<div class="stage-head"><span class="big">1</span><div><h2 style="border:0;margin:0;padding:0">Этап 1. База данных и перенос</h2><span class="muted">Фундамент. Внешне почти ничего не меняется — но это самая ответственная часть.</span></div></div>
+
+<h3>Новые таблицы</h3>
+<table class="tbl-db">
+  <tr><th>Таблица</th><th>Что хранит</th></tr>
+  <tr><td>clubs</td><td>Название, код-ID (например PH-7K2Q), город, адрес, координаты на карте, описание, логотип, виден ли на карте, владелец</td></tr>
+  <tr><td>club_members</td><td>Кто в каком клубе, роль (владелец / помощник / игрок), статус (заявка / принят / отклонён / в архиве), стартовый рейтинг в этом клубе</td></tr>
+  <tr><td>club_invites</td><td>Ссылки и коды-приглашения: кто создал, срок, сколько раз можно использовать</td></tr>
+</table>
+
+<h3>Что меняется в существующих данных</h3>
+<p>Ко всем матчам, турнирам, событиям, вызовам, живым играм, объявлениям, прогнозам, пинг-коинам, журналу и настройкам рейтинга добавляется отметка <b>«в каком клубе»</b>. Настройки рейтинга (лиговая система, веса, бонусы) становятся <b>своими у каждого клуба</b>.</p>
+
+<h3>Защита данных — главное на этом этапе</h3>
+<div class="box red">
+  <p>Правила в самой базе гарантируют: <b>участник видит только свои клубы</b>, владелец клуба управляет <b>только своим</b>. Даже если обойти приложение, чужой клуб недоступен.</p>
+  <p class="small">Публично (на карте и странице клуба) видно только: название, город, точку на карте, ники игроков, их места и рейтинг, число игр. Почта и личные данные — никогда.</p>
+</div>
+
+<h3>Перенос вашего коворкинга (клуб №1)</h3>
+<div class="flow">
+  <div class="st">Резервная копия всей базы</div><span class="ar">→</span>
+  <div class="st">Создаётся клуб №1, владелец — вы</div><span class="ar">→</span>
+  <div class="st">Все 11 участников становятся его членами с прежними ролями</div><span class="ar">→</span>
+  <div class="st">Все матчи, турниры, коины переходят в клуб №1</div><span class="ar">→</span>
+  <div class="st g">Проверка: рейтинги совпадают до сотых</div>
+</div>
+
+<h3>Как проверяю</h3>
+<ul class="check">
+  <li>Рейтинг и баланс каждого игрока до и после переноса совпадают.</li>
+  <li>Тестовый второй клуб: его участники не видят ни одного матча клуба №1, и наоборот.</li>
+  <li>Попытки «взломать» через базу от имени чужого игрока отклоняются.</li>
+  <li>Уведомления приходят только участникам своего клуба.</li>
+</ul>
+<p class="foot">Срок: 2–3 вечера. От вас: ничего, кроме согласия. Для пользователей — переход незаметен.</p>
+</section>
+
+<!-- 5. Этап 2 -->
+<section class="page">
+<div class="stage-head"><span class="big">2</span><div><h2 style="border:0;margin:0;padding:0">Этап 2. Клубы в приложении</h2><span class="muted">Новые экраны: создать клуб, вступить, переключиться, пригласить, передать владение.</span></div></div>
+<div class="phones">
+  <div><div class="phone">
+    <b style="text-align:center;font-size:9pt;margin-top:3pt">Выберите клуб</b>
+    <div class="pc"><div class="lbl">У меня есть приглашение</div><div style="background:#e9effa;border-radius:5px;padding:3pt;text-align:center;letter-spacing:1.5pt;margin:3pt 0">PH-7K2Q</div><div class="pb red">Вступить</div></div>
+    <div class="pc"><div class="lbl">Найти клуб</div><div style="border:1px solid #c8d3e3;border-radius:5px;padding:3pt;margin:3pt 0;color:#5b7493">🔍 Название или ID</div>
+      <div class="row"><span><b>IT-Парк Пинг</b><br><span class="muted">Казань · 51</span></span><span class="pb" style="background:#e9effa;color:#1c4f9c;padding:2pt 4pt">заявка</span></div></div>
+    <div class="pb" style="border:1px solid #c8d3e3;background:#fff">🗺 Клубы на карте</div>
+    <div class="pb wd">+ Создать свой клуб</div>
+  </div><div class="ph-cap">Новый пользователь без клуба</div></div>
+
+  <div><div class="phone">
+    <b style="font-size:9pt">Новый клуб</b>
+    <div class="pc"><div class="lbl">Название</div>Коворкинг «Точка»</div>
+    <div class="pc"><div class="lbl">Город</div>Казань</div>
+    <div class="pc" style="padding:2pt"><div class="lbl" style="padding:2pt">Где играете — нажмите на карту</div>
+      <div class="map" style="height:28mm"><div class="road" style="left:0;right:0;top:45%;height:5pt"></div><div class="road" style="top:0;bottom:0;left:40%;width:5pt"></div><div class="pin" style="left:43%;top:30%"></div></div></div>
+    <div class="pc"><div class="lbl">Показывать на карте</div>✅ Да</div>
+    <div class="pb red">Создать клуб</div>
+  </div><div class="ph-cap">Создание клуба</div></div>
+
+  <div><div class="phone">
+    <div class="row pc"><span><b>Коворкинг «Точка»</b> ▾</span><span class="pb wd" style="padding:1pt 4pt">владелец</span></div>
+    <div class="pc"><div class="lbl">Мои клубы</div>✔ Коворкинг «Точка»<br>&nbsp;&nbsp; Сборная Казани<br><span style="color:#e63946">+ Создать / вступить</span></div>
+    <div class="pc"><div class="lbl">Пригласить своих</div><div class="row"><span>ponghub.app/j/PH-7K2Q</span><span class="pb red" style="padding:1pt 4pt">↗</span></div><div class="muted">Код: PH-7K2Q · QR-код для стенда</div></div>
+    <div class="pc"><div class="lbl">Заявки в клуб · 2</div><div class="row"><span>Олег</span><span><span class="pb red" style="padding:1pt 4pt">✓</span> <span class="pb" style="border:1px solid #c8d3e3;padding:1pt 4pt">✕</span></span></div></div>
+  </div><div class="ph-cap">Переключатель, приглашения, заявки</div></div>
+</div>
+
+<h3>Передача владения</h3>
+<div class="flow"><div class="st w">Управление → Игроки</div><span class="ar">→</span><div class="st">«Передать владение» у участника</div><span class="ar">→</span><div class="st">Подтверждение паролем-фразой</div><span class="ar">→</span><div class="st g">Новый владелец; вы становитесь помощником или игроком</div></div>
+
+<h3>Что ещё меняется в приложении</h3>
+<ul class="check">
+  <li>Все экраны (главная, рейтинг, матчи, турниры, прогнозы, сезоны) показывают данные выбранного клуба.</li>
+  <li>Пинг-коины — отдельный счёт в каждом клубе.</li>
+  <li>Уведомления подписаны клубом: «Коворкинг «Точка»: Матч засчитан…».</li>
+  <li>Окно «Что нового» расскажет всем про клубы.</li>
+</ul>
+<p class="foot">Срок: 1–2 вечера. От вас: проверить на телефоне, создать тестовый второй клуб и пригласить кого-нибудь.</p>
+</section>
+
+<!-- 6. Этап 3 -->
+<section class="page">
+<div class="stage-head"><span class="big">3</span><div><h2 style="border:0;margin:0;padding:0">Этап 3. Карта клубов и страница клуба</h2><span class="muted">Общая витрина: кто, где и как играет.</span></div></div>
+<div class="map" style="height:70mm">
+  <div class="road" style="left:0;right:0;top:40%;height:8pt"></div><div class="road" style="top:0;bottom:0;left:30%;width:8pt"></div><div class="road" style="top:0;bottom:0;left:70%;width:6pt"></div><div class="road" style="left:0;right:0;top:75%;height:5pt"></div>
+  <div class="pin" style="left:24%;top:22%"></div><div class="pinlbl" style="left:28%;top:18%">IT-Парк Пинг · 51</div>
+  <div class="pin b" style="left:55%;top:50%"></div><div class="pinlbl" style="left:59%;top:46%">Коворкинг «Точка» · 24</div>
+  <div class="pin" style="left:76%;top:20%"></div><div class="pinlbl" style="left:62%;top:8%">Офис Яндекса · 18</div>
+  <div class="pin" style="left:12%;top:62%"></div><div class="pinlbl" style="left:16%;top:58%">СК «Ракетка» · 33</div>
+</div>
+<p class="small muted">Настоящая карта (OpenStreetMap — бесплатно), можно двигать и приближать. Фильтр по городу, поиск по названию и ID.</p>
+
+<div class="grid2" style="margin-top:6pt">
+<div class="phones" style="justify-content:flex-start"><div><div class="phone">
+  <div class="pc" style="background:#2c6ccb;color:#fff;border:2px solid #fff"><b style="font-size:9pt">IT-Парк Пинг</b><br>Казань, ул. Петербургская 52<br><span style="opacity:.85">51 игрок · 1 240 матчей · с марта 2026</span></div>
+  <div class="pb red">Подать заявку</div>
+  <div class="pc"><div class="lbl">Рейтинг клуба</div>
+    <div class="row"><span>🥇 Gilm</span><b>69.8</b></div><div class="row"><span>🥈 Arsen</span><b>66.1</b></div><div class="row"><span>🥉 Liya</span><b>63.0</b></div><div class="row"><span>4 · Timur</span><b>61.4</b></div></div>
+  <div class="pc"><div class="lbl">Последние турниры</div>Осенний кубок · 🥇 Gilm</div>
+</div><div class="ph-cap">Страница клуба (для всех, только просмотр)</div></div></div>
+<div>
+  <h3 style="margin-top:0">Что видно на странице клуба</h3>
+  <ul class="check">
+    <li>Название, город, адрес, описание, логотип</li>
+    <li>Сколько игроков и матчей, с какого времени играют</li>
+    <li>Таблица рейтинга: ники, места, рейтинг, число игр</li>
+    <li>Результаты турниров</li>
+    <li>Кнопка «Подать заявку»</li>
+  </ul>
+  <h3>Что НЕ видно</h3>
+  <ul class="todo"><li>Почта, имена-фамилии, фото (по желанию клуба)</li><li>Матчи по отдельности, прогнозы, коины, объявления</li></ul>
+  <div class="box wood small">Владелец клуба может скрыть клуб с карты — тогда в него попадают только по приглашению.</div>
+</div>
+</div>
+<p class="foot">Срок: 1 вечер. От вас: ничего; по желанию — описание и логотип своего клуба.</p>
+</section>
+
+<!-- 7. Этап 4 и сроки -->
+<section class="page">
+<div class="stage-head"><span class="big">4</span><div><h2 style="border:0;margin:0;padding:0">Этап 4. Панель владельца платформы</h2><span class="muted">Только для вас: порядок во всей сети клубов.</span></div></div>
+<table>
+  <tr><th>Раздел</th><th>Что можно</th></tr>
+  <tr><td>Все клубы</td><td>Список с числом участников и активностью, переход в любой клуб для просмотра</td></tr>
+  <tr><td>Модерация</td><td>Скрыть клуб с карты, заблокировать клуб или пользователя (спам, фейки, оскорбительные названия)</td></tr>
+  <tr><td>Статистика платформы</td><td>Сколько клубов, игроков, матчей; рост по неделям</td></tr>
+  <tr><td>Объявление всем клубам</td><td>Например, о новой версии приложения</td></tr>
+</table>
+<p class="foot">Срок: 1 вечер.</p>
+
+<h2 style="margin-top:12pt">Сроки и порядок</h2>
+<table>
+  <tr><th>Этап</th><th>Что получится</th><th>Срок</th><th>От вас</th></tr>
+  <tr><td>0. Ваше «добро»</td><td>—</td><td>—</td><td>Изучить этот план, поправить</td></tr>
+  <tr><td>1. База и перенос</td><td>Клубы в базе, коворкинг — клуб №1, защита</td><td>2–3 вечера</td><td>—</td></tr>
+  <tr><td>2. Клубы в приложении</td><td>Создание, приглашения, заявки, переключатель, передача</td><td>1–2 вечера</td><td>Проверить на телефоне</td></tr>
+  <tr><td>3. Карта и страницы</td><td>Карта клубов, публичные страницы</td><td>1 вечер</td><td>—</td></tr>
+  <tr><td>4. Панель платформы</td><td>Модерация, статистика</td><td>1 вечер</td><td>—</td></tr>
+  <tr><td>Дальше</td><td>Магазины (RuStore, GetApps), подписка для клубов</td><td>по решению</td><td>Аккаунты разработчика</td></tr>
+</table>
+<p class="small muted">«Вечер» — одна рабочая сессия со мной. Этапы выкладываются по очереди, после каждого приложение остаётся рабочим.</p>
+
+<h2 style="margin-top:12pt">Затраты</h2>
+<div class="grid2">
+  <div class="box green"><b>Сейчас и на старте — 0 ₽</b><p class="small">Supabase, Vercel, GitHub на бесплатных тарифах. Карта OpenStreetMap — бесплатно.</p></div>
+  <div class="box wood"><b>Когда клубов станет много</b><p class="small">Supabase Pro ≈ $25/мес (≈ тысячи активных игроков). Vercel Pro ≈ $20/мес — если будет платная подписка. Или всё на хостинге компании.</p></div>
+</div>
+
+<h2 style="margin-top:12pt">Решения, которые я принял сам — проверьте</h2>
+<div class="box">
+  <p><span class="num">1</span>Приглашение по ссылке или коду пускает в клуб <b>сразу</b>, без отдельного одобрения.</p>
+  <p><span class="num">2</span>Пинг-коины и прогнозы — <b>отдельные в каждом клубе</b>.</p>
+  <p><span class="num">3</span>Страницу клуба на карте видят только <b>зарегистрированные</b> пользователи; только ник, рейтинг, число игр.</p>
+</div>
+<p class="foot">Готовый план с вашими решениями хранится в проекте: docs/clubs-plan.md. Работа начнётся только после вашего «начинай клубы».</p>
+</section>
+</body></html>
