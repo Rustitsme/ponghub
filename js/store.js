@@ -252,7 +252,25 @@ class SupaStore {
   async adminEmails() {
     const { data, error } = await this.sb.rpc('admin_emails');
     if (error) return new Map();
-    return new Map((data || []).map(r => [r.id, r.email]));
+    return new Map((data || []).map(r => [r.id, r.email?.endsWith('@telegram.ponghub.app') ? 'вход через Telegram' : r.email]));
+  }
+
+  // ── Telegram ──
+  async tgCall(body) {
+    const { data, error } = await this.sb.functions.invoke('tg', { body });
+    if (error) {
+      let msg = 'Вход через Telegram сейчас недоступен';
+      try { const j = await error.context?.json(); if (j?.error) msg = j.error; } catch { /* */ }
+      throw new Error(msg);
+    }
+    return data;
+  }
+  tgStart(purpose) { return this.tgCall({ action: 'start', purpose }); }
+  tgPoll(token) { return this.tgCall({ action: 'poll', token }); }
+  tgUnlink() { return this.tgCall({ action: 'unlink' }); }
+  async tgSignIn(tokenHash) {
+    const { error } = await this.sb.auth.verifyOtp({ token_hash: tokenHash, type: 'magiclink' });
+    if (error) throw translateError(error);
   }
 
   // ── клубы ──
@@ -369,6 +387,11 @@ class LocalStore {
   async resetPassword() { throw new Error('В демо-режиме восстановление пароля недоступно'); }
   async updatePassword(pw) { const u = this.db.users.find(x => x.id === this.db.session); if (u) u.password = pw; this.save(); }
   async nicknameAvailable(n) { return !this.db.profiles.some(p => p.nickname.toLowerCase() === n.trim().toLowerCase()); }
+
+  async tgStart() { throw new Error('Вход через Telegram работает только с подключённой базой'); }
+  async tgPoll() { return { status: 'expired' }; }
+  async tgUnlink() {}
+  async tgSignIn() {}
 
   // ── клубы (упрощённая копия серверной логики) ──
   mem(cid, uid) { return this.db.club_members.find(m => m.club_id === cid && m.user_id === uid); }

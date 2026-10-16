@@ -35,7 +35,10 @@ function ava(p, cls = '') {
   return `<span class="ava ${cls}" style="--c:${esc(p.color || '#e63946')}">${inner}</span>`;
 }
 function leagueBadge(r) { const l = leagueOf(r); return `<span class="league ${l.cls}">${l.name}</span>`; }
-function roleBadge(p) { return p.role === 'admin' ? '<span class="role-badge owner">👑 Владелец</span>' : p.role === 'editor' ? '<span class="role-badge">✍️ Помощник</span>' : ''; }
+function roleBadge(p) {
+  const club = p.role === 'admin' ? '<span class="role-badge owner">👑 Владелец</span>' : p.role === 'editor' ? '<span class="role-badge">✍️ Помощник</span>' : '';
+  return (p.is_founder ? '<span class="role-badge creator">⭐ Создатель PongHub</span>' : '') + club;
+}
 function delta(d, cls = '') { if (d == null || Math.abs(d) < 0.005) return `<span class="delta zero ${cls}">0.00</span>`; return `<span class="delta ${d > 0 ? 'up' : 'down'} ${cls}">${fmtD(d)}</span>`; }
 
 function toast(msg, type = 'ok') {
@@ -289,7 +292,9 @@ function authView(r) {
         <button class="btn" data-act="demo-as" data-id="demo-9">⏳ Новичок</button>
       </div>
     </div>` : '';
-  return `<div class="auth-wrap">${head}<div class="auth-card">${form}</div>${demoBox}</div>${iosInstallHint(true)}`;
+  const tgBox = mode === 'forgot' ? '' : `<div class="auth-or"><span>или</span></div>
+    <button class="btn tg-btn big full" data-act="tg-login">${TG_ICON} ${mode === 'register' ? 'Зарегистрироваться через Telegram' : 'Войти через Telegram'}</button>`;
+  return `<div class="auth-wrap">${head}<div class="auth-card">${form}${tgBox}</div>${demoBox}</div>${iosInstallHint(true)}`;
 }
 
 function recoveryView() {
@@ -1377,6 +1382,8 @@ function viewMe() {
   </section>
   <section class="card menu">
     <button class="menu-item" data-act="edit-profile">✏️ <span>Редактировать профиль</span></button>
+    ${S.ctx?.me?.telegram_id ? `<button class="menu-item" data-act="tg-unlink">${TG_ICON} <span>Telegram привязан${S.ctx.me.telegram_username ? ' · @' + esc(S.ctx.me.telegram_username) : ''}</span><small class="muted">отвязать</small></button>`
+      : `<button class="menu-item" data-act="tg-link">${TG_ICON} <span>Привязать Telegram</span><small class="muted">вход в одно касание</small></button>`}
     ${predOn() ? '<a class="menu-item" href="#/predict">🎯 <span>Прогнозы</span></a>' : ''}
     <a class="menu-item" href="#/help">❓ <span>Как пользоваться</span></a>
     ${isAdmin() ? '<a class="menu-item" href="#/rules">📐 <span>Как считается рейтинг</span></a>' : ''}
@@ -1433,14 +1440,14 @@ async function makeMap(el, center, zoom) {
 }
 const pinIcon = (mine = false) => window.L.divIcon({ className: 'club-pin' + (mine ? ' mine' : ''), html: '<span><i>🏓</i></span>', iconSize: [34, 34], iconAnchor: [17, 34], popupAnchor: [0, -30] });
 
-// каркас для экранов вне клуба (выбор клуба, карта, страница клуба, панель основателя)
+// каркас для экранов вне клуба (выбор клуба, карта, страница клуба, панель создателя)
 function bare(body, back = S.club ? '#/home' : '') {
   return `<header class="top"><a href="${S.club ? '#/home' : '#/clubs'}" class="brand"><img src="${logo()}" alt="" width="30" height="30"><span>PongHub</span></a>
     <div class="top-actions">${S.store.mode === 'demo' ? '<span class="demo-pill">ДЕМО</span>' : ''}${back ? `<a href="${back}" class="btn ghost sm">← ${back === '#/home' ? 'В клуб' : 'Назад'}</a>` : ''}</div></header>
     <main class="page">${body}</main>`;
 }
 
-// пока основатель переносит клуб — для тех, кто был в PongHub до клубов
+// пока создатель переносит клуб — для тех, кто был в PongHub до клубов
 function waitView() {
   return `<div class="auth-wrap"><div class="auth-card center">
     <div class="gate-emoji">🔄</div><h2>PongHub обновляется</h2>
@@ -1695,9 +1702,9 @@ async function openInvite(code) {
   } catch (e) { toast(e.message, 'err'); location.replace(S.club ? '#/home' : '#/clubs'); }
 }
 
-// ── панель основателя ──
+// ── панель создателя PongHub ──
 function viewFounder() {
-  if (!isFounder()) return bare('<div class="empty">Раздел только для основателя PongHub</div>');
+  if (!isFounder()) return bare('<div class="empty">Раздел только для создателя PongHub</div>');
   return bare(`<div class="page-h"><h1>Платформа PongHub</h1></div><div id="founder-box"><div class="empty">Загружаю…</div></div>`);
 }
 async function renderFounder() {
@@ -1757,9 +1764,48 @@ async function copyText(text) {
   catch { window.prompt('Скопируйте:', text); }
 }
 
+// ── вход и привязка через Telegram ──
+const TG_ICON = '<svg class="ic tg-ic" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21.9 4.3 18.7 19.4c-.2 1-.9 1.3-1.7.8l-4.8-3.5-2.3 2.2c-.3.3-.5.5-1 .5l.3-4.9 8.9-8c.4-.3-.1-.5-.6-.2L6.5 13.2 1.8 11.7c-1-.3-1-1 .2-1.5L20.6 3c.9-.3 1.6.2 1.3 1.3z"/></svg>';
+let tgTimer = null;
+async function tgFlow(purpose) {
+  let st;
+  try { st = await S.store.tgStart(purpose); } catch (e) { toast(e.message, 'err'); return; }
+  const link = purpose === 'link';
+  openModal(`<div class="tg-flow center">
+      <div class="gate-emoji">✈️</div><h3>${link ? 'Привязать Telegram' : 'Вход через Telegram'}</h3>
+      <ol class="tg-steps"><li>Нажмите кнопку — откроется бот <b>@${esc(st.bot)}</b></li><li>В Telegram нажмите <b>«Старт»</b>, затем <b>«${link ? 'Да, привязать' : 'Да, войти'}»</b></li><li>Вернитесь сюда — ${link ? 'Telegram привяжется' : 'вход выполнится'} сам</li></ol>
+      <a class="btn tg-btn big full" href="${esc(st.url)}" target="_blank" rel="noopener">${TG_ICON} Открыть Telegram</a>
+      <p class="muted small" id="tg-status"><span class="spin"></span> Ждём подтверждения в Telegram…</p>
+    </div>`);
+  const stop = () => { clearInterval(tgTimer); tgTimer = null; document.removeEventListener('visibilitychange', check); };
+  let busyPoll = false;
+  async function check() {
+    if (busyPoll || document.hidden) return;
+    if (!$modal.classList.contains('open') || !document.getElementById('tg-status')) return stop();
+    busyPoll = true;
+    try {
+      const r = await S.store.tgPoll(st.token);
+      const box = document.getElementById('tg-status');
+      if (r.status === 'ok') { stop(); box.textContent = 'Входим…'; await S.store.tgSignIn(r.token_hash); closeModal(); toast('Вы вошли через Telegram ✈️'); }
+      else if (r.status === 'linked') { stop(); closeModal(); await refresh(); toast('Telegram привязан ✈️'); }
+      else if (['expired', 'missing', 'used'].includes(r.status)) { stop(); box.textContent = 'Время вышло. Закройте окно и попробуйте снова.'; }
+      else if (r.status === 'failed') { stop(); box.textContent = r.error || 'Не получилось. Попробуйте снова.'; }
+    } catch (e) { /* связь пропала — попробуем ещё раз */ } finally { busyPoll = false; }
+  }
+  clearInterval(tgTimer);
+  tgTimer = setInterval(check, 2000);
+  document.addEventListener('visibilitychange', check);
+}
+
 const CLUB_FREE = { clubs: viewClubs, club: viewClubPage, map: viewMap, newclub: viewNewClub, join: viewJoin, founder: viewFounder };
 
 const CLUB_ACT = {
+  'tg-login': () => tgFlow('login'),
+  'tg-link': () => tgFlow('link'),
+  'tg-unlink': async el => {
+    if (!(await confirmDialog('Отвязать Telegram? Входить можно будет только по почте и паролю.', 'Отвязать'))) return;
+    await busy(el, async () => { await S.store.tgUnlink(); await refresh(); toast('Telegram отвязан'); });
+  },
   'club-menu': () => openClubMenu(),
   'switch-club': el => switchClub(el.dataset.id),
   'request-join': el => busy(el, async () => { await S.store.requestJoin(el.dataset.id, el.dataset.code || null); S.ctx = await S.store.loadContext(); toast('Заявка отправлена — клуб рассмотрит её'); render(); }),

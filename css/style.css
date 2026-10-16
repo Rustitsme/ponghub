@@ -781,3 +781,14 @@ form[data-sys="league"] .only-elo, form[data-sys="elo"] .only-league { display: 
   .poster-code { font: 700 28pt ui-monospace, Menlo, monospace; letter-spacing: 6pt; }
 }
 #club-page > * + *, #founder-box > * + *, #invite-box > * + * { margin-top: 14px; }
+.role-badge.creator, .me-card .role-badge.creator { background: linear-gradient(135deg, #ffe08a, #f4b400); color: #3b2a00; }
+
+/* ── Telegram ── */
+.tg-btn { background: #2aabee; color: #fff; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.tg-btn:hover { background: #229ed9; }
+.tg-ic { width: 20px; height: 20px; }
+.menu-item .tg-ic { color: #2aabee; }
+.auth-or { display: flex; align-items: center; gap: 10px; margin: 14px 0 10px; color: var(--muted); font-size: 13px; }
+.auth-or::before, .auth-or::after { content: ''; flex: 1; border-top: 1px solid var(--line); }
+.tg-steps { text-align: left; padding-left: 20px; margin: 10px 0 16px; line-height: 1.6; }
+.tg-flow #tg-status { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 12px; }
