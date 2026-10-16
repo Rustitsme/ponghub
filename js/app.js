@@ -35,9 +35,12 @@ function ava(p, cls = '') {
   return `<span class="ava ${cls}" style="--c:${esc(p.color || '#e63946')}">${inner}</span>`;
 }
 function leagueBadge(r) { const l = leagueOf(r); return `<span class="league ${l.cls}">${l.name}</span>`; }
+// ⭐ — создатель PongHub (рядом с короной владельца, без лишних подписей)
 function roleBadge(p) {
-  const club = p.role === 'admin' ? '<span class="role-badge owner">👑 Владелец</span>' : p.role === 'editor' ? '<span class="role-badge">✍️ Помощник</span>' : '';
-  return (p.is_founder ? '<span class="role-badge creator">⭐ Создатель PongHub</span>' : '') + club;
+  const star = p.is_founder ? '<span class="creator-star" title="Создатель PongHub">⭐</span>' : '';
+  if (p.role === 'admin') return `<span class="role-badge owner">👑${star} Владелец</span>`;
+  if (p.role === 'editor') return `<span class="role-badge">✍️${star} Помощник</span>`;
+  return star ? `<span class="role-badge owner">${star}</span>` : '';
 }
 function delta(d, cls = '') { if (d == null || Math.abs(d) < 0.005) return `<span class="delta zero ${cls}">0.00</span>`; return `<span class="delta ${d > 0 ? 'up' : 'down'} ${cls}">${fmtD(d)}</span>`; }
 
@@ -1425,20 +1428,59 @@ function loadCss(href) {
   if (document.querySelector(`link[href="${href}"]`)) return;
   const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = href; document.head.appendChild(l);
 }
-async function leaflet() {
-  loadCss('https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css');
-  await loadScript('https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js');
-  return window.L;
+// Карта: открытая карта OpenStreetMap (сервис OpenFreeMap, без ключей и лимитов), показ — MapLibre.
+// Снаружи простой интерфейс: setView, pin, onClick, fit. Координаты — [широта, долгота].
+const MAP_STYLE = 'https://tiles.openfreemap.org/styles/liberty';
+async function maplibre() {
+  loadCss('https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css');
+  await loadScript('https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js');
+  return window.maplibregl;
 }
 async function makeMap(el, center, zoom) {
-  const L = await leaflet();
+  const ml = await maplibre();
   if (!el.isConnected) return null;
-  const map = L.map(el, { zoomControl: true, attributionControl: true }).setView(center, zoom);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
-  setTimeout(() => map.invalidateSize(), 60);
-  return map;
+  const ll2 = ll => [+ll[1], +ll[0]];
+  const map = new ml.Map({ container: el, style: MAP_STYLE, center: ll2(center), zoom, attributionControl: { compact: true }, cooperativeGestures: false });
+  map.addControl(new ml.NavigationControl({ showCompass: false }), 'top-left');
+  // подпись карты — свёрнутым значком «i»
+  map.once('load', () => el.querySelector('.maplibregl-ctrl-attrib')?.classList.remove('maplibregl-compact-show'));
+  // подписи на карте — по-русски, где есть русское название
+  map.on('styledata', () => {
+    for (const l of map.getStyle()?.layers || []) {
+      if (l.type === 'symbol' && l.layout?.['text-field'] && !l._ru) {
+        try { map.setLayoutProperty(l.id, 'text-field', ['coalesce', ['get', 'name:ru'], ['get', 'name']]); l._ru = 1; } catch { /* */ }
+      }
+    }
+  });
+  return {
+    setView: (ll, z) => map.jumpTo({ center: ll2(ll), zoom: z ?? map.getZoom() }),
+    pin(ll, o = {}) {
+      const div = document.createElement('div');
+      div.className = 'club-pin' + (o.mine ? ' mine' : '');
+      div.innerHTML = '<span><i>🏓</i></span>';
+      const m = new ml.Marker({ element: div, draggable: !!o.draggable, anchor: 'bottom' }).setLngLat(ll2(ll)).addTo(map);
+      if (o.popup) m.setPopup(new ml.Popup({ offset: 30, closeButton: false }).setHTML(o.popup));
+      if (o.onDrag) m.on('dragend', () => { const p = m.getLngLat(); o.onDrag([p.lat, p.lng]); });
+      return { move: p => m.setLngLat(ll2(p)), open: () => { if (!m.getPopup()?.isOpen()) m.togglePopup(); } };
+    },
+    onClick: cb => map.on('click', e => cb([e.lngLat.lat, e.lngLat.lng])),
+    fit: lls => { const b = new ml.LngLatBounds(); lls.forEach(ll => b.extend(ll2(ll))); map.fitBounds(b, { padding: 40, maxZoom: 14, duration: 0 }); },
+  };
 }
-const pinIcon = (mine = false) => window.L.divIcon({ className: 'club-pin' + (mine ? ' mine' : ''), html: '<span><i>🏓</i></span>', iconSize: [34, 34], iconAnchor: [17, 34], popupAnchor: [0, -30] });
+
+// Подсказки адреса — Photon (открытая база OpenStreetMap, бесплатно)
+async function addrSuggest(q) {
+  const res = await fetch(`https://photon.komoot.io/api/?limit=6&lat=${KAZAN[0]}&lon=${KAZAN[1]}&q=${encodeURIComponent(q)}`);
+  const seen = new Set();
+  return ((await res.json()).features || []).map(f => {
+    const p = f.properties || {};
+    const city = p.city || p.town || p.village || p.state || '';
+    const street = p.street ? [p.street, p.housenumber].filter(Boolean).join(', ') : (p.name || '');
+    const place = p.street && p.name && p.osm_key !== 'building' && p.osm_key !== 'place' ? ` (${p.name})` : '';
+    return { title: [street + place, city].filter(Boolean).join(' · '), lat: f.geometry.coordinates[1], lng: f.geometry.coordinates[0], city, address: street };
+  }).filter(x => x.title && !seen.has(x.title) && seen.add(x.title));
+}
+async function addrResolve(it) { return it; }
 
 // каркас для экранов вне клуба (выбор клуба, карта, страница клуба, панель создателя)
 function bare(body, back = S.club ? '#/home' : '') {
@@ -1475,7 +1517,7 @@ function viewClubs() {
       <label>Код приглашения<input name="code" required minlength="6" maxlength="20" placeholder="Например, K7Q2M9XA" autocapitalize="characters" autocomplete="off"></label>
       <button class="btn primary">Найти клуб</button></form>
     <section class="card"><div class="card-h"><h3>🔍&nbsp; Найти клуб</h3></div>
-      <input type="search" data-input="dir-search" placeholder="Название, город или ID клуба (PH-…)" autocomplete="off">
+      <input type="search" data-input="dir-search" placeholder="Город, адрес, название или ID клуба" autocomplete="off">
       <div id="dir-box" class="dir-box"><div class="muted small">Загружаю…</div></div></section>
     <div class="row-btns"><a class="btn" href="#/map">🗺 Клубы на карте</a><a class="btn primary" href="#/newclub">＋ Создать клуб</a></div>
     ${isFounder() ? '<a class="card menu-item" href="#/founder">🛡 <span>Платформа PongHub</span><span>→</span></a>' : ''}
@@ -1494,6 +1536,8 @@ let dirTimer;
 async function renderDirectory(q = '') {
   const box = document.getElementById('dir-box');
   if (!box) return;
+  // общий список клубов не показываем — только результаты поиска
+  if (q.trim().length < 2) { box.innerHTML = '<div class="muted small">Введите город, адрес, название или ID клуба — или откройте карту.</div>'; return; }
   try {
     const rows = await S.store.directory(q);
     if (!box.isConnected) return;
@@ -1504,11 +1548,10 @@ async function renderDirectory(q = '') {
 // ── создание и настройки клуба ──
 function clubForm(c = {}, edit = false) {
   return `<label>Название клуба<input name="name" required minlength="2" maxlength="60" value="${esc(c.name || '')}" placeholder="Например, Коворкинг «Точка»"></label>
-    <label>Город<input name="city" maxlength="40" value="${esc(c.city || '')}" placeholder="Казань"></label>
-    <label>Адрес<input name="address" maxlength="100" value="${esc(c.address || '')}" placeholder="ул. Баумана, 44, 3 этаж"></label>
-    <div><b class="small">Где стоит стол — нажмите на карту</b>
-      <div class="geo-find"><input type="search" id="geo-q" placeholder="Найти адрес на карте" autocomplete="off"><button type="button" class="btn sm" data-act="geo-search">Найти</button></div>
-      <div id="geo-res" class="geo-res"></div>
+    <label>Адрес — начните вводить и выберите подсказку<input name="address" maxlength="100" value="${esc(c.address || '')}" placeholder="Например, Казань, Баумана 44" autocomplete="off" data-input="addr"></label>
+    <div id="geo-res" class="geo-res"></div>
+    <label>Город<input name="city" maxlength="40" value="${esc(c.city || '')}" placeholder="Заполнится сам по адресу"></label>
+    <div><b class="small">Точка на карте — ставится по адресу, можно поправить нажатием</b>
       <div id="pick-map" class="club-map" data-lat="${c.lat ?? ''}" data-lng="${c.lng ?? ''}"></div>
       <small class="muted" id="pick-hint">${c.lat != null ? 'Точка выбрана. Можно передвинуть' : 'Точка не выбрана — клуб не появится на карте'}</small>
       <input type="hidden" name="lat" value="${c.lat ?? ''}"><input type="hidden" name="lng" value="${c.lng ?? ''}"></div>
@@ -1548,30 +1591,43 @@ async function mountPickMap() {
   try { map = await makeMap(el, has ? [lat, lng] : KAZAN, has ? 16 : 11); } catch (e) { el.innerHTML = `<div class="empty small">${esc(e.message)}</div>`; return; }
   if (!map) return;
   const form = el.closest('form');
-  let marker = has ? window.L.marker([lat, lng], { icon: pinIcon(true), draggable: true }).addTo(map) : null;
+  let marker = null;
   const set = ll => {
-    if (!marker) marker = window.L.marker(ll, { icon: pinIcon(true), draggable: true }).addTo(map).on('dragend', () => set(marker.getLatLng()));
-    else marker.setLatLng(ll);
-    form.lat.value = ll.lat.toFixed(6); form.lng.value = ll.lng.toFixed(6);
+    if (!marker) marker = map.pin(ll, { mine: true, draggable: true, onDrag: set });
+    else marker.move(ll);
+    form.lat.value = (+ll[0]).toFixed(6); form.lng.value = (+ll[1]).toFixed(6);
     document.getElementById('pick-hint').textContent = 'Точка выбрана. Можно передвинуть';
   };
-  marker?.on('dragend', () => set(marker.getLatLng()));
-  map.on('click', e => set(e.latlng));
-  el._set = (ll, z) => { set(ll); map.setView(ll, z || 17); };
+  if (has) set([lat, lng]);
+  map.onClick(set);
+  el._set = (ll, z) => { set(ll); map.setView(ll, z || 15.5); };
   if (!has && navigator.geolocation) navigator.geolocation.getCurrentPosition(p => { if (!form.lat.value) map.setView([p.coords.latitude, p.coords.longitude], 14); }, () => {}, { timeout: 5000 });
 }
 
-async function geoSearch() {
-  const q = document.getElementById('geo-q')?.value.trim();
+let addrTimer, addrItems = [];
+function addrInput(inp) {
+  clearTimeout(addrTimer);
   const box = document.getElementById('geo-res');
-  if (!q || !box) return;
-  box.innerHTML = '<div class="muted small">Ищу…</div>';
+  const q = inp.value.trim();
+  if (q.length < 3) { box.innerHTML = ''; return; }
+  addrTimer = setTimeout(async () => {
+    try {
+      addrItems = await addrSuggest(q);
+      if (inp.value.trim() !== q) return;
+      box.innerHTML = addrItems.map((x, i) => `<button type="button" class="geo-item" data-act="addr-pick" data-i="${i}">📍 ${esc(x.title)}</button>`).join('');
+    } catch { box.innerHTML = ''; }
+  }, 350);
+}
+async function addrPick(i) {
+  const box = document.getElementById('geo-res');
+  const form = document.querySelector('[data-form=new-club], [data-form=club-edit]');
   try {
-    const city = document.querySelector('[data-form] [name=city]')?.value.trim();
-    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=5&accept-language=ru&q=${encodeURIComponent([q, city].filter(Boolean).join(', '))}`);
-    const rows = await res.json();
-    box.innerHTML = rows.length ? rows.map(r => `<button type="button" class="geo-item" data-act="geo-pick" data-lat="${r.lat}" data-lng="${r.lon}">${esc(r.display_name)}</button>`).join('') : '<div class="muted small">Не нашли. Поставьте точку на карте вручную</div>';
-  } catch { box.innerHTML = '<div class="muted small">Поиск адреса сейчас недоступен — поставьте точку вручную</div>'; }
+    const r = await addrResolve(addrItems[i]);
+    if (r.address) form.address.value = r.address;
+    if (r.city) form.city.value = r.city;
+    document.getElementById('pick-map')?._set?.([r.lat, r.lng]);
+    box.innerHTML = '';
+  } catch (e) { toast(e.message, 'err'); }
 }
 
 // ── приглашение ──
@@ -1633,11 +1689,10 @@ async function renderMap() {
   mapState = { rows, map, markers: new Map() };
   if (map) {
     for (const c of geo) {
-      const m = window.L.marker([c.lat, c.lng], { icon: pinIcon(c.my_status === 'active') }).addTo(map)
-        .bindPopup(`<b>${esc(c.name)}</b><br>${c.players} ${plural(c.players, 'игрок', 'игрока', 'игроков')} · ${c.matches} ${plural(c.matches, 'матч', 'матча', 'матчей')}<br><a href="#/club/${c.id}">Открыть страницу клуба →</a>`);
+      const m = map.pin([c.lat, c.lng], { mine: c.my_status === 'active', popup: `<b>${esc(c.name)}</b><br>${c.players} ${plural(c.players, 'игрок', 'игрока', 'игроков')} · ${c.matches} ${plural(c.matches, 'матч', 'матча', 'матчей')}<br><a href="#/club/${c.id}">Открыть страницу клуба →</a>` });
       mapState.markers.set(c.id, m);
     }
-    if (geo.length > 1) map.fitBounds(geo.map(c => [c.lat, c.lng]), { padding: [30, 30], maxZoom: 13 });
+    if (geo.length > 1) map.fit(geo.map(c => [c.lat, c.lng]));
   }
   renderMapList('');
 }
@@ -1645,12 +1700,12 @@ function renderMapList(q) {
   const box = document.getElementById('map-list');
   if (!box || !mapState) return;
   const t = q.trim().toLowerCase();
-  const rows = mapState.rows.filter(c => !t || c.name.toLowerCase().includes(t) || (c.city || '').toLowerCase().includes(t) || c.code.toLowerCase() === t || c.code.toLowerCase() === 'ph-' + t);
+  const rows = mapState.rows.filter(c => !t || c.name.toLowerCase().includes(t) || (c.city || '').toLowerCase().includes(t) || (c.address || '').toLowerCase().includes(t) || c.code.toLowerCase() === t || c.code.toLowerCase() === 'ph-' + t);
   box.innerHTML = rows.length ? rows.map(dirItem).join('') : '<div class="empty small">Клубов не найдено</div>';
   if (t && rows.length && mapState.map) {
     const g = rows.filter(c => c.lat != null);
-    if (g.length === 1) { mapState.map.setView([g[0].lat, g[0].lng], 15); mapState.markers.get(g[0].id)?.openPopup(); }
-    else if (g.length > 1) mapState.map.fitBounds(g.map(c => [c.lat, c.lng]), { padding: [30, 30], maxZoom: 14 });
+    if (g.length === 1) { mapState.map.setView([g[0].lat, g[0].lng], 15); mapState.markers.get(g[0].id)?.open(); }
+    else if (g.length > 1) mapState.map.fit(g.map(c => [c.lat, c.lng]));
   }
 }
 
@@ -1687,7 +1742,7 @@ async function renderClubPage(id, code = null) {
     ${fin.length ? `<section class="card"><div class="card-h"><h3>Турниры</h3></div>${fin.slice(0, 10).map(t => `<div class="req"><div class="rn"><b>${esc(t.name)}</b><small class="muted">🥇 ${esc(nick(t.results.gold))}${t.results.silver ? ' · 🥈 ' + esc(nick(t.results.silver)) : ''}${t.date ? ' · ' + fmtDate(t.date) : ''}</small></div></div>`).join('')}</section>` : ''}
     ${c.lat != null ? `<div id="club-mini-map" class="club-map" data-lat="${c.lat}" data-lng="${c.lng}"></div>` : ''}`;
   const mm = document.getElementById('club-mini-map');
-  if (mm) { try { const map = await makeMap(mm, [c.lat, c.lng], 15); map && window.L.marker([c.lat, c.lng], { icon: pinIcon() }).addTo(map); } catch { mm.remove(); } }
+  if (mm) { try { const map = await makeMap(mm, [c.lat, c.lng], 15); map?.pin([c.lat, c.lng]); } catch { mm.remove(); } }
 }
 
 // ── вход по ссылке-приглашению ──
@@ -1833,8 +1888,7 @@ const CLUB_ACT = {
     if (!(await confirmDialog(`Передать клуб «${c.name}» игроку ${P(to).nickname}? Вы станете помощником.`, 'Передать', true))) return;
     await busy(el, async () => { await S.store.transferClub(c.id, to); await reload(); location.hash = '#/home'; render(); toast('Клуб передан'); });
   },
-  'geo-search': () => geoSearch(),
-  'geo-pick': el => { document.getElementById('pick-map')?._set?.({ lat: +el.dataset.lat, lng: +el.dataset.lng }); document.getElementById('geo-res').innerHTML = ''; },
+  'addr-pick': el => addrPick(+el.dataset.i),
   'map-locate': () => {
     if (!navigator.geolocation || !mapState?.map) return toast('Не удалось определить местоположение', 'err');
     navigator.geolocation.getCurrentPosition(p => mapState.map.setView([p.coords.latitude, p.coords.longitude], 13), () => toast('Разрешите доступ к геолокации', 'err'), { timeout: 8000 });
@@ -2698,9 +2752,10 @@ document.addEventListener('input', e => {
   const inp = e.target.closest('[data-input]');
   if (inp?.dataset.input === 'dir-search') { clearTimeout(dirTimer); dirTimer = setTimeout(() => renderDirectory(inp.value), 300); }
   if (inp?.dataset.input === 'map-search') renderMapList(inp.value);
+  if (inp?.dataset.input === 'addr') addrInput(inp);
 });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && e.target.id === 'geo-q') { e.preventDefault(); geoSearch(); }
+  if (e.key === 'Enter' && e.target.dataset?.input === 'addr') e.preventDefault();
 });
 document.addEventListener('submit', async e => {
   const f = e.target.closest('[data-form]');
@@ -2815,6 +2870,16 @@ async function renderPushBox() {
 
 /** Уменьшает шрифт ника, пока он не поместится; если совсем длинный — переносит на две строки. */
 function fitNicks() {
+  // название клуба в шапке: уменьшаем шрифт (до 16px), не влезло — переносим на две строки
+  document.querySelectorAll('.club-switch span').forEach(el => {
+    el.style.fontSize = ''; el.classList.remove('wrap');
+    let size = parseFloat(getComputedStyle(el).fontSize);
+    while (el.scrollWidth > el.clientWidth && size > 16) { size -= 1; el.style.fontSize = size + 'px'; }
+    if (el.scrollWidth > el.clientWidth) {
+      el.classList.add('wrap');
+      while (el.scrollHeight > el.clientHeight + 1 && size > 12) { size -= 1; el.style.fontSize = size + 'px'; }
+    }
+  });
   document.querySelectorAll('.hero-nick').forEach(el => {
     el.style.fontSize = ''; el.classList.remove('wrap');
     let size = parseFloat(getComputedStyle(el).fontSize);
@@ -2831,7 +2896,7 @@ function afterRender(r) {
   if (r.name === 'predict') renderPredBoard();
   if (r.name === 'admin' && r.args[0] === 'log') renderAudit();
   if (r.name === 'admin' && r.args[0] === 'data') renderBackups();
-  if (document.getElementById('dir-box')) renderDirectory('');
+  if (document.getElementById('dir-box')) renderDirectory(document.querySelector('[data-input=dir-search]')?.value || '');
   if (document.getElementById('pick-map')) mountPickMap();
   if (r.name === 'invite') renderInvite();
   if (r.name === 'map') renderMap();

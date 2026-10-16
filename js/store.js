@@ -464,7 +464,7 @@ class LocalStore {
   async directory(q = '') {
     const t = q.trim().toLowerCase();
     return this.db.clubs.filter(c => !c.blocked && (c.visible || this.mem(c.id, this.db.session)))
-      .filter(c => !t || c.name.toLowerCase().includes(t) || (c.city || '').toLowerCase().includes(t) || c.code.toLowerCase() === t || c.code.toLowerCase() === 'ph-' + t)
+      .filter(c => !t || c.name.toLowerCase().includes(t) || (c.city || '').toLowerCase().includes(t) || (c.address || '').toLowerCase().includes(t) || c.code.toLowerCase() === t || c.code.toLowerCase() === 'ph-' + t)
       .map(c => this.clubRow(c)).sort((a, b) => b.players - a.players);
   }
   async clubPublic(cid, code = null) {
