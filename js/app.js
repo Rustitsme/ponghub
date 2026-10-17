@@ -1,4 +1,6 @@
 import { createStore } from './store.js';
+import { ITEMS, RG, RGSUB, RUBBER_COLORS, STYLE, EQUIP, LEAGUE_REWARDS, STREAK, STARTER, byId, colorOf, priceOf, keyOf, parseKey } from './shop-catalog.js';
+import { thumb, mountViewer, loadThree, racketShot } from './shop3d.js';
 import {
   analyze, ranking, playerStats, ACHIEVEMENTS, insights, playerOfMonth, headToHead, validateSet,
   leagueOf, nextLeague, LEAGUES, DEFAULT_SETTINGS, ratingAt, setsFor, expected, marginFactor, winsNeeded, ts,
@@ -26,6 +28,8 @@ const toLocalInput = d => { const x = new Date(d); return new Date(x - x.getTime
 const isAdmin = () => !!S.club && S.me?.role === 'admin' && S.me?.status === 'approved';
 const isEditor = () => !!S.club && (S.me?.role === 'editor' || S.me?.role === 'admin') && S.me?.status === 'approved';
 const isFounder = () => !!S.ctx?.me?.is_founder;
+// флажки обновлений: 'founder' — только у создателя, 'all' — у всех
+const feature = name => { const m = S.ctx?.platform?.features?.[name] ?? 'all'; return m === 'all' || (m === 'founder' && isFounder()); };
 const ratingOf = id => S.A.rating.get(id) ?? S.A.S.initialRating;
 const settings = () => ({ ...DEFAULT_SETTINGS, ...(S.data?.settings || {}) });
 const tById = id => S.data.tournaments.find(t => t.id === id);
@@ -164,7 +168,9 @@ async function reload() {
   }
   derive();
   if (isAdmin() && !S.emails.size) S.emails = await S.store.adminEmails();
-  if (S.me?.status === 'approved' && predOn()) { try { S.coins = await S.store.rpc('ensure_wallet'); } catch { S.coins = null; } }
+  if (S.me?.status === 'approved' && feature('shop')) { try { await ensureShop(true); } catch { S.shop = null; } }
+  else S.shop = null;
+  if (S.me?.status === 'approved' && predOn() && !S.shop) { try { S.coins = await S.store.rpc('ensure_wallet'); } catch { S.coins = null; } }
 }
 async function refresh() { await reload(); render(); }
 
@@ -196,7 +202,7 @@ function render() {
   else if (CLUB_FREE[r.name]) html = CLUB_FREE[r.name](r);
   else if (!S.club) html = S.ctx.me.legacy && !S.ctx.platform?.migration_done && !isFounder() ? waitView() : viewClubs(r);
   else {
-    const views = { invite: viewInvite, clubedit: viewClubEdit, home: viewHome, rating: viewRating, matches: viewMatches, player: viewPlayer, h2h: viewH2H, tournaments: viewTournaments, tournament: viewTournament, calendar: viewCalendar, admin: viewAdmin, rules: viewRules, me: viewMe, help: viewHelp, seasons: viewSeasons, live: viewLive, inbox: viewInbox, predict: viewPredict };
+    const views = { shop: r => feature('shop') ? viewShop(r) : viewHome(r), racket: () => feature('shop') ? viewRacket() : viewHome(), invite: viewInvite, clubedit: viewClubEdit, home: viewHome, rating: viewRating, matches: viewMatches, player: viewPlayer, h2h: viewH2H, tournaments: viewTournaments, tournament: viewTournament, calendar: viewCalendar, admin: viewAdmin, rules: viewRules, me: viewMe, help: viewHelp, seasons: viewSeasons, live: viewLive, inbox: viewInbox, predict: viewPredict };
     const v = views[r.name] || viewHome;
     html = shell(r, v(r));
   }
@@ -434,13 +440,14 @@ function viewHome() {
       <div><b>${st.streakType === 'W' ? '🔥' + st.streak : st.streak ? '−' + st.streak : '0'}</b><small>серия</small></div>
     </div>
     ${nl ? `<div class="next-league"><span>До лиги «${nl.name}»: ${fmtR(nl.min - r)}</span><div class="bar thin"><i style="width:${Math.max(4, Math.min(100, 100 - (nl.min - r) * 5))}%"></i></div></div>` : ''}
-    <div class="row-btns hero-links"><a href="#/player/${me.id}" class="btn ghost-light">Статистика и анализ →</a>${predOn() && S.coins != null ? `<a href="#/predict" class="btn coin-btn">🎯 ${fmtC(S.coins)} PC</a>` : ''}</div>
+    <div class="row-btns hero-links"><a href="#/player/${me.id}" class="btn ghost-light">Статистика и анализ →</a>${predOn() && S.coins != null ? `<a href="${feature('shop') ? '#/shop' : '#/predict'}" class="btn coin-btn">${feature('shop') ? '🛍️' : '🎯'} ${fmtC(S.coins)} PC</a>` : ''}</div>
   </section>
 
   ${pc.total ? `<a href="#/admin" class="alert">🔔 Ждут вашего решения: ${pc.users ? `${pc.users} ${plural(pc.users, 'заявка', 'заявки', 'заявок')} на регистрацию` : ''}${pc.users && pc.matches ? ', ' : ''}${pc.matches ? `${pc.matches} ${plural(pc.matches, 'матч', 'матча', 'матчей')}` : ''} →</a>` : ''}
   ${mine.length ? `<div class="alert info">⏳ ${mine.length} ${plural(mine.length, 'ваш результат ждёт', 'ваших результата ждут', 'ваших результатов ждут')} подтверждения администратором</div>` : ''}
 
   ${liveBlock()}
+  ${feature('shop') && S.shop && !S.shop.streak.claimed ? `<a href="#/shop?tab=bonus" class="card sh-home"><span class="sh-home-ic">🔥</span><span class="rn"><b>Бонус дня: +${STREAK[S.shop.streak.day - 1]} PC</b><small class="muted">День ${S.shop.streak.day} из 7 — заберите, пока не сгорело</small></span><span class="btn sm primary">Забрать</span></a>` : ''}
   ${predHomeBlock()}
   ${challengesBlock()}
   ${weekCard()}
@@ -571,6 +578,7 @@ function viewPlayer(r) {
       ${mine ? '<button class="btn ghost-light" data-act="edit-profile">✏️ Редактировать</button>' : `<a class="btn ghost-light" href="#/h2h/${S.me.id}/${id}">📊 Сравнить</a>${p.status === 'approved' ? `<button class="btn ghost-light" data-act="challenge" data-id="${id}">⚔️ Вызвать на матч</button>` : ''}`}
     </div>
   </section>
+  ${feature('shop') ? playerRacketCard(p) : ''}
 
   <section class="stat-grid">
     <div><b>${st.matches}</b><small>матчей</small></div>
@@ -924,7 +932,7 @@ function viewPredict() {
   return `<div class="page-h"><h1>🎯 Прогнозы</h1></div>
     <section class="hero table-card coin-hero"><div class="coin-top"><div><small>Ваш счёт</small><div class="big-num">${fmtC(S.coins)} <span class="pc">PC</span></div></div>
       <div class="coin-stats"><div><b>${settled.length}</b><small>прогнозов</small></div><div><b>${pct(acc)}</b><small>верных</small></div></div></div>
-      <p class="muted small">Пинг-коины — игровые баллы. Их нельзя купить, и они никак не влияют на рейтинг. Каждый понедельник +${settings().predWeekly ?? 100} PC всем.</p></section>
+      <p class="muted small">Пинг-коины — игровые баллы. Их нельзя купить, и они никак не влияют на рейтинг. ${feature('shop') ? 'Пополнить: <a class="link" href="#/shop?tab=bonus">бонус дня</a>, +15 за матч, призы турниров. Потратить — в <a class="link" href="#/shop">магазине</a>.' : `Каждый понедельник +${settings().predWeekly ?? 100} PC всем.`}</p></section>
     <section class="card"><div class="card-h"><h3>Открытые прогнозы</h3></div>${open.map(predRow).join('') || '<div class="empty small">Сейчас открытых нет. Прогноз открывается, когда начинается живой счёт или принят вызов.</div>'}</section>
     ${active.length ? `<section class="card"><div class="card-h"><h3>Ждут результата</h3></div>${active.map(line).join('')}</section>` : ''}
     <section class="card"><div class="card-h"><h3>🏆 Лучшие прогнозисты</h3><div class="seg sm"><button class="on" data-act="pred-board" data-p="month">месяц</button><button data-act="pred-board" data-p="all">всё время</button></div></div>
@@ -1383,7 +1391,8 @@ function viewMe() {
   ${isAdmin() ? `<a href="#/admin" class="card menu-item">🛠️ <span>Управление клубом</span>${pendingCounts().total ? `<i class="dot inline">${pendingCounts().total}</i>` : ''}<span>→</span></a>` : ''}
   <section class="card menu">
     ${isAdmin() ? '<a class="menu-item" href="#/invite">✉️ <span>Пригласить в клуб</span></a><a class="menu-item" href="#/clubedit">🏠 <span>Клуб: название, адрес, карта</span></a>' : ''}
-    <a class="menu-item" href="#/clubs">🏓 <span>Мои клубы</span><small class="muted">${(S.ctx?.clubs || []).filter(c => c.my_status === 'active').length}</small></a>
+    ${feature('shop') ? '<a class="menu-item" href="#/shop">🛍️ <span>Магазин</span><small class="muted">' + fmtC(S.coins) + ' PC</small></a><a class="menu-item" href="#/racket">🏓 <span>Моя ракетка</span></a>' : ''}
+    <a class="menu-item" href="#/clubs">🏠 <span>Мои клубы</span><small class="muted">${(S.ctx?.clubs || []).filter(c => c.my_status === 'active').length}</small></a>
     <a class="menu-item" href="#/map">🗺 <span>Клубы на карте</span></a>
     ${isFounder() ? '<a class="menu-item" href="#/founder">🛡 <span>Платформа PongHub</span></a>' : ''}
     ${!isAdmin() ? '<button class="menu-item danger-text" data-act="leave-club">🚪 <span>Покинуть клуб</span></button>' : ''}
@@ -1788,6 +1797,14 @@ async function renderFounder() {
         <label>В какой клуб<select id="hist-club">${opts}</select></label>
         <button class="btn primary" data-act="founder-history">Перенести всю историю в этот клуб</button></section>` : ''}
       ${!st.migration_done && !legacyRows && clubs.length ? '<section class="card"><p class="muted small">Истории до клубов нет — переносить нечего.</p></section>' : ''}
+      <section class="card stack"><div class="card-h"><h3>🚀 Обновления</h3></div>
+        <p class="muted small">Новые функции сначала видны только вам. Проверьте их — и включите для всех.</p>
+        ${[['shop', '🛍️ Магазин и новая экономика', 'Магазин, моя ракетка, бонус дня, +15 за матч, призы турниров, награды за лиги. При включении для всех: балансы × 0,3, старт 300 PC, ставка до 300, еженедельные +100 отменяются.']].map(([k, t, d]) => {
+          const mode = S.ctx?.platform?.features?.[k] ?? 'all';
+          return `<div class="pl-row"><div class="pl-top"><span class="rn"><b>${t}</b><small class="muted">${d}</small></span></div>
+            <div class="pl-ctl"><span class="badge ${mode === 'all' ? 'ok' : 'warn'}">${mode === 'all' ? 'включено у всех' : 'только у вас'}</span>
+            ${mode === 'all' ? '' : `<button class="btn sm primary" data-act="feature-all" data-k="${k}">Включить для всех</button>`}</div></div>`;
+        }).join('')}</section>
       <section class="card"><div class="card-h"><h3>Все клубы</h3></div>
         ${clubs.map(c => `<div class="pl-row ${c.blocked ? 'arch' : ''}"><div class="pl-top"><span class="rn"><b>${esc(c.name)}</b><small class="muted">${esc(c.code)} · ${esc(c.city || 'город не указан')} · владелец ${esc(c.owner_nick || '—')}</small>
           <small class="muted">${c.players} ${plural(c.players, 'игрок', 'игрока', 'игроков')} · ${c.matches} ${plural(c.matches, 'матч', 'матча', 'матчей')}${c.pending ? ` · заявок: ${c.pending}` : ''}${c.last_match ? ' · последний матч ' + fmtDate(c.last_match) : ''}${c.visible ? '' : ' · скрыт с карты'}</small></span></div>
@@ -1877,6 +1894,12 @@ async function renderScreens() {
 const CLUB_FREE = { clubs: viewClubs, club: viewClubPage, map: viewMap, newclub: viewNewClub, join: viewJoin, founder: viewFounder };
 
 const CLUB_ACT = {
+  'feature-all': async el => {
+    const k = el.dataset.k;
+    const warn = k === 'shop' ? 'Включить магазин и новую экономику для всех? Балансы всех игроков пересчитаются × 0,3, стартовый баланс станет 300 PC. Отменить пересчёт нельзя.' : 'Включить для всех?';
+    if (!(await confirmDialog(warn, 'Включить для всех'))) return;
+    await busy(el, async () => { await S.store.rpc('founder_set_feature', { fname: k, mode: 'all' }); await reload(); render(); toast('Включено для всех 🚀'); });
+  },
   'screen-remove': async el => {
     if (!(await confirmDialog('Отключить это табло? Чтобы вернуть, понадобится новый код с телевизора.', 'Отключить', true))) return;
     await busy(el, async () => { await S.store.rpc('screen_remove', { sid: el.dataset.id }); await renderScreens(); toast('Табло отключено'); });
@@ -1963,6 +1986,253 @@ const CLUB_FORMS = {
   'club-edit': async (f, fd) => { await S.store.updateClub(S.club.id, clubFields(fd)); await reload(); render(); toast('Клуб сохранён'); },
 };
 
+// ───────────── Магазин ─────────────
+// Каталог и 3D — в shop-catalog.js / shop3d.js. Цены и покупки проверяет база (buy_item), награды за лиги — функция notify.
+const SHOP = { region: 'cn', kind: 'blade', color: 'red' };
+const RG_ICON = { cn: '🇨🇳', eu: '🇪🇺', jp: '🇯🇵', acc: '🧻', wear: '👟' };
+const SHOP_REGIONS = ['cn', 'eu', 'jp', 'acc', 'wear'];
+let threeAsked = false;
+function ensureThree() {
+  if (window.THREE || threeAsked) return;
+  threeAsked = true;
+  loadThree().then(() => { if (['shop', 'racket', 'player'].includes(route().name)) render(); }).catch(() => {});
+}
+async function ensureShop(force = false) {
+  if (S.shop && !force) return S.shop;
+  try { S.shop = await S.store.shopState(); S.coins = S.shop.balance; } catch (e) { S.shop = null; throw e; }
+  return S.shop;
+}
+const owns = key => !!S.shop?.items?.includes(key);
+const ownsAny = it => it.colors ? it.colors.some(c => owns(`${it.id}:${c.key}`)) : owns(it.id);
+const shopBars = it => it.s == null ? '' : `<div class="sh-bars">${[['Скорость', it.s, '#e63946'], ['Вращение', it.w, '#2563b8'], ['Контроль', it.c, '#12a061']].map(([l, v, c]) => `<div class="sh-bar">${l}<i><b style="width:${v * 10}%;background:${c}"></b></i><span>${String(v).replace('.', ',')}</span></div>`).join('')}</div>`;
+const shopTags = it => `<div class="sh-tags"><span class="sh-tag ${STYLE[it.style][1]}">${STYLE[it.style][0]}</span>${it.type === 'blade' ? `<span class="sh-tag">${esc(it.layers)}</span>` : it.type === 'rubber' ? `<span class="sh-tag">${esc(it.rubber)}</span><span class="sh-tag">${esc(it.sponge)}</span>` : ''}</div>`;
+const thumbEl = (it, color, big) => { const el = thumb(it, color, big); el.classList.add(big ? 'sh-pic-img' : 'sh-thumb-img'); return el; };
+
+function shopHeader(tab) {
+  return `<div class="page-h"><h1>🛍️ Магазин</h1><a href="#/racket" class="btn sm">🏓 Моя ракетка</a></div>
+    <section class="hero table-card sh-hero"><div><small>Ваш счёт в этом клубе</small><div class="big-num">${fmtC(S.coins)} <span class="pc">PC</span></div></div>
+      <div class="seg sh-seg"><a href="#/shop" class="${tab === 'shop' ? 'on' : ''}">Товары</a><a href="#/shop?tab=bonus" class="${tab === 'bonus' ? 'on' : ''}">Бонусы${S.shop && !S.shop.streak.claimed ? ' <i class="dot inline">1</i>' : ''}</a></div></section>`;
+}
+
+function viewShop(r) {
+  ensureThree();
+  if (!S.shop) return `${shopHeader('shop')}<div class="empty"><span class="spin"></span></div>`;
+  if (r.q.get('tab') === 'bonus') return shopHeader('bonus') + bonusBody();
+  const reg = SHOP.region, racketRegion = ['cn', 'eu', 'jp'].includes(reg);
+  return `${shopHeader('shop')}
+    <div class="sh-chips">${SHOP_REGIONS.map(k => `<button data-act="sh-region" data-v="${k}" class="${k === reg ? 'on' : ''}">${RG_ICON[k]} ${RG[k]}</button>`).join('')}</div>
+    <div class="sh-region rh-${reg}"><b>${RG[reg]}</b><small>${RGSUB[reg]}</small></div>
+    ${racketRegion ? `<div class="seg"><button data-act="sh-kind" data-v="blade" class="${SHOP.kind === 'blade' ? 'on' : ''}">Основания</button><button data-act="sh-kind" data-v="rubber" class="${SHOP.kind === 'rubber' ? 'on' : ''}">Накладки</button></div>` : ''}
+    ${racketRegion && SHOP.kind === 'rubber' ? `<div class="sh-colors">Цвет: ${RUBBER_COLORS.map(c => `<button data-act="sh-color" data-v="${c.key}" class="${SHOP.color === c.key ? 'on' : ''}" style="background:${c.hex}" aria-label="${c.name}"></button>`).join('')}<span>${colorOf({ colors: RUBBER_COLORS }, SHOP.color).name}${SHOP.color === 'blue' ? ' · +60 PC' : ''}</span></div>` : ''}
+    <div class="sh-list" id="sh-list"></div>`;
+}
+function renderShopList() {
+  const box = document.getElementById('sh-list');
+  if (!box) return;
+  const reg = SHOP.region, racketRegion = ['cn', 'eu', 'jp'].includes(reg);
+  const list = ITEMS.filter(it => it.region === reg && !it.reward && (!racketRegion || it.type === SHOP.kind));
+  for (const it of list) {
+    const color = it.type === 'rubber' ? SHOP.color : null;
+    const own = it.type === 'rubber' ? owns(keyOf(it, color)) : it.handles ? ownsAny(it) : false;
+    const any = ownsAny(it);
+    const el = document.createElement('button');
+    el.className = 'sh-item'; el.dataset.act = 'sh-open'; el.dataset.id = it.id; if (color) el.dataset.color = color;
+    const th = document.createElement('span'); th.className = 'sh-thumb'; th.appendChild(thumbEl(it, color));
+    const body = document.createElement('span'); body.className = 'sh-body';
+    body.innerHTML = `<span class="sh-top"><span><small class="sh-brand">${esc(it.brand)}</small><b class="sh-name">${esc(it.name)}</b></span>
+      ${own ? '<span class="sh-price own">✓ куплено</span>' : `<span class="sh-price">${it.colors && it.type !== 'rubber' ? '<small>от</small> ' : ''}${fmtC(priceOf(it, color))} <small>PC</small></span>`}</span>
+      ${shopTags(it)}${it.colors && it.type !== 'rubber' && !it.handles ? `<span class="sh-dots">${it.colors.map(c => `<i style="background:${c.hex}"></i>`).join('')}</span>` : ''}${shopBars(it)}
+      ${!own && any && !it.handles && it.type !== 'rubber' ? '<span class="sh-tags"><span class="sh-tag uni">есть у вас</span></span>' : ''}`;
+    el.append(th, body); box.appendChild(el);
+  }
+}
+
+function openShopItem(it, color, mode = 'buy') {
+  let sel = colorOf(it, color)?.key || null;
+  openModal('<div id="sh-sheet"></div>', () => draw());
+  function draw() {
+    const box = document.getElementById('sh-sheet'); if (!box) return;
+    const k = keyOf(it, sel), own = owns(k), price = priceOf(it, sel);
+    const spec = it.type === 'blade' ? [['Слои', it.layers], ['Материал', it.material], ['Класс', it.cls], ['Вес', it.wt + ' г'], ['Толщина', String(it.th).replace('.', ',') + ' мм'], ['Стиль', STYLE[it.style][0]], ['В жизни', it.real]]
+      : it.type === 'rubber' ? [['Тип', it.rubber], ['Губка', it.sponge], ['Жёсткость губки', it.hard], ['Дуга полёта', it.arc], ['Липкость', it.tack], ['Вес листа', '≈ ' + it.wt + ' г'], ['Цвет', colorOf(it, sel).name], ['В жизни', it.real]]
+      : [['Цвет', colorOf(it, sel)?.name || '—'], ['В жизни', it.real]];
+    box.innerHTML = `<div class="sh-pic" id="sh-pic"></div>
+      <small class="sh-brand">${esc(it.brand)} · ${RG[it.region] || 'Награда'}</small><h3 class="sh-title">${esc(it.name)}</h3>${shopTags(it)}
+      <small class="muted">в духе: ${esc(it.orig)}</small>
+      <p class="muted">${esc(it.desc)}</p>${shopBars(it)}
+      ${it.handles ? `<div><b class="small">Форма ручки</b><div class="sh-hsel">${it.colors.map(c => `<button data-hk="${c.key}" class="${sel === c.key ? 'on' : ''}">${c.key}<small>${c.extra ? '+' + c.extra : 'база'}</small></button>`).join('')}</div><small class="muted">${esc(colorOf(it, sel).name)}</small></div>`
+        : it.colors && it.colors.length > 1 ? `<div class="sh-colors">${it.colors.map(c => `<button data-hk="${c.key}" class="${sel === c.key ? 'on' : ''}" style="background:${c.hex}" aria-label="${esc(c.name)}"></button>`).join('')}<span>${esc(colorOf(it, sel).name)}${colorOf(it, sel).extra ? ` · +${colorOf(it, sel).extra} PC` : ''}</span></div>` : ''}
+      <div class="sh-spec">${spec.map(([a, b]) => `<div>${a}<b>${esc(b)}</b></div>`).join('')}</div>
+      <div id="sh-act" class="sh-act"></div>`;
+    box.querySelector('#sh-pic').appendChild(thumbEl(it, sel, true));
+    box.querySelectorAll('[data-hk]').forEach(b => b.onclick = () => { sel = b.dataset.hk; if (it.type === 'rubber') SHOP.color = sel; draw(); });
+    const act = box.querySelector('#sh-act');
+    const can = !!EQUIP[it.type];
+    if (mode.startsWith('reward:')) {
+      act.innerHTML = own ? '<button class="btn full" disabled>Уже есть — выберите другой</button>' : `<button class="btn primary full" id="sh-rw">Забрать бесплатно</button>`;
+      act.querySelector('#sh-rw')?.addEventListener('click', e => busy(e.currentTarget, async () => {
+        await S.store.claimLeague(mode.slice(7), k); await ensureShop(true); closeModal(); toast('Награда получена 🎁'); render();
+      }));
+      return;
+    }
+    if (own) {
+      act.innerHTML = can ? `<button class="btn primary full" id="sh-eq">Поставить на ракетку</button>` : '<button class="btn full" disabled>Уже у вас</button>';
+      act.querySelector('#sh-eq')?.addEventListener('click', () => askEquip(it, k, act));
+    } else {
+      act.innerHTML = `<button class="btn primary full" id="sh-buy" ${S.coins < price ? 'disabled' : ''}>${S.coins < price ? `Не хватает ${fmtC(price - S.coins)} PC` : `Купить за ${fmtC(price)} PC`}</button>`;
+      act.querySelector('#sh-buy').addEventListener('click', () => {
+        act.innerHTML = `<p class="muted small">Списать <b>${fmtC(price)} PC</b>? Останется ${fmtC(S.coins - price)} PC.</p><div class="row-btns"><button class="btn ghost" id="sh-no">Отмена</button><button class="btn primary" id="sh-yes">Купить</button></div>`;
+        act.querySelector('#sh-no').onclick = () => draw();
+        act.querySelector('#sh-yes').onclick = e => busy(e.currentTarget, async () => {
+          S.coins = await S.store.buyItem(k); S.shop.items.push(k); S.shop.balance = S.coins;
+          act.innerHTML = `<p class="small">🎉 <b>${esc(it.name)}</b> теперь ваша.</p>${can ? '<button class="btn primary full" id="sh-eq">Поставить на ракетку</button>' : '<button class="btn full" id="sh-ok">Отлично</button>'}`;
+          act.querySelector('#sh-eq')?.addEventListener('click', () => askEquip(it, k, act));
+          act.querySelector('#sh-ok')?.addEventListener('click', () => { closeModal(); render(); });
+        });
+      });
+    }
+  }
+}
+function askEquip(it, k, act) {
+  if (it.type !== 'rubber') return doEquip(EQUIP[it.type], k);
+  act.innerHTML = `<p class="small">На какую сторону поставить?</p><div class="row-btns"><button class="btn" id="eq-fh">Сторона 1</button><button class="btn" id="eq-bh">Сторона 2</button></div>`;
+  act.querySelector('#eq-fh').onclick = () => doEquip('fh', k);
+  act.querySelector('#eq-bh').onclick = () => doEquip('bh', k);
+}
+async function doEquip(slot, k) {
+  await busy(null, async () => {
+    S.shop.loadout = await S.store.equipItem(slot, k);
+    closeModal(); S.applySlot = slot;
+    if (route().name === 'racket') render(); else location.hash = '#/racket';
+    toast('Установлено на ракетку ✓');
+  });
+}
+
+// ── моя ракетка ──
+function viewRacket() {
+  ensureThree();
+  if (!S.shop) return '<div class="page-h"><h1>🏓 Моя ракетка</h1></div><div class="empty"><span class="spin"></span></div>';
+  const lo = S.shop.loadout || {};
+  const bk = parseKey(lo.blade || STARTER), bl = bk.it;
+  const part = s => parseKey(lo[s]);
+  const fh = part('fh'), bh = part('bh'), grip = part('grip'), tape = part('tape');
+  const total = priceOf(bl, bk.color) + [fh, bh, grip, tape].reduce((a, x) => a + (x.it ? priceOf(x.it, x.color) : 0), 0);
+  const rubs = [fh, bh].filter(x => x.it);
+  const avg = k => ((bl[k] * 1.2 + rubs.reduce((a, x) => a + x.it[k], 0)) / (1.2 + rubs.length)).toFixed(1).replace('.', ',');
+  const slot = (label, x, s, empty) => `<div class="sh-slot"><span class="sh-sw" style="background:${x.it ? (x.it.type === 'blade' ? x.it.look.face : colorOf(x.it, x.color).hex) : 'var(--line)'}"></span><span class="rn"><small class="muted">${label}</small><b>${x.it ? esc(`${x.it.brand} ${x.it.name}`) + (x.it.handles ? ' · ' + x.color : '') : empty}</b></span><a class="btn sm ghost" href="#/shop" data-act="sh-goto" data-slot="${s}">${x.it ? 'Сменить' : 'Купить'}</a>${x.it && s !== 'blade' ? `<button class="btn sm ghost" data-act="sh-unequip" data-slot="${s}" aria-label="Снять">✕</button>` : ''}</div>`;
+  const owned = (S.shop.items || []).map(parseKey).filter(x => x.it);
+  return `<div class="page-h"><h1>🏓 Моя ракетка</h1><a href="#/shop" class="btn sm">🛍️ Магазин</a></div>
+    <div class="sh-viewer" id="sh-viewer"><div class="sh-vside" id="sh-vside">Сторона 1</div>
+      <div class="sh-vtools"><button data-act="sh-v" data-v="flip" aria-label="Перевернуть">⟲</button><button data-act="sh-v" data-v="in" aria-label="Ближе">+</button><button data-act="sh-v" data-v="out" aria-label="Дальше">−</button></div>
+      <div class="sh-vhint">${window.THREE ? 'Потяните, чтобы повернуть' : 'Загружаю 3D…'}</div></div>
+    <div class="sh-totals"><div>Скорость<b>${avg('s')}</b></div><div>Вращение<b>${avg('w')}</b></div><div>Контроль<b>${avg('c')}</b></div></div>
+    <section class="card sh-slots">
+      ${slot('Основание', bk, 'blade', '')}
+      ${slot('Сторона 1', fh, 'fh', 'нет накладки')}
+      ${slot('Сторона 2', bh, 'bh', 'нет накладки')}
+      ${slot('Обмотка', grip, 'grip', 'нет')}
+      ${slot('Торцевая лента', tape, 'tape', 'нет')}
+      <div class="sh-cost"><small class="muted">Стоимость сборки</small><b>${fmtC(total)} PC</b></div>
+    </section>
+    <section class="card"><div class="card-h"><h3>Мои детали</h3><small class="muted">нажмите, чтобы поставить</small></div><div class="sh-strip" id="sh-inv"></div></section>
+    ${owned.some(x => !EQUIP[x.it.type]) ? '<section class="card"><div class="card-h"><h3>Гардероб</h3></div><div class="sh-strip" id="sh-ward"></div></section>' : ''}`;
+}
+let racketCtl = null;
+function mountRacket() {
+  const el = document.getElementById('sh-viewer');
+  const fill = (id, list) => {
+    const box = document.getElementById(id); if (!box) return;
+    for (const { it, color } of list) {
+      const k = keyOf(it, color);
+      const b = document.createElement('button'); b.className = Object.values(S.shop.loadout || {}).includes(k) ? 'on' : ''; b.dataset.act = 'sh-open'; b.dataset.id = it.id; if (color) b.dataset.color = color;
+      b.appendChild(thumbEl(it, color)); b.append(`${it.name}${it.colors && !it.handles ? ' · ' + colorOf(it, color).name : it.handles ? ' · ' + color : ''}`);
+      box.appendChild(b);
+    }
+  };
+  const owned = (S.shop?.items || []).map(parseKey).filter(x => x.it);
+  fill('sh-inv', owned.filter(x => EQUIP[x.it.type]));
+  fill('sh-ward', owned.filter(x => !EQUIP[x.it.type]));
+  if (!el || !window.THREE) return;
+  const lo = S.shop.loadout || {};
+  racketCtl = mountViewer(el, { blade: lo.blade || STARTER, fh: lo.fh, bh: lo.bh, grip: lo.grip, tape: lo.tape }, {
+    apply: S.applySlot, onSide: n => { const s = document.getElementById('sh-vside'); if (s && s.dataset.n !== String(n)) { s.dataset.n = n; s.textContent = 'Сторона ' + n; } },
+  });
+  S.applySlot = null;
+}
+
+// ── бонусы и награды за лиги ──
+function bonusBody() {
+  const sk = S.shop.streak, d = sk.day;
+  const r = ratingOf(S.me.id);
+  const LG = { silver: LEAGUES[1], gold: LEAGUES[2], platinum: LEAGUES[3], diamond: LEAGUES[4] };
+  return `<section class="card sh-streak-card"><div class="card-h"><h3>🔥 Серия: день ${d} из 7</h3></div>
+      <p class="muted small">Заходите каждый день — бонус растёт до 120 PC. После 7-го дня серия начинается заново. Пропустили день — тоже с начала.</p>
+      <div class="sh-streak">${STREAK.map((v, i) => { const n = i + 1, got = n < d || (n === d && sk.claimed), today = n === d && !sk.claimed; return `<div class="sh-day ${got ? 'got' : today ? 'today' : ''}">День ${n}<b>${v}</b>${got ? '✓' : today ? 'сегодня' : 'PC'}</div>`; }).join('')}</div>
+      <button class="btn primary full" data-act="sh-claim" ${sk.claimed ? 'disabled' : ''}>${sk.claimed ? 'Получено — приходите завтра' : `Забрать ${STREAK[d - 1]} PC`}</button></section>
+    <section class="card"><div class="card-h"><h3>🏆 Награды за лигу</h3></div>
+      <p class="muted small">Дошли до новой лиги — заберите предмет бесплатно. Один раз за каждую лигу. Ваш рейтинг: <b>${fmtR(r)}</b>.</p>
+      <div class="sh-ladder">${LEAGUE_REWARDS.map(w => {
+        const l = LG[w.league], got = S.shop.rewards?.[w.league], can = !got && r >= l.min;
+        const gi = got ? parseKey(got) : null;
+        return `<div class="sh-rung"><span class="league ${l.cls}">${l.name}</span><span class="rn"><b>${esc(w.text)}</b><small class="muted">${got ? 'получено: ' + esc(gi.it ? gi.it.brand + ' ' + gi.it.name : got) : `от рейтинга ${l.min}`}</small></span>
+          ${got ? '<span class="badge ok">✓</span>' : can ? `<button class="btn sm primary" data-act="sh-reward" data-v="${w.league}">Выбрать</button>` : '<span class="badge">🔒</span>'}</div>`;
+      }).join('')}</div></section>
+    <section class="card"><div class="card-h"><h3>Как ещё заработать</h3></div><ul class="muted small sh-earn">
+      <li><b>Прогнозы</b> на матчи — <a class="link" href="#/predict">открыть</a></li><li><b>+15 PC</b> за каждый подтверждённый матч (до 3 в день)</li><li><b>Турниры:</b> 1-е место 500, 2-е 300, 3-е 150 PC</li></ul></section>`;
+}
+function openRewardPicker(league) {
+  const w = LEAGUE_REWARDS.find(x => x.league === league);
+  const opts = [];
+  for (const it of ITEMS) {
+    if (it.reward || !w.types.includes(it.type)) continue;
+    for (const c of it.colors || [{ key: null, extra: 0 }]) if (priceOf(it, c.key) <= w.cap && !owns(keyOf(it, c.key))) opts.push({ it, color: c.key });
+  }
+  openModal(`<h3>Награда: ${esc(w.name)}</h3><p class="muted small">${esc(w.text)}. Выберите, что забрать.</p><div class="sh-pick" id="sh-pick"></div>`, sh => {
+    const box = sh.querySelector('#sh-pick');
+    const seen = new Set();
+    for (const { it, color } of opts) {
+      if (it.handles && seen.has(it.id)) continue; seen.add(it.id);
+      const b = document.createElement('button'); b.className = 'sh-item';
+      const th = document.createElement('span'); th.className = 'sh-thumb'; th.appendChild(thumbEl(it, color));
+      const body = document.createElement('span'); body.className = 'sh-body'; body.innerHTML = `<small class="sh-brand">${esc(it.brand)}</small><b class="sh-name">${esc(it.name)}</b><span class="muted small">${it.colors && !it.handles ? colorOf(it, color).name + ' · ' : ''}обычно ${fmtC(priceOf(it, color))} PC</span>`;
+      b.append(th, body);
+      b.onclick = () => { closeModal(); setTimeout(() => openShopItem(it, color, 'reward:' + league), 50); };
+      box.appendChild(b);
+    }
+    if (!opts.length) box.innerHTML = '<div class="empty small">Подходящих предметов нет — у вас уже всё есть</div>';
+  });
+}
+
+const SHOP_ACT = {
+  'sh-region': el => { SHOP.region = el.dataset.v; render(); },
+  'sh-kind': el => { SHOP.kind = el.dataset.v; render(); },
+  'sh-color': el => { SHOP.color = el.dataset.v; render(); },
+  'sh-open': el => { const it = byId(el.dataset.id); if (it) openShopItem(it, el.dataset.color || null); },
+  'sh-claim': el => busy(el, async () => { const r = await S.store.claimDaily(); S.coins = r.balance; await ensureShop(true); render(); toast(`+${r.amount} PC 🔥`); }),
+  'sh-reward': el => openRewardPicker(el.dataset.v),
+  'sh-unequip': el => busy(el, async () => { S.shop.loadout = await S.store.equipItem(el.dataset.slot, null); render(); }),
+  'sh-goto': el => { const s = el.dataset.slot; const cur = parseKey(S.shop.loadout?.[s]).it; if (s === 'grip' || s === 'tape') SHOP.region = 'acc'; else { SHOP.kind = s === 'blade' ? 'blade' : 'rubber'; if (cur) SHOP.region = cur.region; } },
+  'sh-v': el => { const v = el.dataset.v; if (v === 'flip') racketCtl?.flip(); else if (v === 'in') racketCtl?.zoomIn(); else racketCtl?.zoomOut(); },
+};
+
+// ракетка игрока — картинкой в профиле
+function playerRacketCard(p) {
+  const lo = p.loadout || {};
+  if (!lo.blade) return '';
+  const bl = parseKey(lo.blade).it;
+  const rub = s => { const x = parseKey(lo[s]); return x.it ? `${x.it.brand} ${x.it.name} (${colorOf(x.it, x.color).name})` : 'без накладки'; };
+  return `<section class="card sh-prk"><div class="card-h"><h3>🏓 Ракетка</h3>${p.id === S.me.id ? '<a href="#/racket" class="link">Собрать →</a>' : ''}</div>
+    <div class="sh-prk-row"><div class="sh-prk-img" data-racket='${esc(JSON.stringify(lo))}'></div>
+    <div class="small"><b>${esc(bl ? bl.brand + ' ' + bl.name : '')}</b> · ${esc(parseKey(lo.blade).color || 'FL')}<br><span class="muted">1: ${esc(rub('fh'))}<br>2: ${esc(rub('bh'))}</span></div></div></section>`;
+}
+function mountPlayerRackets() {
+  if (!window.THREE) return;
+  document.querySelectorAll('.sh-prk-img[data-racket]').forEach(el => {
+    if (el.dataset.done) return; el.dataset.done = '1';
+    try { const lo = JSON.parse(el.dataset.racket); const url = racketShot({ blade: lo.blade, fh: lo.fh, bh: lo.bh, grip: lo.grip, tape: lo.tape }); if (url) el.innerHTML = `<img src="${url}" alt="Ракетка">`; } catch { /* */ }
+  });
+}
+
 // ───────────── Админка ─────────────
 function viewAdmin(r) {
   if (!isAdmin()) return '<div class="empty">Управление клубом доступно только владельцу</div>';
@@ -2042,8 +2312,6 @@ function viewAdmin(r) {
       <hr><b class="small">🎯 Прогнозы на матчи</b>
       <label class="switch"><input type="checkbox" name="predEnabled" ${s.predEnabled ? 'checked' : ''}><i></i><span>Включены</span></label>
       ${f('predStart', 'Стартовый баланс, PC', 'Сколько пинг-коинов получает каждый в начале', 50)}
-      ${f('predWeekly', 'Бонус по понедельникам, PC', 'Всем, кто уже участвует в прогнозах', 10)}
-      ${f('predDaily', 'Ежедневная помощь при нуле, PC', 'Чтобы никто не выпадал из игры', 10)}
       ${f('predMin', 'Минимальная ставка, PC', '', 5)}
       ${f('predMax', 'Максимальная ставка, PC', '', 50)}
       ${f('predWindowMin', 'Приём прогнозов в игре без счёта, мин', 'Сколько минут после старта можно ставить, если счёт не ведут', 1)}
@@ -2721,7 +2989,7 @@ const FORMS = {
     s.system = fd.get('system') === 'elo' ? 'elo' : 'league';
     s.decayEnabled = !!fd.get('decayEnabled');
     s.predEnabled = !!fd.get('predEnabled');
-    for (const k of ['predStart', 'predWeekly', 'predDaily', 'predMin', 'predMax', 'predWindowMin']) s[k] = Math.round(+fd.get(k) || 0);
+    for (const k of ['predStart', 'predMin', 'predMax', 'predWindowMin']) s[k] = Math.round(+fd.get(k) || 0);
     if (!(s.spread > 0)) throw new Error('Масштаб должен быть больше нуля');
     s.marginBonus = !!fd.get('marginBonus');
     s.clubName = fd.get('clubName').trim() || 'PongHub';
@@ -2766,7 +3034,7 @@ const FORMS = {
   },
 };
 
-Object.assign(ACT, CLUB_ACT);
+Object.assign(ACT, CLUB_ACT, SHOP_ACT);
 Object.assign(CHANGE, CLUB_CHANGE);
 Object.assign(FORMS, CLUB_FORMS);
 
@@ -2934,6 +3202,9 @@ function afterRender(r) {
   if (r.name === 'admin' && r.args[0] === 'log') renderAudit();
   if (r.name === 'admin' && r.args[0] === 'data') renderBackups();
   if (r.name === 'admin' && r.args[0] === 'screens') renderScreens();
+  if (r.name === 'shop') { if (!S.shop && feature('shop')) ensureShop().then(render).catch(e => toast(e.message, 'err')); else renderShopList(); }
+  if (r.name === 'racket') { if (!S.shop && feature('shop')) ensureShop().then(render).catch(e => toast(e.message, 'err')); else mountRacket(); }
+  if (r.name === 'player' && feature('shop')) { ensureThree(); mountPlayerRackets(); }
   if (document.getElementById('dir-box')) renderDirectory(document.querySelector('[data-input=dir-search]')?.value || '');
   if (document.getElementById('pick-map')) mountPickMap();
   if (r.name === 'invite') renderInvite();

@@ -4,7 +4,7 @@
 import webpush from 'npm:web-push@3.6.7';
 import { createClient } from 'npm:@supabase/supabase-js@2.50.0';
 // Тот же движок рейтинга, что и в приложении: engine.js — копия js/engine.js (обновлять вместе)
-import { analyze, analyzeDoubles, weekSummary, seasonTable, monthKey, monthName } from './engine.js';
+import { analyze, analyzeDoubles, weekSummary, seasonTable, monthKey, monthName, LEAGUES } from './engine.js';
 
 const SB_URL = Deno.env.get('SUPABASE_URL')!;
 const sb = createClient(SB_URL, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
@@ -272,6 +272,50 @@ Deno.serve(async (req) => {
   if (body.action === 'backup') {
     if (!(await isAdminRequest(req))) return json({ error: 'forbidden' }, 403);
     return json({ name: await backup() });
+  }
+
+  // награда за лигу: рейтинг проверяем здесь, на сервере, по тем же правилам, что и в приложении
+  if (body.action === 'league_reward') {
+    const jwt = req.headers.get('Authorization')?.replace('Bearer ', '') ?? '';
+    const { data: au } = await sb.auth.getUser(jwt);
+    if (!au.user) return json({ error: 'Войдите в аккаунт' }, 401);
+    const uid = au.user.id, cid = String(body.cid ?? ''), league = String(body.league ?? ''), item = String(body.item ?? '');
+    const lmin = (name: string) => LEAGUES.find((l: { name: string }) => l.name === name)?.min ?? Infinity;
+    const RW: Record<string, { types: string[]; cap: number; min: number; bonus?: string; name: string }> = {
+      silver: { types: ['grip', 'tape', 'ball'], cap: 250, min: lmin('Серебро'), name: 'Серебро' },
+      gold: { types: ['rubber'], cap: 1000, min: lmin('Золото'), bonus: 'rw-tape-gold:gold', name: 'Золото' },
+      platinum: { types: ['blade'], cap: 3000, min: lmin('Платина'), name: 'Платина' },
+      diamond: { types: ['shoes'], cap: 1e9, min: lmin('Алмаз'), name: 'Алмаз' },
+    };
+    const rw = RW[league];
+    if (!rw) return json({ error: 'Нет такой награды' }, 400);
+    // магазин включён для всех — или это создатель (тестирует раньше всех)
+    const { data: feat } = await sb.from('platform').select('value').eq('key', 'features').maybeSingle();
+    const mode = feat?.value?.shop ?? 'all';
+    if (mode !== 'all') {
+      const { data: me } = await sb.from('profiles').select('is_founder').eq('id', uid).maybeSingle();
+      if (!(mode === 'founder' && me?.is_founder)) return json({ error: 'Магазин пока недоступен' }, 403);
+    }
+    const { data: mem } = await sb.from('club_members').select('status').eq('club_id', cid).eq('user_id', uid).maybeSingle();
+    if (mem?.status !== 'active') return json({ error: 'Вы не участник этого клуба' }, 403);
+    const { data: got } = await sb.from('league_rewards').select('item_key').eq('user_id', uid).eq('league', league).maybeSingle();
+    if (got) return json({ error: 'Эта награда уже получена' }, 400);
+    const c = await club(cid);
+    if (!c) return json({ error: 'Клуб не найден' }, 404);
+    const { profiles, matches, settings } = await loadClub(c);
+    const A = analyze(profiles.filter((p) => ['approved', 'archived', 'deleted'].includes(p.status)), matches, settings);
+    const r = A.rating.get(uid) ?? A.S.initialRating;
+    if (r < rw.min) return json({ error: `Награда откроется в лиге «${rw.name}» — рейтинг от ${rw.min}` }, 400);
+    const [iid, v] = item.split(':');
+    const { data: it } = await sb.from('shop_items').select('*').eq('id', iid).maybeSingle();
+    if (!it || !it.for_sale || !rw.types.includes(it.type) || !(v in (it.variants ?? {})) || it.price + Number(it.variants[v] ?? 0) > rw.cap)
+      return json({ error: 'Этот предмет нельзя выбрать в награду' }, 400);
+    const { data: own } = await sb.from('user_items').select('item_key').eq('user_id', uid).eq('item_key', item).maybeSingle();
+    if (own) return json({ error: 'Этот предмет у вас уже есть — выберите другой' }, 400);
+    await sb.from('user_items').insert({ user_id: uid, item_key: item, club_id: cid, price: 0, source: 'reward' });
+    if (rw.bonus) await sb.from('user_items').upsert({ user_id: uid, item_key: rw.bonus, club_id: cid, price: 0, source: 'reward' }, { onConflict: 'user_id,item_key', ignoreDuplicates: true });
+    await sb.from('league_rewards').insert({ user_id: uid, league, item_key: item, club_id: cid });
+    return json({ ok: true });
   }
 
   if (body.action === 'test') {

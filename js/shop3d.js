@@ -1,0 +1,441 @@
+// Картинки предметов магазина и реалистичная 3D-ракетка (three.js r128, грузится по требованию).
+import { BRANDS, byId, colorOf, parseKey } from './shop-catalog.js';
+
+// ───────────── Эмблемы ─────────────
+function emblem(x, bk, cx, cy, s, col) {
+  const b = BRANDS[bk] || { mark: 'box', color: '#333' };
+  x.save(); x.translate(cx, cy); x.fillStyle = col || b.color; x.strokeStyle = col || b.color; x.lineWidth = s * .12; x.lineCap = 'round'; x.lineJoin = 'round';
+  const m = b.mark;
+  if (m === 'wings') { for (const k of [-1, 1]) { x.beginPath(); x.ellipse(k * s * .42, -s * .12, s * .4, s * .26, k * -.5, 0, 7); x.fill(); x.beginPath(); x.ellipse(k * s * .3, s * .28, s * .24, s * .17, k * .6, 0, 7); x.fill(); } x.fillRect(-s * .05, -s * .35, s * .1, s * .8); }
+  else if (m === 'swoosh') { x.beginPath(); x.moveTo(-s * .6, s * .15); x.quadraticCurveTo(-s * .1, s * .55, s * .65, -s * .35); x.quadraticCurveTo(0, s * .25, -s * .6, s * .15); x.fill(); }
+  else if (m === 'chevron') { x.beginPath(); x.moveTo(-s * .55, -s * .4); x.lineTo(0, s * .4); x.lineTo(s * .55, -s * .4); x.stroke(); x.beginPath(); x.moveTo(-s * .3, -s * .4); x.lineTo(0, s * .05); x.lineTo(s * .3, -s * .4); x.stroke(); }
+  else if (m === 'stripes') { for (let i = -2; i <= 2; i++) { x.beginPath(); x.moveTo(i * s * .22 - s * .1, -s * .45); x.lineTo(i * s * .22 + s * .1, s * .45); x.stroke(); } }
+  else if (m === 'ring') { x.beginPath(); x.arc(0, 0, s * .42, 0, 7); x.stroke(); x.beginPath(); x.arc(0, 0, s * .16, 0, 7); x.fill(); }
+  else if (m === 'sun') { x.beginPath(); x.arc(0, 0, s * .3, 0, 7); x.fill(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; x.beginPath(); x.moveTo(Math.cos(a) * s * .42, Math.sin(a) * s * .42); x.lineTo(Math.cos(a) * s * .56, Math.sin(a) * s * .56); x.stroke(); } }
+  else if (m === 'stars') { for (const [dx, dy] of [[-.36, .15], [0, -.2], [.36, .15]]) star(x, dx * s, dy * s, s * .2); }
+  else if (m === 'tri') { x.beginPath(); x.moveTo(0, -s * .45); x.lineTo(s * .5, s * .38); x.lineTo(-s * .5, s * .38); x.closePath(); x.stroke(); }
+  else if (m === 'wave') { x.beginPath(); x.moveTo(-s * .6, 0); for (let i = 0; i <= 12; i++) x.lineTo(-s * .6 + i * s * .1, Math.sin(i / 1.9) * s * .22); x.stroke(); }
+  else { x.strokeRect(-s * .45, -s * .32, s * .9, s * .64); x.font = `800 ${s * .38}px Arial`; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText((b.name || '').slice(0, 3), 0, s * .02); }
+  x.restore();
+}
+function star(x, cx, cy, r) { x.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; x.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); } x.closePath(); x.fill(); }
+function rr(x, l, t, w, h, r) { x.beginPath(); x.moveTo(l + r, t); x.arcTo(l + w, t, l + w, t + h, r); x.arcTo(l + w, t + h, l, t + h, r); x.arcTo(l, t + h, l, t, r); x.arcTo(l, t, l + w, t, r); x.closePath(); }
+const light = hex => { const n = parseInt(hex.slice(1), 16); return ((n >> 16) * .3 + ((n >> 8) & 255) * .59 + (n & 255) * .11) > 150; };
+function shade(hex, amt) { const n = parseInt(hex.slice(1), 16); const f = c => Math.max(0, Math.min(255, c + amt)); return '#' + [f(n >> 16), f((n >> 8) & 255), f(n & 255)].map(v => v.toString(16).padStart(2, '0')).join(''); }
+
+// ───────────── Картинки предметов (2D) ─────────────
+function headPath2D(x, cx, cy, k, hex) {
+  // та же форма головы, что и в 3D (с «плечами» у ручки)
+  x.beginPath();
+  if (hex) { const r = 7.4 * k; const p = [[.62, -1], [1, -.25], [.82, .78], [.18, 1.02], [-.18, 1.02], [-.82, .78], [-1, -.25], [-.62, -1]]; p.forEach(([a, b], i) => i ? x.lineTo(cx + a * r, cy + b * r) : x.moveTo(cx + a * r, cy + b * r)); x.closePath(); return; }
+  const P = (a, b) => [cx + a * k, cy - b * k];
+  x.moveTo(...P(1.25, -7.0));
+  x.bezierCurveTo(...P(3.6, -7.5), ...P(7.0, -5.0), ...P(7.3, -2.0));
+  x.bezierCurveTo(...P(7.6, 1.0), ...P(7.0, 4.4), ...P(5.2, 6.3));
+  x.bezierCurveTo(...P(3.7, 7.7), ...P(1.9, 8.15), ...P(0, 8.15));
+  x.bezierCurveTo(...P(-1.9, 8.15), ...P(-3.7, 7.7), ...P(-5.2, 6.3));
+  x.bezierCurveTo(...P(-7.0, 4.4), ...P(-7.6, 1.0), ...P(-7.3, -2.0));
+  x.bezierCurveTo(...P(-7.0, -5.0), ...P(-3.6, -7.5), ...P(-1.25, -7.0));
+  x.closePath();
+}
+function thumb(it, color, big = false) {
+  // основания, накладки и обмотки — снимок настоящей 3D-модели
+  if (window.THREE && ['blade', 'rubber', 'grip'].includes(it.type)) {
+    const ck = colorOf(it, color)?.key;
+    const url = it.type === 'blade' ? snapshot(`b:${it.id}:${ck}`, { blade: `${it.id}:${ck}`, only: 'blade' }, { rx: -.12, ry: .5, rz: -.55, d: 46, y: -.6 })
+      : it.type === 'rubber' ? snapshot(`r:${it.id}:${ck}`, { blade: 'cn-b1:FL', fh: `${it.id}:${ck}`, only: 'rubber' }, { rx: -.2, ry: .45, rz: -.25, d: 33, y: 3.6 })
+      : snapshot(`g:${it.id}:${ck}`, { blade: 'eu-b1:FL', grip: `${it.id}:${ck}`, only: 'blade' }, { rx: .25, ry: .7, rz: -.5, d: 40, y: -4.5 });
+    if (url) { const img = new Image(); img.src = url; img.alt = ''; img.width = big ? 220 : 128; img.height = big ? 220 : 128; img.className = 'snap'; return img; }
+  }
+  const N = big ? 220 : 128;
+  const cv = document.createElement('canvas'); cv.width = cv.height = N; const x = cv.getContext('2d');
+  x.scale(N / 128, N / 128);
+  const col = colorOf(it, color);
+  const t = it.type;
+  if (t === 'blade' || t === 'rubber') {
+    x.save(); x.translate(64, 60); x.rotate(-0.42);
+    const k = 3.9;
+    // ручка
+    const cheek = t === 'blade' ? it.look.cheek : '#c9935a';
+    x.fillStyle = cheek; rr(x, -5.6, 26, 11.2, 40, 4); x.fill();
+    x.fillStyle = 'rgba(255,255,255,.18)'; rr(x, -2.6, 40, 5.2, 14, 2); x.fill();
+    // голова
+    headPath2D(x, 0, 0, k, t === 'blade' && it.look.hex);
+    if (t === 'blade') {
+      x.fillStyle = it.look.face; x.fill(); x.save(); x.clip();
+      x.strokeStyle = 'rgba(90,50,15,.28)'; x.lineWidth = 1;
+      for (let i = -34; i < 34; i += 4) { x.beginPath(); x.moveTo(i, -36); x.bezierCurveTo(i + 4, -14, i - 3, 4, i + 2, 30); x.stroke(); }
+      x.restore(); x.strokeStyle = shade(it.look.face, -40); x.lineWidth = 1.4; headPath2D(x, 0, 0, k, it.look.hex); x.stroke();
+      emblem(x, it.bk, 0, -20, 14, BRANDS[it.bk]?.color);
+    } else {
+      const g = x.createLinearGradient(-30, -30, 30, 30); g.addColorStop(0, shade(col.hex, 30)); g.addColorStop(1, shade(col.hex, -15));
+      x.fillStyle = g; x.fill();
+      x.strokeStyle = it.sp || '#e3b04b'; x.lineWidth = 2; x.stroke();
+      if (it.rubber === 'длинные шипы') { x.save(); headPath2D(x, 0, 0, k); x.clip(); x.fillStyle = 'rgba(255,255,255,.2)'; for (let a = -30; a <= 30; a += 4.5) for (let b = -34; b <= 34; b += 4.5) { x.beginPath(); x.arc(a + ((b / 4.5) % 2) * 2.2, b, 1.2, 0, 7); x.fill(); } x.restore(); }
+      x.fillStyle = 'rgba(255,255,255,.22)'; x.beginPath(); x.ellipse(-10, -12, 10, 16, -0.5, 0, 7); x.fill();
+      const lc = col.key === 'black' ? '#e8e8e8' : '#fff';
+      emblem(x, it.bk, 0, 13, 12, lc);
+      x.fillStyle = lc; x.font = '800 7px Arial'; x.textAlign = 'center'; x.fillText(it.brand.toUpperCase(), 0, 25);
+    }
+    x.restore();
+  } else if (t === 'grip' && false) {
+    x.save(); x.translate(64, 64); x.rotate(-0.4);
+    x.fillStyle = '#c9935a'; rr(x, -10, -44, 20, 88, 8); x.fill();
+    x.save(); rr(x, -10, -44, 20, 88, 8); x.clip();
+    for (let y = -60; y < 60; y += 9) { x.fillStyle = col.hex; x.beginPath(); x.moveTo(-14, y); x.lineTo(14, y - 10); x.lineTo(14, y - 3); x.lineTo(-14, y + 7); x.closePath(); x.fill(); x.fillStyle = 'rgba(0,0,0,.18)'; x.fillRect(-14, y + 6, 28, 1.2); }
+    x.restore();
+    emblem(x, it.bk, 0, 0, 13, light(col.hex) ? '#333' : '#fff');
+    x.restore();
+  } else if (t === 'tape') {
+    x.translate(64, 64); x.shadowColor = 'rgba(10,30,70,.28)'; x.shadowBlur = 8; x.shadowOffsetY = 4;
+    x.strokeStyle = col.hex; x.lineWidth = 18; x.beginPath(); x.arc(0, 0, 32, 0, 7); x.stroke();
+    x.shadowColor = 'transparent';
+    const tg = x.createLinearGradient(-40, -40, 40, 40); tg.addColorStop(0, 'rgba(255,255,255,.35)'); tg.addColorStop(.5, 'rgba(255,255,255,0)'); tg.addColorStop(1, 'rgba(0,0,0,.25)');
+    x.strokeStyle = tg; x.lineWidth = 18; x.beginPath(); x.arc(0, 0, 32, 0, 7); x.stroke();
+    x.strokeStyle = 'rgba(0,0,0,.15)'; x.lineWidth = 1; for (let r2 = 24; r2 < 41; r2 += 3) { x.beginPath(); x.arc(0, 0, r2, 0, 7); x.stroke(); }
+    x.fillStyle = '#e7ecf4'; x.beginPath(); x.arc(0, 0, 22, 0, 7); x.fill();
+    emblem(x, it.bk, 0, 0, 16, BRANDS[it.bk]?.color);
+  } else if (t === 'ball') {
+    x.translate(64, 64);
+    x.fillStyle = 'rgba(10,30,70,.18)'; x.beginPath(); x.ellipse(0, 44, 48, 8, 0, 0, 7); x.fill();
+    const drawBall = (bx, by, r) => {
+      const g = x.createRadialGradient(bx - r * .35, by - r * .4, r * .1, bx, by, r); g.addColorStop(0, '#fff'); g.addColorStop(1, shade(col.hex, -40));
+      x.fillStyle = g; x.beginPath(); x.arc(bx, by, r, 0, 7); x.fill();
+      x.fillStyle = BRANDS[it.bk]?.color || '#333';
+      for (let i = 0; i < it.stars; i++) star(x, bx - (it.stars - 1) * r * .22 + i * r * .44, by - r * .12, r * .18);
+      x.font = `800 ${r * .34}px Arial`; x.textAlign = 'center'; x.fillText(it.brand.toUpperCase(), bx, by + r * .38);
+    };
+    drawBall(-20, 14, 24); drawBall(22, 18, 22); drawBall(0, -20, 26);
+  } else if (t === 'case') {
+    x.translate(64, 64); x.rotate(-0.3); x.shadowColor = 'rgba(10,30,70,.3)'; x.shadowBlur = 10; x.shadowOffsetY = 5;
+    x.fillStyle = col.hex; headPath2D(x, 0, -6, 4.6); x.fill();
+    rr(x, -8, 26, 16, 26, 6); x.fill();
+    x.shadowColor = 'transparent';
+    { const cg = x.createRadialGradient(-12, -22, 4, 0, -6, 44); cg.addColorStop(0, 'rgba(255,255,255,.28)'); cg.addColorStop(1, 'rgba(0,0,0,.22)'); x.fillStyle = cg; headPath2D(x, 0, -6, 4.6); x.fill(); }
+    x.strokeStyle = light(col.hex) ? '#9aa4b2' : 'rgba(255,255,255,.55)'; x.setLineDash([3, 3]); x.lineWidth = 2; headPath2D(x, 0, -6, 4.1); x.stroke(); x.setLineDash([]);
+    x.fillStyle = '#c9ced8'; rr(x, 30, -14, 6, 12, 2); x.fill();
+    if (col.key === 'carbon') { x.save(); headPath2D(x, 0, -6, 4.6); x.clip(); x.fillStyle = 'rgba(255,255,255,.07)'; for (let i = -60; i < 60; i += 6) for (let j = -60; j < 60; j += 6) if ((i + j) / 6 % 2 === 0) x.fillRect(i, j, 6, 6); x.restore(); }
+    emblem(x, it.bk, 0, -8, 22, light(col.hex) ? BRANDS[it.bk]?.color : '#fff');
+  } else if (t === 'shirt') {
+    x.translate(64, 66); x.shadowColor = 'rgba(10,30,70,.28)'; x.shadowBlur = 9; x.shadowOffsetY = 4;
+    x.fillStyle = col.hex;
+    x.beginPath(); x.moveTo(-18, -40); x.lineTo(-42, -26); x.lineTo(-32, -6); x.lineTo(-24, -10); x.lineTo(-24, 42); x.lineTo(24, 42); x.lineTo(24, -10); x.lineTo(32, -6); x.lineTo(42, -26); x.lineTo(18, -40); x.quadraticCurveTo(0, -26, -18, -40); x.closePath(); x.fill();
+    x.shadowColor = 'transparent';
+    { const sg = x.createLinearGradient(-42, -40, 42, 42); sg.addColorStop(0, 'rgba(255,255,255,.22)'); sg.addColorStop(.55, 'rgba(255,255,255,0)'); sg.addColorStop(1, 'rgba(0,0,0,.2)'); x.fillStyle = sg; x.fill();
+      x.strokeStyle = 'rgba(0,0,0,.12)'; x.lineWidth = 1; x.beginPath(); x.moveTo(-10, 0); x.quadraticCurveTo(-6, 20, -12, 40); x.moveTo(12, 4); x.quadraticCurveTo(8, 22, 14, 40); x.stroke();
+      x.fillStyle = 'rgba(0,0,0,.18)'; x.beginPath(); x.moveTo(-18, -40); x.quadraticCurveTo(0, -24, 18, -40); x.quadraticCurveTo(0, -30, -18, -40); x.fill(); }
+    x.strokeStyle = 'rgba(0,0,0,.15)'; x.lineWidth = 1.5;
+    const acc = BRANDS[it.bk]?.color || '#333';
+    x.fillStyle = light(col.hex) ? acc : 'rgba(255,255,255,.9)';
+    x.fillRect(-24, 18, 48, 4);
+    if (it.bk === 'Tibhar') { x.fillStyle = 'rgba(0,0,0,.35)'; for (let i = -22; i < 24; i += 9) { x.beginPath(); x.moveTo(i, -10); x.lineTo(i + 5, 14); x.lineTo(i + 2, 14); x.closePath(); x.fill(); } }
+    if (it.bk === 'Li-Ning') { x.fillStyle = col.key === 'red' ? '#ffcc00' : '#c8102e'; for (const [a, b, r] of [[-12, -18, 5], [-3, -24, 2], [2, -19, 2], [2, -12, 2], [-3, -8, 2]]) star(x, a, b, r); }
+    emblem(x, it.bk, 10, -14, 11, light(col.hex) ? acc : '#fff');
+    if (col.key === 'gold') { x.fillStyle = 'rgba(255,255,255,.35)'; x.beginPath(); x.moveTo(-24, -10); x.lineTo(-6, -10); x.lineTo(-24, 20); x.closePath(); x.fill(); }
+  } else if (t === 'shorts') {
+    x.translate(64, 64); x.shadowColor = 'rgba(10,30,70,.28)'; x.shadowBlur = 9; x.shadowOffsetY = 4;
+    x.fillStyle = col.hex;
+    x.beginPath(); x.moveTo(-30, -30); x.lineTo(30, -30); x.lineTo(36, 34); x.lineTo(6, 36); x.lineTo(0, 6); x.lineTo(-6, 36); x.lineTo(-36, 34); x.closePath(); x.fill();
+    x.shadowColor = 'transparent';
+    { const sg = x.createLinearGradient(-36, -30, 36, 36); sg.addColorStop(0, 'rgba(255,255,255,.2)'); sg.addColorStop(1, 'rgba(0,0,0,.22)'); x.fillStyle = sg; x.fill(); }
+    x.fillStyle = 'rgba(0,0,0,.18)'; x.fillRect(-30, -30, 60, 7);
+    const acc = BRANDS[it.bk]?.color || '#333';
+    x.fillStyle = light(col.hex) ? acc : 'rgba(255,255,255,.85)'; x.fillRect(-35, 26, 5, 8); x.fillRect(30, 26, 5, 8);
+    emblem(x, it.bk, -18, 18, 10, light(col.hex) ? acc : '#fff');
+  } else if (t === 'shoes') {
+    x.translate(64, 70);
+    x.fillStyle = 'rgba(10,30,70,.18)'; x.beginPath(); x.ellipse(2, 24, 54, 6, 0, 0, 7); x.fill();
+    const [a1, a2] = it.accent;
+    x.fillStyle = col.hex;
+    x.beginPath(); x.moveTo(-48, 6); x.quadraticCurveTo(-46, -22, -26, -24); x.lineTo(-6, -24); x.quadraticCurveTo(8, -6, 34, -4); x.quadraticCurveTo(50, -2, 50, 10); x.lineTo(50, 14); x.lineTo(-48, 14); x.closePath(); x.fill();
+    x.strokeStyle = 'rgba(0,0,0,.18)'; x.lineWidth = 1.2; x.stroke();
+    { const sg = x.createLinearGradient(0, -24, 0, 14); sg.addColorStop(0, 'rgba(255,255,255,.3)'); sg.addColorStop(1, 'rgba(0,0,0,.15)'); x.fillStyle = sg; x.fill(); }
+    x.fillStyle = col.key === 'black' || col.key === 'bg' || col.key === 'neon' || col.key === 'navy' || col.key === 'purple' ? '#2a2b30' : '#e9edf3';
+    x.fillRect(-48, 12, 98, 7);
+    x.fillStyle = col.key === 'neon' ? a2 : a1;
+    x.beginPath(); x.moveTo(-30, 8); x.quadraticCurveTo(-4, -16, 30, 4); x.quadraticCurveTo(-2, -6, -30, 8); x.fill();
+    x.fillStyle = a2; x.fillRect(-48, 18, 98, 2);
+    x.strokeStyle = light(col.hex) ? '#9aa4b2' : 'rgba(255,255,255,.5)'; x.lineWidth = 1.4;
+    for (let i = 0; i < 4; i++) { x.beginPath(); x.moveTo(-18 + i * 6, -22 + i * 2); x.lineTo(-12 + i * 6, -16 + i * 2); x.stroke(); }
+    emblem(x, it.bk, -30, -4, 10, light(col.hex) ? BRANDS[it.bk]?.color : '#fff');
+  }
+  return cv;
+}
+
+// ───────────── 3D: реалистичная ракетка ─────────────
+
+function canvasTex(w, h, draw, opts = {}) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c); if (!opts.data) t.encoding = THREE.sRGBEncoding; t.anisotropy = 8;
+  if (opts.repeat) { t.wrapS = t.wrapT = THREE.RepeatWrapping; } return t;
+}
+function woodCanvas(x, w, h, base, seed, dark = 1) {
+  x.fillStyle = base; x.fillRect(0, 0, w, h);
+  let r = seed * 9301 + 7; const rnd = () => (r = (r * 9301 + 49297) % 233280) / 233280;
+  for (let i = 0; i < 150; i++) {
+    const xx = rnd() * w, lw = .6 + rnd() * 2.4, a = (.03 + rnd() * .09) * dark;
+    x.strokeStyle = `rgba(80,45,12,${a})`; x.lineWidth = lw; x.beginPath(); x.moveTo(xx, 0);
+    for (let y = 0; y <= h; y += 24) x.lineTo(xx + Math.sin(y / 90 + i * .7) * 5 + (rnd() - .5) * 2, y);
+    x.stroke();
+  }
+  for (let i = 0; i < 6; i++) { const cx = rnd() * w, cy = rnd() * h; const g = x.createRadialGradient(cx, cy, 2, cx, cy, 30 + rnd() * 40); g.addColorStop(0, 'rgba(110,60,20,.10)'); g.addColorStop(1, 'rgba(110,60,20,0)'); x.fillStyle = g; x.fillRect(0, 0, w, h); }
+}
+// контур головы (см): ширина 15, высота 15.8, «плечи» переходят в ручку шириной 2.5
+function headShape(hex, inset = 0) {
+  const s = new THREE.Shape();
+  const k = 1 - inset / 7.5;
+  if (hex) {
+    const r = 7.4 * k, cy = 0.35;
+    const p = [[.62, -1], [1, -.25], [.82, .78], [.18, 1.02], [-.18, 1.02], [-.82, .78], [-1, -.25], [-.62, -1]].map(([a, b]) => [a * r, cy - b * r]);
+    s.moveTo(p[0][0], p[0][1]); p.slice(1).forEach(q => s.lineTo(q[0], q[1])); s.closePath(); return s;
+  }
+  const P = (a, b) => [a * k, b * k];
+  s.moveTo(...P(1.25, -7.0));
+  s.bezierCurveTo(...P(3.6, -7.5), ...P(7.0, -5.0), ...P(7.3, -2.0));
+  s.bezierCurveTo(...P(7.6, 1.0), ...P(7.0, 4.4), ...P(5.2, 6.3));
+  s.bezierCurveTo(...P(3.7, 7.7), ...P(1.9, 8.15), ...P(0, 8.15));
+  s.bezierCurveTo(...P(-1.9, 8.15), ...P(-3.7, 7.7), ...P(-5.2, 6.3));
+  s.bezierCurveTo(...P(-7.0, 4.4), ...P(-7.6, 1.0), ...P(-7.3, -2.0));
+  s.bezierCurveTo(...P(-7.0, -5.0), ...P(-3.6, -7.5), ...P(-1.25, -7.0));
+  s.closePath();
+  return s;
+}
+// накладка: та же голова, но внизу вырез дугой под «корону» ручки
+function rubberShape(hex) {
+  const s = headShape(hex, 0.02);
+  if (hex) return s;
+  const pts = s.getPoints(120).filter(p => p.y > -6.35);
+  const o = new THREE.Shape();
+  // начинаем справа над ручкой, идём по контуру, закрываем дугой
+  const start = pts.findIndex((p, i) => i > 0 && pts[i - 1].y <= -6.35);
+  const ordered = start > 0 ? pts.slice(start).concat(pts.slice(0, start)) : pts;
+  o.moveTo(ordered[0].x, ordered[0].y);
+  ordered.slice(1).forEach(p => o.lineTo(p.x, p.y));
+  o.quadraticCurveTo(0, -5.75, ordered[0].x, ordered[0].y);
+  return o;
+}
+function setCapUV(geo, size) {
+  const uv = geo.attributes.uv, pos = geo.attributes.position, nor = geo.attributes.normal;
+  for (let i = 0; i < uv.count; i++) if (Math.abs(nor.getZ(i)) > 0.7) uv.setXY(i, pos.getX(i) / size + .5, pos.getY(i) / size + .5);
+  uv.needsUpdate = true;
+}
+function buildEnv(renderer) {
+  // мягкая «студия»: светлые панели вокруг — для бликов на резине и лаке
+  const env = new THREE.Scene();
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), new THREE.MeshBasicMaterial({ side: THREE.BackSide, map: canvasTex(64, 256, (x, w, h) => { const g = x.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#ffffff'); g.addColorStop(.5, '#cfd9ea'); g.addColorStop(1, '#5d6f8f'); x.fillStyle = g; x.fillRect(0, 0, w, h); }) }));
+  env.add(sky);
+  const panel = (w, h, x, y, z, ry, rx = 0) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: '#ffffff', side: THREE.DoubleSide })); m.position.set(x, y, z); m.rotation.set(rx, ry, 0); env.add(m); };
+  panel(30, 14, 0, 26, 0, 0, Math.PI / 2); panel(14, 30, 30, 4, 10, -Math.PI / 2.4); panel(12, 26, -30, 0, 6, Math.PI / 2.2);
+  const pm = new THREE.PMREMGenerator(renderer);
+  return pm.fromScene(env, 0.03).texture;
+}
+// cfg: { blade:'id:FL', fh, bh, grip, tape, only:'rubber'|'blade' } · q — разрешение текстур
+function buildRacket(cfg, q = 1) {
+  const inner = new THREE.Group(); inner.position.y = 3.6;
+  const bk = parseKey(cfg.blade), bl = bk.it, hex = !!bl.look.hex, HAND = bk.color || 'FL';
+  const R = n => Math.round(n * q);
+  const T = 0.58;
+  // ── основание: голова + стержень ручки одной пластиной, кромка — видны слои
+  const bshape = headShape(hex);
+  const bladeGeo = new THREE.ExtrudeGeometry(bshape, { depth: T, bevelEnabled: true, bevelThickness: .03, bevelSize: .035, bevelSegments: 3, curveSegments: 96 });
+  bladeGeo.translate(0, 0, -T / 2); setCapUV(bladeGeo, 16);
+  const seq = bl.look.ply.length === 3 ? [0, 2, 1, 2, 1, 2, 0].map(i => bl.look.ply[i]) : [0, 1, 0, 1, 0].map(i => bl.look.ply[i]);
+  const plyTex = canvasTex(8, 256, (x, w, h) => { const hh = h / seq.length; seq.forEach((c, i) => { x.fillStyle = c; x.fillRect(0, i * hh, w, hh + 1); x.fillStyle = 'rgba(60,30,10,.25)'; x.fillRect(0, i * hh, w, 1); }); });
+  plyTex.wrapT = THREE.ClampToEdgeWrapping; plyTex.repeat.set(1, 1 / (T + .06)); plyTex.offset.set(0, .03 / (T + .06));
+  const faceTex = canvasTex(R(512), R(512), (x, w, h) => woodCanvas(x, w, h, bl.look.face, bl.price), { repeat: true });
+  const bladeMat = [new THREE.MeshPhysicalMaterial({ map: faceTex, roughness: .55, clearcoat: .25, clearcoatRoughness: .5 }), new THREE.MeshStandardMaterial({ map: plyTex, roughness: .7 })];
+  if (cfg.only !== 'rubber') inner.add(new THREE.Mesh(bladeGeo, bladeMat));
+  // ── ручка: стержень + две щёчки с расширением книзу (FL) и выпуклой «короной»
+  const HTOP = -6.15, HBOT = HAND === 'CS' ? -13.1 : -16.3;
+  const stemW = 1.05;
+  const stem = new THREE.Shape(); stem.moveTo(-stemW, -6.8); stem.lineTo(stemW, -6.8); stem.lineTo(stemW * 1.08, HBOT); stem.lineTo(-stemW * 1.08, HBOT); stem.closePath();
+  const stemGeo = new THREE.ExtrudeGeometry(stem, { depth: T, bevelEnabled: false }); stemGeo.translate(0, 0, -T / 2);
+  if (cfg.only !== 'rubber') inner.add(new THREE.Mesh(stemGeo, bladeMat));
+  // формы ручки: FL — расширяется книзу, ST — прямая, AN — утолщение посередине, CS — короткая
+  const HW = { FL: [1.3, 1.16, 1.78], ST: [1.32, 1.32, 1.32], AN: [1.16, 1.62, 1.22], CS: [1.2, 1.1, 1.22] }[HAND];
+  const cheekShape = () => {
+    const s = new THREE.Shape(); const [w0, wm, w1] = HW.map(v => v * .86);
+    s.moveTo(-w0, HTOP - .55); s.quadraticCurveTo(0, HTOP + .32, w0, HTOP - .55);
+    s.bezierCurveTo(w0 + .02, HTOP - 3, wm, -11.6, wm + .05, -12.6);
+    s.bezierCurveTo(wm + .15, -14, w1, -15.2, w1, HBOT + .35);
+    s.quadraticCurveTo(w1, HBOT, w1 - .35, HBOT); s.lineTo(-w1 + .35, HBOT); s.quadraticCurveTo(-w1, HBOT, -w1, HBOT + .35);
+    s.bezierCurveTo(-w1, -15.2, -wm - .15, -14, -wm - .05, -12.6);
+    s.bezierCurveTo(-wm, -11.6, -w0 - .02, HTOP - 3, -w0, HTOP - .55);
+    return s;
+  };
+  const grip = parseKey(cfg.grip);
+  const CT = 0.42, CB = 0.22; // щёчка: толщина + скругление → ручка ≈ 2,3 см
+  const cheekWood = canvasTex(R(256), R(512), (x, w, h) => woodCanvas(x, w, h, bl.look.cheek, bl.price + 3, light(bl.look.cheek) ? 1 : .6), { repeat: true });
+  let cheekMat;
+  if (grip.it) {
+    const gc = colorOf(grip.it, grip.color).hex;
+    const wrap = canvasTex(R(256), R(512), (x, w, h) => {
+      x.fillStyle = gc; x.fillRect(0, 0, w, h);
+      for (let y = -w; y < h + w; y += 34) { x.fillStyle = 'rgba(0,0,0,.22)'; x.beginPath(); x.moveTo(0, y); x.lineTo(w, y - 60); x.lineTo(w, y - 56); x.lineTo(0, y + 4); x.closePath(); x.fill(); x.fillStyle = 'rgba(255,255,255,.12)'; x.beginPath(); x.moveTo(0, y + 6); x.lineTo(w, y - 54); x.lineTo(w, y - 50); x.lineTo(0, y + 10); x.closePath(); x.fill(); }
+      if (grip.it.id === 'acc-g1') for (let i = 0; i < 2500; i++) { x.fillStyle = `rgba(255,255,255,${Math.random() * .12})`; x.fillRect(Math.random() * w, Math.random() * h, 2, 2); }
+    }, { repeat: true });
+    cheekMat = new THREE.MeshStandardMaterial({ map: wrap, roughness: grip.it.id === 'acc-g3' ? .45 : .9 });
+  } else cheekMat = new THREE.MeshPhysicalMaterial({ map: cheekWood, roughness: .45, clearcoat: .5, clearcoatRoughness: .35 });
+  for (const sgn of cfg.only === 'rubber' ? [] : [1, -1]) {
+    const cg = new THREE.ExtrudeGeometry(cheekShape(), { depth: CT, bevelEnabled: true, bevelThickness: CB, bevelSize: .2, bevelSegments: 6, curveSegments: 48 });
+    setCapUV(cg, 6);
+    const m = new THREE.Mesh(cg, cheekMat);
+    if (sgn === 1) m.position.z = T / 2 + CB; else { m.rotation.y = Math.PI; m.position.z = -T / 2 - CB; }
+    inner.add(m);
+    // фирменная плашка на ручке
+    if (!grip.it) {
+      const plate = new THREE.Mesh(new THREE.PlaneGeometry(1.25, 2.8), new THREE.MeshPhysicalMaterial({
+        map: canvasTex(150, 320, (x, w, h) => {
+          const bc = BRANDS[bl.bk]?.color || '#333';
+          const g2 = x.createLinearGradient(0, 0, w, h); g2.addColorStop(0, '#f6f7fa'); g2.addColorStop(.5, '#c9ced8'); g2.addColorStop(1, '#eef0f4');
+          x.fillStyle = g2; rr(x, 4, 4, w - 8, h - 8, 22); x.fill(); x.strokeStyle = bc; x.lineWidth = 6; rr(x, 10, 10, w - 20, h - 20, 18); x.stroke();
+          emblem(x, bl.bk, w / 2, 80, 70, bc);
+          x.save(); x.translate(w / 2, 200); x.rotate(-Math.PI / 2); x.fillStyle = bc; x.font = '800 34px "Barlow Condensed", Arial'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(bl.brand.toUpperCase(), 0, 0); x.restore();
+        }), transparent: true, metalness: .55, roughness: .3, clearcoat: 1,
+      }));
+      plate.position.set(0, HAND === 'CS' ? -9.6 : -10.9, sgn * (T / 2 + CB + CT + CB + .012));
+      if (sgn === -1) plate.rotation.y = Math.PI;
+      inner.add(plate);
+    }
+  }
+  // ── накладки: цветная верхняя резина + губка (видна на торце)
+  for (const side of cfg.only === 'blade' ? [] : ['fh', 'bh'].filter(sd => cfg[sd])) {
+    const { it, color } = parseKey(cfg[side]);
+    const col = colorOf(it, color);
+    const shape = rubberShape(hex);
+    const SP = it.sp ? 0.17 : 0.05, TS = 0.07; // губка, верхний лист
+    const sponge = new THREE.ExtrudeGeometry(shape, { depth: SP, bevelEnabled: false, curveSegments: 96 });
+    const topG = new THREE.ExtrudeGeometry(shape, { depth: TS, bevelEnabled: true, bevelThickness: .015, bevelSize: .012, bevelSegments: 2, curveSegments: 96 });
+    setCapUV(topG, 15.4);
+    const pimples = it.rubber === 'длинные шипы';
+    const lc = col.key === 'black' ? '#e9e9e9' : '#ffffff';
+    const topTex = canvasTex(R(1024), R(1024), (x, w, h) => {
+      x.save(); x.scale(w / 1024, h / 1024); w = 1024; h = 1024;
+      x.fillStyle = col.hex; x.fillRect(0, 0, w, h);
+      const img = x.getImageData(0, 0, w, h), d = img.data;
+      for (let i = 0; i < d.length; i += 4) { const n = (Math.random() - .5) * 6; d[i] += n; d[i + 1] += n; d[i + 2] += n; }
+      x.putImageData(img, 0, 0);
+      x.fillStyle = lc; x.strokeStyle = lc; x.textAlign = 'center';
+      // логотип у ручки, как на настоящих накладках
+      emblem(x, it.bk, w / 2, h * .74, 70, lc);
+      x.font = '800 62px "Barlow Condensed", Arial'; x.fillText(it.brand.toUpperCase(), w / 2, h * .835);
+      x.font = '600 34px Inter, Arial'; x.fillText(it.name.replace(/ ·.*$/, ''), w / 2, h * .875);
+      x.globalAlpha = .55; x.font = '600 18px Inter, Arial'; x.fillText(it.sp ? `${it.sponge} · ${it.region === 'cn' ? 'MADE IN CHINA' : it.region === 'jp' ? 'MADE IN JAPAN' : 'MADE IN GERMANY'}` : 'OX · PIMPLES OUT', w / 2, h * .905);
+      x.globalAlpha = 1; x.restore();
+    });
+    const bump = pimples ? canvasTex(512, 512, (x, w, h) => { x.fillStyle = '#000'; x.fillRect(0, 0, w, h); x.fillStyle = '#fff'; for (let a = 6; a < w; a += 12) for (let b = 6; b < h; b += 12) { x.beginPath(); x.arc(a + ((b / 12) % 2) * 6, b, 3.6, 0, 7); x.fill(); } }, { data: true }) : null;
+    const tacky = it.rubber.includes('лип');
+    const topMat = new THREE.MeshPhysicalMaterial({ map: topTex, roughness: pimples ? .75 : tacky ? .42 : .55, clearcoat: pimples ? 0 : tacky ? .6 : .3, clearcoatRoughness: tacky ? .22 : .45, bumpMap: bump, bumpScale: pimples ? .05 : 0, envMapIntensity: .45 });
+    const edgeMat = new THREE.MeshStandardMaterial({ color: shade(col.hex, -10), roughness: .7 });
+    const spongeMat = new THREE.MeshStandardMaterial({ color: it.sp || col.hex, roughness: .95 });
+    const grp = new THREE.Group();
+    const spM = new THREE.Mesh(sponge, spongeMat); grp.add(spM);
+    const tpM = new THREE.Mesh(topG, [topMat, edgeMat]); tpM.position.z = SP; grp.add(tpM);
+    if (side === 'fh') grp.position.z = T / 2 + .005; else { grp.rotation.y = Math.PI; grp.position.z = -T / 2 - .005; }
+    grp.userData = { side, baseZ: grp.position.z };
+    inner.add(grp);
+  }
+  // ── торцевая лента по краю головы
+  const tape = parseKey(cfg.tape);
+  if (tape.it && cfg.only !== 'rubber') {
+    const pts = headShape(hex, -0.06).getPoints(160).filter(p => p.y > -6.2).map(p => new THREE.Vector3(p.x, p.y, 0));
+    const curve = new THREE.CatmullRomCurve3(pts, false);
+    const tg = new THREE.TubeGeometry(curve, 240, .5, 10, false);
+    tg.scale(1, 1, .82);
+    const tm = new THREE.Mesh(tg, new THREE.MeshPhysicalMaterial({ color: colorOf(tape.it, tape.color).hex, roughness: tape.color === 'silver' ? .25 : .5, metalness: tape.color === 'silver' ? .7 : 0, clearcoat: .6 }));
+    inner.add(tm);
+  }
+  return inner;
+}
+// ── картинки для карточек: снимок той же 3D-модели ──
+const SNAP = new Map();
+let snapR = null;
+function snapshot(key, cfg, view) {
+  if (SNAP.has(key)) return SNAP.get(key);
+  if (!window.THREE) return null;
+  if (!snapR) {
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+    renderer.setPixelRatio(1); renderer.setSize(240, 240, false); renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.LinearToneMapping; renderer.toneMappingExposure = .95; renderer.physicallyCorrectLights = true;
+    const scene = new THREE.Scene(); scene.environment = buildEnv(renderer);
+    const key2 = new THREE.DirectionalLight('#ffffff', 1.6); key2.position.set(10, 14, 16); scene.add(key2);
+    const rim = new THREE.DirectionalLight('#cfe0ff', 1.3); rim.position.set(-12, 6, -14); scene.add(rim);
+    scene.add(new THREE.AmbientLight('#ffffff', .3));
+    snapR = { renderer, scene, camera: new THREE.PerspectiveCamera(30, 1, .1, 200) };
+  }
+  const { renderer, scene, camera } = snapR;
+  const g = new THREE.Group(); g.add(buildRacket(cfg, .5)); scene.add(g);
+  const v = view || { rx: -.15, ry: .55, rz: -.5, d: 50, y: 0 };
+  g.rotation.set(v.rx, v.ry, v.rz); camera.position.set(0, v.y, v.d); camera.lookAt(0, v.y, 0);
+  renderer.render(scene, camera);
+  const url = renderer.domElement.toDataURL('image/png');
+  scene.remove(g); g.traverse(o => { o.geometry?.dispose?.(); [].concat(o.material || []).forEach(m => { m.map?.dispose?.(); m.dispose?.(); }); });
+  SNAP.set(key, url);
+  return url;
+}
+
+export function loadThree() {
+  if (window.THREE) return Promise.resolve(window.THREE);
+  return new Promise((res, rej) => {
+    const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+    s.onload = () => res(window.THREE); s.onerror = () => rej(new Error('3D не загрузилось — проверьте интернет')); document.head.appendChild(s);
+  });
+}
+// 3D-просмотр ракетки: вертеть пальцем, перевернуть, приблизить. Один на экран.
+let viewer = null;
+export function mountViewer(el, cfg, opts = {}) {
+  const THREE = window.THREE;
+  if (!THREE) return null;
+  if (!viewer) {
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(2, devicePixelRatio)); renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping = THREE.LinearToneMapping; renderer.toneMappingExposure = .95; renderer.physicallyCorrectLights = true;
+    const scene = new THREE.Scene(); scene.environment = buildEnv(renderer);
+    const camera = new THREE.PerspectiveCamera(30, 1, .1, 200);
+    const key = new THREE.DirectionalLight('#ffffff', 1.6); key.position.set(10, 14, 16); scene.add(key);
+    const rim = new THREE.DirectionalLight('#cfe0ff', 1.4); rim.position.set(-12, 6, -14); scene.add(rim);
+    scene.add(new THREE.AmbientLight('#ffffff', .25));
+    viewer = { renderer, scene, camera, group: null, inner: null, target: { x: -0.18, y: 0.35 }, cur: { x: -0.18, y: 0.35 }, zoom: 1, dragging: false, idleAt: 0, anim: null, onSide: null };
+    const loop = () => {
+      requestAnimationFrame(loop);
+      const v = viewer;
+      if (!v.group || !v.renderer.domElement.isConnected) return;
+      if (!v.dragging && Date.now() - v.idleAt > 2500 && !v.anim) v.target.y += 0.005;
+      v.cur.x += (v.target.x - v.cur.x) * .1; v.cur.y += (v.target.y - v.cur.y) * .1;
+      v.group.rotation.set(v.cur.x, v.cur.y, 0);
+      v.onSide?.(Math.cos(v.cur.y) >= 0 ? 1 : 2);
+      v.camera.position.set(0, 0, 52 / v.zoom); v.camera.lookAt(0, 0, 0);
+      if (v.anim) {
+        v.anim.t = Math.min(1, v.anim.t + 0.025);
+        const e = 1 - Math.pow(1 - v.anim.t, 3);
+        v.inner.children.forEach(m => { if (m.userData.side === v.anim.slot) { m.position.z = m.userData.baseZ + (m.userData.side === 'fh' ? 1 : -1) * (1 - e) * 7; m.scale.setScalar(.9 + .1 * e); } });
+        if (v.anim.t >= 1) v.anim = null;
+      }
+      v.renderer.render(v.scene, v.camera);
+    };
+    loop();
+  }
+  const v = viewer;
+  const w = el.clientWidth, h = el.clientHeight;
+  v.renderer.setSize(w, h, false); v.camera.aspect = w / h; v.camera.updateProjectionMatrix();
+  el.prepend(v.renderer.domElement);
+  if (v.group) { v.scene.remove(v.group); v.group.traverse(o => { o.geometry?.dispose?.(); [].concat(o.material || []).forEach(m => { m.map?.dispose?.(); m.dispose?.(); }); }); }
+  v.group = new THREE.Group(); v.inner = buildRacket(cfg); v.group.add(v.inner); v.scene.add(v.group);
+  v.onSide = opts.onSide || null;
+  if (opts.apply) { v.anim = { slot: opts.apply, t: 0 }; v.target.y = opts.apply === 'bh' ? Math.PI + .35 : opts.apply === 'grip' ? .6 : .35; v.target.x = opts.apply === 'grip' ? .35 : -.18; }
+  let last = null;
+  el.onpointerdown = e => { if (e.target.closest('button')) return; v.dragging = true; last = [e.clientX, e.clientY]; el.setPointerCapture(e.pointerId); };
+  el.onpointermove = e => { if (!v.dragging) return; v.target.y += (e.clientX - last[0]) * .012; v.target.x = Math.max(-1.3, Math.min(1.3, v.target.x + (e.clientY - last[1]) * .008)); last = [e.clientX, e.clientY]; v.idleAt = Date.now(); };
+  el.onpointerup = el.onpointercancel = () => { v.dragging = false; v.idleAt = Date.now(); };
+  el.onwheel = e => { e.preventDefault(); v.zoom = Math.max(.7, Math.min(2.2, v.zoom * (e.deltaY < 0 ? 1.08 : .92))); };
+  return {
+    flip() { v.target.y += Math.PI; v.idleAt = Date.now(); },
+    zoomIn() { v.zoom = Math.min(2.2, v.zoom * 1.15); },
+    zoomOut() { v.zoom = Math.max(.7, v.zoom / 1.15); },
+  };
+}
+
+// снимок целой ракетки (для профиля игрока)
+export function racketShot(cfg) {
+  return snapshot('R:' + JSON.stringify(cfg), cfg, { rx: -.12, ry: .45, rz: -.45, d: 50, y: -.6 });
+}
+export { emblem, thumb, buildRacket, buildEnv, light, shade };

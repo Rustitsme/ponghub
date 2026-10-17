@@ -1,5 +1,6 @@
 // Слой данных: Supabase (боевой режим) или localStorage (демо-режим, если база не настроена).
 import { CONFIG } from './config.js';
+import { parseKey, priceOf } from './shop-catalog.js';
 
 const TABLES = ['profiles', 'matches', 'tournaments', 'events', 'challenges', 'live_matches', 'announcements', 'pred_events', 'predictions', 'coin_tx', 'clubs', 'club_members', 'platform'];
 // данные, которые принадлежат клубу (club_id подставляется автоматически)
@@ -253,6 +254,17 @@ class SupaStore {
     const { data, error } = await this.sb.rpc('admin_emails');
     if (error) return new Map();
     return new Map((data || []).map(r => [r.id, r.email?.endsWith('@telegram.ponghub.app') ? 'вход через Telegram' : r.email]));
+  }
+
+  // ── магазин ──
+  shopState() { return this.rpc('shop_state', { cid: this.cid }); }
+  buyItem(key) { return this.rpc('buy_item', { cid: this.cid, p_key: key }); }
+  equipItem(slot, key) { return this.rpc('equip_item', { p_slot: slot, p_key: key }); }
+  claimDaily() { return this.rpc('claim_daily', { cid: this.cid }); }
+  async claimLeague(league, item) {
+    const { data, error } = await this.sb.functions.invoke('notify', { body: { action: 'league_reward', cid: this.cid, league, item } });
+    if (error) { let msg = 'Не удалось получить награду'; try { const j = await error.context?.json(); if (j?.error) msg = j.error; } catch { /* */ } throw new Error(msg); }
+    return data;
   }
 
   async listScreens(cid) {
@@ -613,6 +625,57 @@ class LocalStore {
   tx(user_id, amount, kind, ref = null) { (this.db.coin_tx = this.db.coin_tx || []).push({ id: uid(), club_id: this.cid, user_id, amount, kind, ref, created_at: new Date().toISOString() }); }
   predSetting(k, d) { return this.db.clubs.find(c => c.id === this.cid)?.settings?.[k] ?? d; }
   async listScreens(cid) { return (this.db.screens || []).filter(s => s.club_id === cid); }
+  // ── магазин (демо: та же логика, что в базе) ──
+  shopDb() { const d = this.db; d.user_items = d.user_items || []; d.daily = d.daily || []; d.league_rewards = d.league_rewards || []; return d; }
+  async shopState() {
+    const d = this.shopDb(), me = this.db.session, p = d.profiles.find(x => x.id === me);
+    if (!d.user_items.some(x => x.user_id === me)) d.user_items.push({ user_id: me, item_key: 'cn-b1:FL', source: 'starter', created_at: new Date().toISOString() });
+    p.loadout = p.loadout || {}; if (!p.loadout.blade) p.loadout.blade = 'cn-b1:FL';
+    const today = new Date().toISOString().slice(0, 10), yest = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+    const last = d.daily.filter(x => x.user_id === me).sort((a, b) => b.day.localeCompare(a.day))[0];
+    const day = !last ? 1 : last.day === today ? last.streak : last.day === yest ? (last.streak >= 7 ? 1 : last.streak + 1) : 1;
+    const balance = await this.rpc('ensure_wallet');
+    this.save();
+    return JSON.parse(JSON.stringify({ items: d.user_items.filter(x => x.user_id === me).map(x => x.item_key), loadout: p.loadout, balance, streak: { day, claimed: last?.day === today }, rewards: Object.fromEntries(d.league_rewards.filter(x => x.user_id === me).map(x => [x.league, x.item_key])) }));
+  }
+  async buyItem(key) {
+    const d = this.shopDb(), me = this.db.session;
+    const { it, color } = parseKey(key);
+    const price = it && !it.reward && it.colors?.some(c => c.key === color) ? priceOf(it, color) : null;
+    if (price == null) throw new Error('Этот предмет не продаётся');
+    if (d.user_items.some(x => x.user_id === me && x.item_key === key)) throw new Error('Уже куплено');
+    await this.rpc('ensure_wallet');
+    const bal = this.coinBal(me); if (bal < price) throw new Error(`Не хватает ${price - bal} PC`);
+    d.user_items.push({ user_id: me, item_key: key, club_id: this.cid, price, source: 'shop', created_at: new Date().toISOString() });
+    this.tx(me, -price, 'shop'); this.save(); return bal - price;
+  }
+  async equipItem(slot, key) {
+    const d = this.shopDb(), me = this.db.session, p = d.profiles.find(x => x.id === me);
+    if (key && !d.user_items.some(x => x.user_id === me && x.item_key === key)) throw new Error('Сначала купите эту деталь');
+    const lo = { ...(p.loadout || {}) };
+    if (slot === 'fh' && lo.bh === key) delete lo.bh;
+    if (slot === 'bh' && lo.fh === key) delete lo.fh;
+    if (key) lo[slot] = key; else delete lo[slot];
+    p.loadout = lo; this.save(); return lo;
+  }
+  async claimDaily() {
+    const d = this.shopDb(), me = this.db.session, arr = [20, 30, 40, 50, 60, 80, 120];
+    const today = new Date().toISOString().slice(0, 10), yest = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+    const last = d.daily.filter(x => x.user_id === me).sort((a, b) => b.day.localeCompare(a.day))[0];
+    if (last?.day === today) throw new Error('Бонус за сегодня уже получен — приходите завтра');
+    const n = last?.day === yest && last.streak < 7 ? last.streak + 1 : 1;
+    await this.rpc('ensure_wallet');
+    d.daily.push({ user_id: me, day: today, streak: n, amount: arr[n - 1] }); this.tx(me, arr[n - 1], 'streak'); this.save();
+    return { streak: n, amount: arr[n - 1], balance: this.coinBal(me) };
+  }
+  async claimLeague(league, item) {
+    const d = this.shopDb(), me = this.db.session;
+    if (d.league_rewards.some(x => x.user_id === me && x.league === league)) throw new Error('Эта награда уже получена');
+    if (d.user_items.some(x => x.user_id === me && x.item_key === item)) throw new Error('Этот предмет у вас уже есть — выберите другой');
+    d.user_items.push({ user_id: me, item_key: item, source: 'reward', created_at: new Date().toISOString() });
+    if (league === 'gold' && !d.user_items.some(x => x.user_id === me && x.item_key === 'rw-tape-gold:gold')) d.user_items.push({ user_id: me, item_key: 'rw-tape-gold:gold', source: 'reward', created_at: new Date().toISOString() });
+    d.league_rewards.push({ user_id: me, league, item_key: item }); this.save(); return { ok: true };
+  }
   screenRpc(name, a) {
     const S = this.db.screens = this.db.screens || [];
     if (name === 'screen_start') {
@@ -661,9 +724,10 @@ class LocalStore {
   }
   async rpc(name, a = {}) {
     if (name.startsWith('screen_')) return this.screenRpc(name, a);
+    if (name === 'founder_set_feature') { this.needFounder(); this.db.platform.features = { ...(this.db.platform.features || {}), [a.fname]: a.mode }; this.save(); return this.db.platform.features; }
     const me = this.db.session;
     this.db.pred_events = this.db.pred_events || []; this.db.predictions = this.db.predictions || [];
-    if (name === 'ensure_wallet') { if (!this.role(this.cid)) return 0; if (!(this.db.coin_tx || []).some(t => t.user_id === me && t.club_id === this.cid)) { this.tx(me, this.predSetting('predStart', 1000), 'start'); this.save(); } return this.coinBal(me); }
+    if (name === 'ensure_wallet') { if (!this.role(this.cid)) return 0; if (!(this.db.coin_tx || []).some(t => t.user_id === me && t.club_id === this.cid && ['start', 'convert'].includes(t.kind))) { this.tx(me, this.predSetting('predStart', 300), 'start'); this.save(); } return this.coinBal(me); }
     if (name === 'create_pred_event') {
       const ex = this.db.pred_events.find(e => e.source_id === a.src_id); if (ex) return ex.id;
       const srcRow = a.src === 'live' ? (this.db.live_matches || []).find(x => x.id === a.src_id) : (this.db.challenges || []).find(x => x.id === a.src_id);
@@ -680,7 +744,7 @@ class LocalStore {
       if ([e.player1_id, e.player2_id, e.player3_id, e.player4_id].includes(me)) throw new Error('На свой матч прогноз сделать нельзя');
       if (e.source === 'live') { const l = (this.db.live_matches || []).find(x => x.id === e.source_id); if (!l || l.status !== 'live' || (l.log || []).length) { e.status = 'closed'; this.save(); throw new Error('Игра уже началась — приём прогнозов закрыт'); } }
       if (this.db.predictions.some(p => p.event_id === e.id && p.user_id === me)) throw new Error('Вы уже сделали прогноз на этот матч');
-      const min = this.predSetting('predMin', 10), max = this.predSetting('predMax', 500);
+      const min = this.predSetting('predMin', 10), max = this.predSetting('predMax', 300);
       if (a.amount < min || a.amount > max) throw new Error(`Ставка от ${min} до ${max} PC`);
       await this.rpc('ensure_wallet');
       if (this.coinBal(me) < a.amount) throw new Error(`Недостаточно пинг-коинов (у вас ${this.coinBal(me)})`);
@@ -919,5 +983,5 @@ function seedDemo(opts = {}) {
     club_members.push({ club_id: 'demo-club', user_id: p.id, role: p.role === 'admin' ? 'owner' : p.role === 'editor' ? 'helper' : 'player', status: p.status === 'pending' ? 'pending' : 'active', initial_rating: p.initial_rating });
   });
   club_members.push({ club_id: 'demo-club2', user_id: 'demo-4', role: 'player', status: 'active' });
-  return { users, profiles, matches: [...matches, ...xm], tournaments, events, challenges, audit: [], settings: {}, clubs, invites, club_members, platform: { migration_done: true }, session: null };
+  return { users, profiles, matches: [...matches, ...xm], tournaments, events, challenges, audit: [], settings: {}, clubs, invites, club_members, platform: { migration_done: true, features: { shop: 'founder' } }, session: null };
 }
