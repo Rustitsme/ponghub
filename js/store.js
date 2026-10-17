@@ -255,6 +255,12 @@ class SupaStore {
     return new Map((data || []).map(r => [r.id, r.email?.endsWith('@telegram.ponghub.app') ? 'вход через Telegram' : r.email]));
   }
 
+  async listScreens(cid) {
+    const { data, error } = await this.sb.from('club_screens').select('id, name, theme, last_seen, paired_at').eq('club_id', cid).order('paired_at');
+    if (error) throw translateError(error);
+    return data || [];
+  }
+
   // ── Telegram ──
   async tgCall(body) {
     const { data, error } = await this.sb.functions.invoke('tg', { body });
@@ -569,6 +575,7 @@ class LocalStore {
     const r = this.db[table].find(x => x.id === id);
     if (!r) throw new Error('Запись не найдена');
     Object.assign(r, patch);
+    if (table === 'live_matches') r.updated_at = new Date().toISOString();
     if (table === 'live_matches' || table === 'challenges') {
       const f = e => e.source_id === id;
       if (['cancelled', 'declined'].includes(r.status)) this.predCancel(f);
@@ -605,7 +612,55 @@ class LocalStore {
   coinBal(uid) { return (this.db.coin_tx || []).filter(t => t.user_id === uid && t.club_id === this.cid).reduce((a, t) => a + t.amount, 0); }
   tx(user_id, amount, kind, ref = null) { (this.db.coin_tx = this.db.coin_tx || []).push({ id: uid(), club_id: this.cid, user_id, amount, kind, ref, created_at: new Date().toISOString() }); }
   predSetting(k, d) { return this.db.clubs.find(c => c.id === this.cid)?.settings?.[k] ?? d; }
+  async listScreens(cid) { return (this.db.screens || []).filter(s => s.club_id === cid); }
+  screenRpc(name, a) {
+    const S = this.db.screens = this.db.screens || [];
+    if (name === 'screen_start') {
+      const s = { id: uid(), token: uid(), pair_code: String(Math.floor(100000 + Math.random() * 900000)), club_id: null, name: 'Табло', theme: 'night', created_at: new Date().toISOString() };
+      S.push(s); this.save(); return { token: s.token, code: s.pair_code };
+    }
+    if (name === 'screen_pair') {
+      this.needAdmin(a.cid);
+      const s = S.find(x => x.pair_code === String(a.p_code).replace(/\D/g, '') && !x.club_id);
+      if (!s) throw new Error('Код не найден. Проверьте цифры на экране телевизора');
+      Object.assign(s, { club_id: a.cid, pair_code: null, paired_at: new Date().toISOString(), name: a.p_name || s.name }); this.save(); return s.id;
+    }
+    if (name === 'screen_set') { const s = S.find(x => x.id === a.sid); this.needAdmin(s.club_id); if (a.p_theme) s.theme = a.p_theme; this.save(); return; }
+    if (name === 'screen_remove') { const s = S.find(x => x.id === a.sid); this.needAdmin(s.club_id); this.db.screens = S.filter(x => x !== s); this.save(); return; }
+    if (name === 'screen_state') {
+      // табло в демо читает localStorage заново — его открывают в отдельной вкладке
+      try { const fresh = JSON.parse(localStorage.getItem(LS_KEY)); if (fresh) this.db = fresh; } catch { /* */ }
+      const s = (this.db.screens || []).find(x => x.token === a.p_token);
+      if (!s) return { status: 'unknown' };
+      if (!s.club_id) return { status: 'pairing', code: s.pair_code };
+      s.last_seen = new Date().toISOString(); this.save();
+      const cid = s.club_id, c = this.db.clubs.find(x => x.id === cid);
+      const now = Date.now();
+      const live = (this.db.live_matches || []).filter(l => l.club_id === cid && l.status === 'live' && !l.is_test);
+      const recent = (this.db.live_matches || []).filter(l => l.club_id === cid && l.status === 'finished' && now - Date.parse(l.updated_at || l.created_at) < 75e3).pop() || null;
+      const evIds = new Set([...live.map(l => l.id), recent?.id].filter(Boolean));
+      const preds = (this.db.pred_events || []).filter(e => evIds.has(e.source_id)).map(e => {
+        const pr = (this.db.predictions || []).filter(p => p.event_id === e.id);
+        return { ...e, bets: e.bets_count, count1: pr.filter(p => p.side === 1).length, count2: pr.filter(p => p.side === 2).length,
+          winners: pr.filter(p => p.status === 'won').map(p => ({ nick: this.db.profiles.find(x => x.id === p.user_id)?.nickname, stake: p.stake, odds: p.odds, payout: p.payout })) };
+      });
+      const res = { status: 'ok', now: new Date().toISOString(), screen: { id: s.id, name: s.name, theme: s.theme }, club: { id: c.id, name: c.name, code: c.code },
+        live, recent, recent_match: recent?.match_id ? this.db.matches.find(m => m.id === recent.match_id) : null, preds,
+        next: (this.db.challenges || []).filter(x => x.club_id === cid && x.status === 'accepted').map(x => ({ a: x.from_id, b: x.to_id })) };
+      if (a.p_full) {
+        res.settings = c.settings || {};
+        res.players = this.db.club_members.filter(m => m.club_id === cid && m.status !== 'pending').map(m => {
+          const p = this.db.profiles.find(x => x.id === m.user_id);
+          return p && !p.is_test && { ...p, initial_rating: m.initial_rating, status: p.status === 'deleted' ? 'deleted' : m.status === 'active' ? 'approved' : 'archived' };
+        }).filter(Boolean);
+        res.matches = this.db.matches.filter(m => m.club_id === cid && m.status === 'approved' && !m.is_test);
+        res.tournaments = this.db.tournaments.filter(x => x.club_id === cid && !x.is_test);
+      }
+      return JSON.parse(JSON.stringify(res));
+    }
+  }
   async rpc(name, a = {}) {
+    if (name.startsWith('screen_')) return this.screenRpc(name, a);
     const me = this.db.session;
     this.db.pred_events = this.db.pred_events || []; this.db.predictions = this.db.predictions || [];
     if (name === 'ensure_wallet') { if (!this.role(this.cid)) return 0; if (!(this.db.coin_tx || []).some(t => t.user_id === me && t.club_id === this.cid)) { this.tx(me, this.predSetting('predStart', 1000), 'start'); this.save(); } return this.coinBal(me); }

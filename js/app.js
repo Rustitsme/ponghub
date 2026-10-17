@@ -185,6 +185,11 @@ function render() {
   const y = scrollY;
   lastRoute = key;
   let html;
+  // табло клуба на телевизоре — отдельный экран без входа в аккаунт
+  if (r.name === 'tv') {
+    if (!S.tvStarted) { S.tvStarted = true; import('./tv.js').then(m => m.startTV($app, S.store)); }
+    return;
+  }
   if (!S.user) { if (r.name === 'join' && r.args[0]) lsSet('ponghub_join', r.args[0]); html = authView(r); }
   else if (S.recovery) html = recoveryView();
   else if (!S.ctx?.me) html = gateView('🤔', 'Профиль не найден', 'Аккаунт создан, но профиль в базе отсутствует. Напишите администратору.', true);
@@ -1062,7 +1067,7 @@ function viewLive(r) {
     ${g.winner !== null ? `<div class="card lv-done"><h3>🏁 Матч окончен</h3><p>Победа: <b>${esc(sideName(l, g.winner))}</b> · ${g.won[0]}:${g.won[1]}</p>
       ${scorer ? `<div class="row-btns"><button class="btn ghost" data-act="live-undo" data-id="${l.id}">↶ Вернуть последнее очко</button><button class="btn primary" data-act="live-save" data-id="${l.id}">Сохранить результат</button></div>` : '<p class="muted small">Счётчик сохранит результат.</p>'}</div>` : ''}
     ${scorer ? `<div class="row-btns lv-tools">${g.winner === null && log.length ? `<button class="btn ghost" data-act="live-undo" data-id="${l.id}">↶ Отменить последнее</button>` : ''}<button class="btn ghost danger" data-act="live-cancel" data-id="${l.id}">Отменить игру</button></div>`
-      : `<div class="card lv-viewer"><span class="muted small">Счёт ведёт ${esc(P(l.scorer_id).nickname)}. Обновляется сам.</span><button class="btn sm" data-act="live-take" data-id="${l.id}">Вести счёт вместо него</button></div>`}`;
+      : `<div class="card lv-viewer"><span class="muted small">Счёт ведёт ${esc(P(l.scorer_id).nickname)}. Обновляется сам.</span>${isEditor() || l.started_by === S.me.id ? `<button class="btn sm" data-act="live-take" data-id="${l.id}">Взять счёт на себя</button>` : ''}</div>`}`;
 }
 
 function pushLive(l, log) {
@@ -1852,9 +1857,30 @@ async function tgFlow(purpose) {
   document.addEventListener('visibilitychange', check);
 }
 
+// ── табло клуба ──
+const TV_THEMES = [['night', 'Ночь'], ['table', 'Стол'], ['red', 'Бордо'], ['green', 'Корт'], ['graphite', 'Графит'], ['light', 'Светлый']];
+async function renderScreens() {
+  const box = document.getElementById('screens-box');
+  if (!box) return;
+  try {
+    const list = await S.store.listScreens(S.club.id);
+    if (!box.isConnected) return;
+    box.innerHTML = `<div class="card-h"><h3>Подключённые табло</h3></div>` + (list.length ? list.map(s => {
+      const online = s.last_seen && Date.now() - Date.parse(s.last_seen) < 3 * 60e3;
+      return `<div class="pl-row"><div class="pl-top"><span class="tv-ic">📺</span><span class="rn"><b>${esc(s.name)}</b><small class="muted">${online ? '🟢 в сети' : s.last_seen ? '⚪ не в сети · был ' + fmtDT(s.last_seen) : '⚪ ещё не выходило в сеть'}</small></span></div>
+        <div class="pl-ctl"><label class="init">Фон<select data-act-change="screen-theme" data-id="${s.id}">${TV_THEMES.map(([k, l]) => `<option value="${k}" ${s.theme === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+          <button class="btn xs ghost danger" data-act="screen-remove" data-id="${s.id}">Отключить</button></div></div>`;
+    }).join('') : '<div class="empty small">Пока нет подключённых табло</div>');
+  } catch (e) { box.innerHTML = `<div class="empty small">${esc(e.message)}</div>`; }
+}
+
 const CLUB_FREE = { clubs: viewClubs, club: viewClubPage, map: viewMap, newclub: viewNewClub, join: viewJoin, founder: viewFounder };
 
 const CLUB_ACT = {
+  'screen-remove': async el => {
+    if (!(await confirmDialog('Отключить это табло? Чтобы вернуть, понадобится новый код с телевизора.', 'Отключить', true))) return;
+    await busy(el, async () => { await S.store.rpc('screen_remove', { sid: el.dataset.id }); await renderScreens(); toast('Табло отключено'); });
+  },
   'tg-login': () => tgFlow('login'),
   'tg-link': () => tgFlow('link'),
   'tg-unlink': async el => {
@@ -1917,6 +1943,7 @@ const CLUB_ACT = {
 };
 
 const CLUB_CHANGE = {
+  'screen-theme': el => busy(null, async () => { await S.store.rpc('screen_set', { sid: el.dataset.id, p_theme: el.value }); toast('Фон табло изменён'); }),
   'founder-all': el => document.querySelectorAll('.un-cb').forEach(x => { x.checked = el.checked; }),
 };
 
@@ -1925,6 +1952,7 @@ const clubFields = fd => ({
   lat: fd.get('lat') ? +fd.get('lat') : null, lng: fd.get('lng') ? +fd.get('lng') : null, visible: fd.get('visible') === 'on',
 });
 const CLUB_FORMS = {
+  'screen-pair': async (f, fd) => { await S.store.rpc('screen_pair', { cid: S.club.id, p_code: fd.get('code'), p_name: fd.get('name').trim() || null }); f.reset(); await renderScreens(); toast('Табло подключено 📺'); },
   'join-code': async (f, fd) => { await openInvite(fd.get('code').trim()); },
   'new-club': async (f, fd) => {
     const cid = await S.store.createClub(clubFields(fd));
@@ -1938,7 +1966,7 @@ const CLUB_FORMS = {
 // ───────────── Админка ─────────────
 function viewAdmin(r) {
   if (!isAdmin()) return '<div class="empty">Управление клубом доступно только владельцу</div>';
-  const tabs = isAdmin() ? [['reqs', 'Заявки'], ['matches', 'Матчи'], ['players', 'Игроки'], ['log', 'Журнал'], ['rating', 'Рейтинг'], ['data', 'Данные']] : [['matches', 'Матчи']];
+  const tabs = isAdmin() ? [['reqs', 'Заявки'], ['matches', 'Матчи'], ['players', 'Игроки'], ['screens', 'Табло'], ['log', 'Журнал'], ['rating', 'Рейтинг'], ['data', 'Данные']] : [['matches', 'Матчи']];
   const tab = tabs.some(t => t[0] === r.args[0]) ? r.args[0] : tabs[0][0];
   const pc = pendingCounts();
   const cnt = { reqs: pc.users, matches: pc.matches };
@@ -2025,6 +2053,14 @@ function viewAdmin(r) {
       <div class="calc" id="calc"></div>
       <div class="row-btns"><button type="button" class="btn ghost" data-act="settings-default">По умолчанию</button><button class="btn primary">Сохранить и пересчитать</button></div>
     </form>`;
+  } else if (tab === 'screens') {
+    body = `<section class="card stack"><div class="card-h"><h3>📺 Подключить табло</h3></div>
+        <ol class="tv-how"><li>На телевизоре или компьютере у стола откройте <b class="mono">${esc(location.host)}/#/tv</b></li><li>На экране появится код из 6 цифр</li><li>Введите его здесь</li></ol>
+        <form data-form="screen-pair" class="stack"><label>Код с экрана<input name="code" inputmode="numeric" required minlength="6" maxlength="7" placeholder="123 456" autocomplete="off"></label>
+          <label>Название (необязательно)<input name="name" maxlength="30" placeholder="Например, Табло у стола"></label>
+          <button class="btn primary">Подключить табло</button></form></section>
+      <section class="card" id="screens-box"><div class="muted small">Загружаю…</div></section>
+      <p class="muted small">Табло само показывает текущую игру с живым счётом, итоги матча и прогнозов, а в перерывах — турнирную сетку и кто играет следом. Изменить оно ничего не может.</p>`;
   } else if (tab === 'data') {
     body = `<section class="card stack">
       <p class="muted small">Выгрузки открываются в Excel и Google Таблицах.</p>
@@ -2787,6 +2823,7 @@ const WHATS_NEW = {
 };
 
 async function startupModals() {
+  if (route().name === 'tv') return;
   if (!S.club || !S.me || S.me.status !== 'approved' || S.startupDone === S.me.id) return;
   S.startupDone = S.me.id;
   if (lsGet('ponghub_seen_news') !== WHATS_NEW.id) return showWhatsNew();
@@ -2896,6 +2933,7 @@ function afterRender(r) {
   if (r.name === 'predict') renderPredBoard();
   if (r.name === 'admin' && r.args[0] === 'log') renderAudit();
   if (r.name === 'admin' && r.args[0] === 'data') renderBackups();
+  if (r.name === 'admin' && r.args[0] === 'screens') renderScreens();
   if (document.getElementById('dir-box')) renderDirectory(document.querySelector('[data-input=dir-search]')?.value || '');
   if (document.getElementById('pick-map')) mountPickMap();
   if (r.name === 'invite') renderInvite();

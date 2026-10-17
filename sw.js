@@ -1,7 +1,7 @@
 // Service worker: приложение открывается быстро, работает как установленное и принимает push-уведомления.
 // Стратегия «сначала сеть»: всегда берём свежую версию, кэш — только если нет интернета.
-const CACHE = 'ponghub-v18';
-const SHELL = ['./', './index.html', './css/style.css', './js/app.js', './js/engine.js', './js/tourney.js', './js/store.js', './js/config.js',
+const CACHE = 'ponghub-v19';
+const SHELL = ['./', './index.html', './css/style.css', './js/app.js', './js/engine.js', './js/tourney.js', './js/store.js', './js/tv.js', './js/config.js',
   './icons/hub.svg', './icons/table.svg', './manifest-hub.webmanifest', './manifest-table.webmanifest'];
 
 self.addEventListener('install', e => {
