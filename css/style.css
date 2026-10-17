@@ -979,6 +979,8 @@ body.tv-mode .tabs, body.tv-mode .fab, body.tv-mode .ios-hint { display: none !i
 #sh-sheet { display: grid; gap: 10px; }
 .sh-pic { display: grid; place-items: center; height: 190px; border-radius: 16px; background: radial-gradient(70% 70% at 50% 40%, #fff, #e6edf8); }
 .sh-pic-img { width: 190px; height: 190px; display: block; }
+.sh-pic.sh-3d { height: 250px; display: block; position: relative; overflow: hidden; touch-action: none; cursor: grab; }
+.sh-pic.sh-3d canvas { width: 100%; height: 100%; display: block; }
 .sh-title { margin: 0; font: 800 28px/1 var(--display); }
 .sh-hsel { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 6px 0 4px; }
 .sh-hsel button { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 8px 0; font: 800 16px var(--display); letter-spacing: .06em; cursor: pointer; color: var(--text); }
@@ -1026,3 +1028,27 @@ body.tv-mode .tabs, body.tv-mode .fab, body.tv-mode .ios-hint { display: none !i
 .sh-rung .rn b { font-size: 14px; line-height: 1.3; }
 .sh-rung .league { flex: none; }
 .sh-rung .rn b, .sh-rung .rn small, .sh-slot .rn b { white-space: normal; overflow: visible; text-overflow: clip; }
+
+/* ── 3D-игрок ── */
+.av-stage { position: relative; height: 430px; border-radius: 20px; overflow: hidden; background: radial-gradient(80% 70% at 50% 35%, #ffffff 0%, #dbe5f5 60%, #b9c9e4 100%); touch-action: none; cursor: grab; }
+.av-stage canvas { width: 100%; height: 100%; display: block; }
+.av-stage.big { position: fixed; inset: 0; z-index: 60; height: auto; border-radius: 0; padding-top: env(safe-area-inset-top, 0px); }
+body.av-big { overflow: hidden; }
+.av-load { position: absolute; inset: 0; display: grid; place-items: center; }
+.av-tools { position: absolute; top: 10px; right: 10px; display: grid; gap: 6px; z-index: 2; }
+.av-stage.big .av-tools { top: calc(10px + env(safe-area-inset-top, 0px)); right: calc(10px + env(safe-area-inset-right, 0px)); }
+.av-tools button { width: 40px; height: 40px; border-radius: 12px; border: 1px solid rgba(22, 60, 120, .14); background: rgba(255, 255, 255, .92); font: 700 17px var(--font, sans-serif); color: #0f2742; cursor: pointer; }
+.av-emotes { position: absolute; left: 8px; right: 8px; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; z-index: 2; }
+.av-emotes button { border: 1px solid rgba(22, 60, 120, .14); background: rgba(255, 255, 255, .94); border-radius: 18px; padding: 7px 11px; font: 600 12px var(--font, sans-serif); color: #0f2742; cursor: pointer; }
+.av-who { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.av-who button { border: 1px solid var(--line); background: var(--card, #fff); color: inherit; border-radius: 14px; padding: 12px; font-weight: 700; cursor: pointer; }
+.av-who button.on, .av-w.on { box-shadow: 0 0 0 2px var(--red, #e63946); }
+.av-wear { display: flex; flex-wrap: wrap; gap: 6px; }
+.av-w { display: grid; grid-template-columns: 18px auto; column-gap: 6px; align-items: center; text-align: left; border: 1px solid var(--line); background: var(--card, #fff); color: inherit; border-radius: 12px; padding: 7px 10px; font: 600 13px var(--font, sans-serif); cursor: pointer; }
+.av-w i { width: 18px; height: 18px; border-radius: 50%; grid-row: span 2; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .12); }
+.av-w small { color: var(--muted); font-weight: 500; font-size: 11px; }
+.av-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.av-sl { display: grid; gap: 2px; font-size: 13px; color: var(--muted); font-weight: 600; }
+.av-sl span { display: grid; grid-template-columns: 1fr 52px; gap: 10px; align-items: center; }
+.av-sl input { width: 100%; accent-color: var(--red, #e63946); }
+.av-sl b { color: var(--text); text-align: right; }

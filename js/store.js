@@ -101,10 +101,11 @@ class SupaStore {
   async loadContext() {
     const { data: { user } } = await this.sb.auth.getUser();
     if (!user) return null;
-    const [me, mem, pl] = await Promise.all([
+    const [me, mem, pl, mf] = await Promise.all([
       this.sb.from('profiles').select('*').eq('id', user.id).maybeSingle(),
       this.sb.from('club_members').select('*, club:clubs(*)').eq('user_id', user.id),
       this.sb.from('platform').select('*'),
+      this.sb.rpc('my_features'),
     ]);
     if (me.error) throw translateError(me.error);
     const platform = Object.fromEntries((pl.data || []).map(r => [r.key, r.value]));
@@ -425,7 +426,8 @@ class LocalStore {
     if (!me) return null;
     const clubs = this.db.club_members.filter(m => m.user_id === me.id && ['active', 'pending'].includes(m.status))
       .map(m => ({ ...this.db.clubs.find(c => c.id === m.club_id), my_role: m.role, my_status: m.status })).filter(c => c.id);
-    return JSON.parse(JSON.stringify({ me, clubs, platform: this.db.platform }));
+    const tf = (this.db.feature_testers || []).filter(t => t.user_id === me.id).map(t => t.feature);
+    return JSON.parse(JSON.stringify({ me, clubs, platform: this.db.platform, myFeatures: tf }));
   }
   setClub(club) { this.club = club || null; this.cid = club?.id || null; }
 
@@ -735,6 +737,18 @@ class LocalStore {
   }
   async rpc(name, a = {}) {
     if (name.startsWith('screen_')) return this.screenRpc(name, a);
+    if (name === 'founder_search_users' || name === 'founder_feature_testers') {
+      this.needFounder(); const t = this.db.feature_testers || [];
+      const list = name === 'founder_feature_testers' ? this.db.profiles.filter(p => t.some(x => x.feature === a.fname && x.user_id === p.id))
+        : this.db.profiles.filter(p => !a.q || (p.nickname + ' ' + (p.full_name || '')).toLowerCase().includes(a.q.toLowerCase())).slice(0, 30);
+      return list.map(p => ({ id: p.id, nickname: p.nickname, full_name: p.full_name, clubs: this.db.club_members.filter(m => m.user_id === p.id && m.status === 'active').map(m => this.db.clubs.find(c => c.id === m.club_id)?.name).filter(Boolean).join(', ') }));
+    }
+    if (name === 'founder_set_tester') {
+      this.needFounder(); const t = this.db.feature_testers = (this.db.feature_testers || []).filter(x => !(x.feature === a.fname && x.user_id === a.uid));
+      if (a.on_) t.push({ feature: a.fname, user_id: a.uid }); this.save(); return t.filter(x => x.feature === a.fname).length;
+    }
+    if (name === 'founder_set_grip') { this.needFounder(); this.db.platform.grip = a.p; this.save(); return a.p; }
+    if (name === 'set_avatar3d') { const me = this.db.profiles.find(p => p.id === this.db.session); me.avatar3d = a.p; this.save(); return a.p; }
     if (name === 'founder_set_feature') { this.needFounder(); this.db.platform.features = { ...(this.db.platform.features || {}), [a.fname]: a.mode }; this.save(); return this.db.platform.features; }
     const me = this.db.session;
     this.db.pred_events = this.db.pred_events || []; this.db.predictions = this.db.predictions || [];
@@ -994,5 +1008,5 @@ function seedDemo(opts = {}) {
     club_members.push({ club_id: 'demo-club', user_id: p.id, role: p.role === 'admin' ? 'owner' : p.role === 'editor' ? 'helper' : 'player', status: p.status === 'pending' ? 'pending' : 'active', initial_rating: p.initial_rating });
   });
   club_members.push({ club_id: 'demo-club2', user_id: 'demo-4', role: 'player', status: 'active' });
-  return { users, profiles, matches: [...matches, ...xm], tournaments, events, challenges, audit: [], settings: {}, clubs, invites, club_members, platform: { migration_done: true, features: { shop: 'founder', resale: 'founder' } }, session: null };
+  return { users, profiles, matches: [...matches, ...xm], tournaments, events, challenges, audit: [], settings: {}, clubs, invites, club_members, platform: { migration_done: true, features: { shop: 'founder', resale: 'founder', avatar: 'founder' } }, session: null };
 }

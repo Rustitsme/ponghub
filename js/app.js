@@ -29,7 +29,7 @@ const isAdmin = () => !!S.club && S.me?.role === 'admin' && S.me?.status === 'ap
 const isEditor = () => !!S.club && (S.me?.role === 'editor' || S.me?.role === 'admin') && S.me?.status === 'approved';
 const isFounder = () => !!S.ctx?.me?.is_founder;
 // флажки обновлений: 'founder' — только у создателя, 'all' — у всех
-const feature = name => { const m = S.ctx?.platform?.features?.[name] ?? 'all'; return m === 'all' || (m === 'founder' && isFounder()); };
+const feature = name => { const m = S.ctx?.platform?.features?.[name] ?? 'all'; return m === 'all' || (m === 'founder' && (isFounder() || (S.ctx?.myFeatures || []).includes(name))); };
 const ratingOf = id => S.A.rating.get(id) ?? S.A.S.initialRating;
 const settings = () => ({ ...DEFAULT_SETTINGS, ...(S.data?.settings || {}) });
 const tById = id => S.data.tournaments.find(t => t.id === id);
@@ -202,7 +202,7 @@ function render() {
   else if (CLUB_FREE[r.name]) html = CLUB_FREE[r.name](r);
   else if (!S.club) html = S.ctx.me.legacy && !S.ctx.platform?.migration_done && !isFounder() ? waitView() : viewClubs(r);
   else {
-    const views = { shop: r => feature('shop') ? viewShop(r) : viewHome(r), racket: () => feature('shop') ? viewRacket() : viewHome(), invite: viewInvite, clubedit: viewClubEdit, home: viewHome, rating: viewRating, matches: viewMatches, player: viewPlayer, h2h: viewH2H, tournaments: viewTournaments, tournament: viewTournament, calendar: viewCalendar, admin: viewAdmin, rules: viewRules, me: viewMe, help: viewHelp, seasons: viewSeasons, live: viewLive, inbox: viewInbox, predict: viewPredict };
+    const views = { shop: r => feature('shop') ? viewShop(r) : viewHome(r), racket: () => feature('shop') ? viewRacket() : viewHome(), avatar: r => feature('avatar') ? viewAvatar(r) : viewHome(r), invite: viewInvite, clubedit: viewClubEdit, home: viewHome, rating: viewRating, matches: viewMatches, player: viewPlayer, h2h: viewH2H, tournaments: viewTournaments, tournament: viewTournament, calendar: viewCalendar, admin: viewAdmin, rules: viewRules, me: viewMe, help: viewHelp, seasons: viewSeasons, live: viewLive, inbox: viewInbox, predict: viewPredict };
     const v = views[r.name] || viewHome;
     html = shell(r, v(r));
   }
@@ -578,6 +578,7 @@ function viewPlayer(r) {
       ${mine ? '<button class="btn ghost-light" data-act="edit-profile">✏️ Редактировать</button>' : `<a class="btn ghost-light" href="#/h2h/${S.me.id}/${id}">📊 Сравнить</a>${p.status === 'approved' ? `<button class="btn ghost-light" data-act="challenge" data-id="${id}">⚔️ Вызвать на матч</button>` : ''}`}
     </div>
   </section>
+  ${feature('avatar') ? `<section class="card"><div class="card-h"><h3>🧍 Игрок</h3><a href="#/avatar/${p.id}" class="link">${p.id === S.me.id ? 'Мой игрок →' : 'Посмотреть →'}</a></div><p class="muted small">3D-игрок в форме и с ракеткой${p.id === S.me.id ? '' : ' соперника'}.</p></section>` : ''}
   ${feature('shop') ? playerRacketCard(p) : ''}
 
   <section class="stat-grid">
@@ -1392,6 +1393,7 @@ function viewMe() {
   <section class="card menu">
     ${isAdmin() ? '<a class="menu-item" href="#/invite">✉️ <span>Пригласить в клуб</span></a><a class="menu-item" href="#/clubedit">🏠 <span>Клуб: название, адрес, карта</span></a>' : ''}
     ${feature('shop') ? '<a class="menu-item" href="#/shop">🛍️ <span>Магазин</span><small class="muted">' + fmtC(S.coins) + ' PC</small></a><a class="menu-item" href="#/racket">🏓 <span>Моя ракетка</span></a>' : ''}
+    ${feature('avatar') ? '<a class="menu-item" href="#/avatar">🧍 <span>Мой игрок</span></a>' : ''}
     <a class="menu-item" href="#/clubs">🏠 <span>Мои клубы</span><small class="muted">${(S.ctx?.clubs || []).filter(c => c.my_status === 'active').length}</small></a>
     <a class="menu-item" href="#/map">🗺 <span>Клубы на карте</span></a>
     ${isFounder() ? '<a class="menu-item" href="#/founder">🛡 <span>Платформа PongHub</span></a>' : ''}
@@ -1798,14 +1800,17 @@ async function renderFounder() {
         <button class="btn primary" data-act="founder-history">Перенести всю историю в этот клуб</button></section>` : ''}
       ${!st.migration_done && !legacyRows && clubs.length ? '<section class="card"><p class="muted small">Истории до клубов нет — переносить нечего.</p></section>' : ''}
       <section class="card stack"><div class="card-h"><h3>🚀 Обновления</h3></div>
-        <p class="muted small">Новые функции сначала видны только вам. Проверьте их — и включите для всех.</p>
+        <p class="muted small">Новые функции сначала видны только вам и тестировщикам, которых вы выберете. Проверьте их — и включите для всех.</p>
         ${[['shop', '🛍️ Магазин и новая экономика', 'Магазин, моя ракетка, бонус дня, +15 за матч, призы турниров, награды за лиги. При включении для всех: балансы × 0,3, старт 300 PC, ставка до 300, еженедельные +100 отменяются.'],
-           ['resale', '♻️ Продажа вещей', 'Купленное в магазине можно продать обратно за 30% от цены покупки. Стартовое основание и награды не продаются.']].map(([k, t, d]) => {
+           ['resale', '♻️ Продажа вещей', 'Купленное в магазине можно продать обратно за 30% от цены покупки. Стартовое основание и награды не продаются.'],
+           ['avatar', '🧍 3D-игрок', 'Свой 3D-игрок: парень или девушка, форма из магазина, ракетка в руке, жесты. Виден в профиле. Хват ракетки настраивается в редакторе ниже.']].map(([k, t, d]) => {
           const mode = S.ctx?.platform?.features?.[k] ?? 'all';
           return `<div class="pl-row"><div class="pl-top"><span class="rn"><b>${t}</b><small class="muted">${d}</small></span></div>
-            <div class="pl-ctl"><span class="badge ${mode === 'all' ? 'ok' : 'warn'}">${mode === 'all' ? 'включено у всех' : 'только у вас'}</span>
-            ${mode === 'all' ? '' : `<button class="btn sm primary" data-act="feature-all" data-k="${k}">Включить для всех</button>`}</div></div>`;
-        }).join('')}</section>
+            <div class="pl-ctl"><span class="badge ${mode === 'all' ? 'ok' : 'warn'}">${mode === 'all' ? 'включено у всех' : 'у вас и тестировщиков'}</span>
+            ${mode === 'all' ? '' : `<button class="btn sm ghost" data-act="feature-testers" data-k="${k}">👥 Тестировщики</button><button class="btn sm primary" data-act="feature-all" data-k="${k}">Включить для всех</button>`}</div></div>`;
+        }).join('')}
+        <div class="pl-row"><div class="pl-top"><span class="rn"><b>✋ Хват ракетки у 3D-игрока</b><small class="muted">Редактор: как игрок держит ракетку — у всех игроков сразу. Работает с телефона и компьютера.</small></span></div>
+          <div class="pl-ctl"><a class="btn sm ghost" href="#/player/grip">Открыть редактор</a></div></div></section>
       <section class="card"><div class="card-h"><h3>Все клубы</h3></div>
         ${clubs.map(c => `<div class="pl-row ${c.blocked ? 'arch' : ''}"><div class="pl-top"><span class="rn"><b>${esc(c.name)}</b><small class="muted">${esc(c.code)} · ${esc(c.city || 'город не указан')} · владелец ${esc(c.owner_nick || '—')}</small>
           <small class="muted">${c.players} ${plural(c.players, 'игрок', 'игрока', 'игроков')} · ${c.matches} ${plural(c.matches, 'матч', 'матча', 'матчей')}${c.pending ? ` · заявок: ${c.pending}` : ''}${c.last_match ? ' · последний матч ' + fmtDate(c.last_match) : ''}${c.visible ? '' : ' · скрыт с карты'}</small></span></div>
@@ -1895,6 +1900,31 @@ async function renderScreens() {
 const CLUB_FREE = { clubs: viewClubs, club: viewClubPage, map: viewMap, newclub: viewNewClub, join: viewJoin, founder: viewFounder };
 
 const CLUB_ACT = {
+  'av-play': el => AV?.ctl?.play(el.dataset.v),
+  'av-tool': el => { const v = el.dataset.v; if (v === 'big') { AV.big = !AV.big; document.getElementById('av-stage')?.classList.toggle('big', AV.big); document.body.classList.toggle('av-big', AV.big); setTimeout(() => AV.ctl?.resize(), 50); return; } AV?.ctl?.[v]?.(); },
+  'av-gender': async el => { await busy(el, async () => { await S.store.rpc('set_avatar3d', { p: el.dataset.v }); S.ctx.me.avatar3d = el.dataset.v; }); render(); },
+  'av-wear': async el => { await busy(el, async () => { await S.store.equipItem(el.dataset.slot, el.dataset.k || null); await ensureShop(true); }); AV?.ctl?.look(S.shop?.loadout); render(); },
+  'feature-testers': async el => {
+    const k = el.dataset.k, title = { shop: 'Магазин', resale: 'Продажа вещей', avatar: '3D-игрок' }[k] || k;
+    let found = [], testers = [];
+    const row = (u, on) => `<div class="pl-row"><div class="pl-top"><span class="rn"><b>${esc(u.nickname)}</b><small class="muted">${esc(u.full_name || '')}${u.clubs ? ' · ' + esc(u.clubs) : ''}</small></span></div>
+      <div class="pl-ctl"><button class="btn xs ${on ? 'ghost' : 'primary'}" data-ts="${u.id}" data-on="${on ? 0 : 1}">${on ? 'Убрать' : 'Дать доступ'}</button></div></div>`;
+    async function load() {
+      testers = await S.store.rpc('founder_feature_testers', { fname: k }) || [];
+      const box = document.getElementById('ts-list'); if (!box) return;
+      box.innerHTML = testers.length ? testers.map(u => row(u, true)).join('') : '<p class="muted small">Пока никого — найдите игроков ниже.</p>';
+      bind(box); drawFound();
+    }
+    function drawFound() { const box = document.getElementById('ts-found'); if (!box) return; const ids = new Set(testers.map(t => t.id)); box.innerHTML = found.filter(u => !ids.has(u.id)).map(u => row(u, false)).join(''); bind(box); }
+    async function search(q) { found = await S.store.rpc('founder_search_users', { q }) || []; drawFound(); }
+    function bind(box) { box.querySelectorAll('[data-ts]').forEach(b => b.onclick = () => busy(b, async () => { await S.store.rpc('founder_set_tester', { fname: k, uid: b.dataset.ts, on_: b.dataset.on === '1' }); await load(); toast(b.dataset.on === '1' ? 'Доступ выдан' : 'Доступ убран'); })); }
+    openModal(`<div class="stack"><h3>👥 Тестировщики: ${esc(title)}</h3>
+      <p class="muted small">Игроки, которым нововведение откроется раньше всех. Поиск — по всем зарегистрированным, из любого клуба.</p>
+      <div id="ts-list" class="stack"></div>
+      <label>Найти игрока<input id="ts-q" placeholder="Ник или имя" autocomplete="off"></label>
+      <div id="ts-found" class="stack"></div></div>`, () => { load(); search(''); });
+    setTimeout(() => { const q = document.getElementById('ts-q'); if (q) { let t; q.oninput = () => { clearTimeout(t); t = setTimeout(() => search(q.value.trim()), 250); }; } }, 50);
+  },
   'feature-all': async el => {
     const k = el.dataset.k;
     const warn = k === 'shop' ? 'Включить магазин и новую экономику для всех? Балансы всех игроков пересчитаются × 0,3, стартовый баланс станет 300 PC. Отменить пересчёт нельзя.' : 'Включить для всех?';
@@ -2048,25 +2078,34 @@ function renderShopList() {
   }
 }
 
+// что показать в живом 3D в карточке предмета
+function previewCfg(it, k) {
+  if (it.type === 'blade') return { blade: k };
+  if (it.type === 'rubber') return { blade: 'cn-b1:FL', fh: k, bh: k };
+  if (it.type === 'grip') return { blade: 'eu-b1:FL', grip: k };
+  if (it.type === 'tape') return { blade: 'cn-b5:FL', fh: 'cn-r5:red', bh: 'cn-r5:black', tape: k };
+  return null;
+}
 function openShopItem(it, color, mode = 'buy') {
-  let sel = colorOf(it, color)?.key || null;
+  let sel = colorOf(it, color)?.key || null, focus = null;
   openModal('<div id="sh-sheet"></div>', () => draw());
   function draw() {
     const box = document.getElementById('sh-sheet'); if (!box) return;
     const k = keyOf(it, sel), own = owns(k), price = priceOf(it, sel);
-    const spec = it.type === 'blade' ? [['Слои', it.layers], ['Материал', it.material], ['Класс', it.cls], ['Вес', it.wt + ' г'], ['Толщина', String(it.th).replace('.', ',') + ' мм'], ['Стиль', STYLE[it.style][0]], ['В жизни', it.real]]
-      : it.type === 'rubber' ? [['Тип', it.rubber], ['Губка', it.sponge], ['Жёсткость губки', it.hard], ['Дуга полёта', it.arc], ['Липкость', it.tack], ['Вес листа', '≈ ' + it.wt + ' г'], ['Цвет', colorOf(it, sel).name], ['В жизни', it.real]]
-      : [['Цвет', colorOf(it, sel)?.name || '—'], ['В жизни', it.real]];
+    const spec = it.type === 'blade' ? [['Слои', it.layers], ['Материал', it.material], ['Класс', it.cls], ['Вес', it.wt + ' г'], ['Толщина', String(it.th).replace('.', ',') + ' мм'], ['Стиль', STYLE[it.style][0]]]
+      : it.type === 'rubber' ? [['Тип', it.rubber], ['Губка', it.sponge], ['Жёсткость губки', it.hard], ['Дуга полёта', it.arc], ['Липкость', it.tack], ['Вес листа', '≈ ' + it.wt + ' г'], ['Цвет', colorOf(it, sel).name]]
+      : [['Цвет', colorOf(it, sel)?.name || '—']];
     box.innerHTML = `<div class="sh-pic" id="sh-pic"></div>
       <small class="sh-brand">${esc(it.brand)} · ${RG[it.region] || 'Награда'}</small><h3 class="sh-title">${esc(it.name)}</h3>${shopTags(it)}
-      <small class="muted">в духе: ${esc(it.orig)}</small>
       <p class="muted">${esc(it.desc)}</p>${shopBars(it)}
       ${it.handles ? `<div><b class="small">Форма ручки</b><div class="sh-hsel">${it.colors.map(c => `<button data-hk="${c.key}" class="${sel === c.key ? 'on' : ''}">${c.key}<small>${c.extra ? '+' + c.extra : 'база'}</small></button>`).join('')}</div><small class="muted">${esc(colorOf(it, sel).name)}</small></div>`
         : it.colors && it.colors.length > 1 ? `<div class="sh-colors">${it.colors.map(c => `<button data-hk="${c.key}" class="${sel === c.key ? 'on' : ''}" style="background:${c.hex}" aria-label="${esc(c.name)}"></button>`).join('')}<span>${esc(colorOf(it, sel).name)}${colorOf(it, sel).extra ? ` · +${colorOf(it, sel).extra} PC` : ''}</span></div>` : ''}
       <div class="sh-spec">${spec.map(([a, b]) => `<div>${a}<b>${esc(b)}</b></div>`).join('')}</div>
       <div id="sh-act" class="sh-act"></div>`;
-    box.querySelector('#sh-pic').appendChild(thumbEl(it, sel, true));
-    box.querySelectorAll('[data-hk]').forEach(b => b.onclick = () => { sel = b.dataset.hk; if (it.type === 'rubber') SHOP.color = sel; draw(); });
+    const pic = box.querySelector('#sh-pic'), cfg3d = previewCfg(it, k);
+    if (window.THREE && cfg3d) { pic.classList.add('sh-3d'); mountViewer(pic, cfg3d, focus ? { apply: focus, zoom: .8 } : { zoom: .8 }); focus = null; }
+    else pic.appendChild(thumbEl(it, sel, true));
+    box.querySelectorAll('[data-hk]').forEach(b => b.onclick = () => { sel = b.dataset.hk; if (it.type === 'rubber') SHOP.color = sel; focus = it.handles ? 'grip' : null; draw(); });
     const act = box.querySelector('#sh-act');
     const can = !!EQUIP[it.type];
     if (mode.startsWith('reward:')) {
@@ -2225,6 +2264,65 @@ const SHOP_ACT = {
 };
 
 // ракетка игрока — картинкой в профиле
+// ───────────── 3D-игрок ─────────────
+let AV = null;
+const WEAR = [['shirt', 'Футболка'], ['shorts', 'Шорты'], ['shoes', 'Кроссовки']];
+function viewAvatar(r) {
+  const a = r.args[0], grip = a === 'grip', other = a && !grip && a !== S.me.id;
+  if (grip && !isFounder()) return viewHome(r);
+  const p = other ? S.byId.get(a) : S.ctx.me;
+  if (!p) return '<div class="empty">Игрок не найден</div>';
+  const mine = !other && !grip, lo = (other ? p.loadout : S.shop?.loadout) || p.loadout || {}, owned = S.shop?.items || [];
+  const gender = p.avatar3d || 'boy';
+  const title = grip ? '✋ Хват ракетки' : mine ? '🧍 Мой игрок' : '🧍 ' + esc(p.nickname);
+  const wearBox = mine ? WEAR.map(([slot, name]) => {
+    const mineItems = owned.filter(k => byId(k.split(':')[0])?.type === slot);
+    return `<div class="stack"><b class="small">${name}</b>${mineItems.length ? `<div class="av-wear">${mineItems.map(k => { const { it, color } = parseKey(k); const c = colorOf(it, color); return `<button class="av-w ${lo[slot] === k ? 'on' : ''}" data-act="av-wear" data-slot="${slot}" data-k="${esc(k)}"><i style="background:${c.hex}"></i>${esc(it.name)}<small>${esc(c.name)}</small></button>`; }).join('')}${lo[slot] ? `<button class="av-w" data-act="av-wear" data-slot="${slot}" data-k="">Снять</button>` : ''}</div>` : `<small class="muted">Пока нет — <a href="#/shop" class="link">купить в магазине</a></small>`}</div>`;
+  }).join('') : '';
+  return `<div class="page-h"><h1>${title}</h1>${mine ? '<a href="#/racket" class="btn sm">🏓 Ракетка</a>' : ''}</div>
+    <div class="av-stage ${AV?.big ? 'big' : ''}" id="av-stage"><div class="av-load" id="av-load"><span class="spin"></span></div>
+      <div class="av-tools"><button data-act="av-tool" data-v="flip" aria-label="Повернуть">⟲</button><button data-act="av-tool" data-v="face" aria-label="Лицо крупно">🔍</button><button data-act="av-tool" data-v="full" aria-label="Во весь рост">⤢</button><button data-act="av-tool" data-v="big" aria-label="Во весь экран">⛶</button></div>
+      ${grip ? '' : `<div class="av-emotes"><button data-act="av-play" data-v="win">🏆 Победа</button><button data-act="av-play" data-v="swing">🏓 Удар</button><button data-act="av-play" data-v="wave">👋 Привет</button><button data-act="av-play" data-v="clap">👏 Хлопки</button></div>`}</div>
+    ${mine ? `<section class="card stack"><b class="small">Персонаж</b><div class="av-who"><button class="${gender === 'boy' ? 'on' : ''}" data-act="av-gender" data-v="boy">Парень</button><button class="${gender === 'girl' ? 'on' : ''}" data-act="av-gender" data-v="girl">Девушка</button></div>
+      <p class="muted small">Лицо по селфи, причёски и амуниция (носки, напульсники, повязки) — в следующих обновлениях.</p></section>
+      <section class="card stack"><div class="card-h"><h3>👕 Форма</h3><a href="#/shop" class="link">Магазин →</a></div>${wearBox}</section>` : ''}
+    ${grip ? `<section class="card stack" id="av-grip"></section>` : ''}`;
+}
+async function mountAvatarView(r) {
+  const el = document.getElementById('av-stage'); if (!el) return;
+  const a = r.args[0], grip = a === 'grip', other = a && !grip && a !== S.me.id;
+  if (!other && !S.shop && feature('shop')) { try { await ensureShop(); } catch { /* без магазина — базовая форма */ } }
+  const p = other ? S.byId.get(a) : S.ctx.me;
+  const lo = (other ? p?.loadout : S.shop?.loadout) || p?.loadout || {};
+  try {
+    const { mountAvatar, RK } = await import('./player3d.js');
+    const ctl = await mountAvatar(el, { gender: p?.avatar3d || 'boy', loadout: lo, grip: S.ctx.platform?.grip || {}, tune: grip });
+    AV = { ...(AV || {}), ctl, RK, lo };
+    document.getElementById('av-load')?.remove();
+    if (grip) mountGripPanel(ctl, RK);
+  } catch (e) { const l = document.getElementById('av-load'); if (l) l.innerHTML = `<span class="muted small">${esc(e.message || '3D не загрузилось')}</span>`; }
+}
+function mountGripPanel(ctl, RK) {
+  const box = document.getElementById('av-grip'); if (!box) return;
+  const F = [['tilt', 'Наклон ракетки в ладони', -3.14, 3.14, .01], ['spin', 'Поворот вокруг ручки', -3.14, 3.14, .01], ['pitch', 'Наклон вперёд / назад', -3.14, 3.14, .01], ['roll', 'Завалить вбок', -3.14, 3.14, .01],
+    ['slide', 'Ракетка вперёд — назад из руки, см', -15, 15, .1], ['sx', 'Ракетка вбок, см', -10, 10, .1], ['sz', 'От накладки — к накладке, см', -10, 10, .1],
+    ['grip', 'Сдвиг вдоль ручки, см', -8, 10, .1], ['side', 'Сдвиг вдоль кулака, см', -5, 5, .1], ['ox', 'Сдвиг вбок, см', -5, 5, .1], ['oz', 'Сдвиг к ладони, см', -5, 5, .1],
+    ['curl', 'Сжатие пальцев', 0, 1.6, .01], ['fside', 'Пальцы влево — вправо', -1.2, 1.2, .01], ['thumb', 'Сжатие большого пальца', 0, 1.6, .01], ['tside', 'Большой палец влево — вправо', -1.2, 1.2, .01],
+    ['wx', 'Кисть вверх — вниз', -1.2, 1.2, .01], ['wz', 'Кисть влево — вправо', -1.2, 1.2, .01]];
+  box.innerHTML = `<p class="muted small">Как игрок держит ракетку — у всех игроков. Вертите кисть пальцем, приближайте колёсиком. «Сохранить для всех» — и так будет у каждого.</p>
+    <div class="av-btns"><button class="btn sm ghost" id="g-full">Общий план</button><button class="btn sm ghost" id="g-swing">Показать удар</button></div>
+    ${F.map(([k, l, a, b, st]) => `<label class="av-sl">${l}<span><input type="range" data-g="${k}" min="${a}" max="${b}" step="${st}" value="${RK[k] ?? 0}"><b id="gv-${k}">${(+(RK[k] ?? 0)).toFixed(2)}</b></span></label>`).join('')}
+    <button class="btn primary full" id="g-save">Сохранить для всех</button>`;
+  box.querySelectorAll('[data-g]').forEach(i => i.oninput = () => { RK[i.dataset.g] = +i.value; document.getElementById('gv-' + i.dataset.g).textContent = (+i.value).toFixed(2); ctl.regrip(); });
+  let full = false;
+  document.getElementById('g-full').onclick = e => { full = !full; ctl.tuneFull(full); e.target.textContent = full ? 'Крупно — кисть' : 'Общий план'; };
+  document.getElementById('g-swing').onclick = () => ctl.play('swing');
+  document.getElementById('g-save').onclick = e => busy(e.currentTarget, async () => {
+    const g = {}; F.forEach(([k]) => g[k] = +(+(RK[k] ?? 0)).toFixed(2));
+    await S.store.rpc('founder_set_grip', { p: g }); S.ctx.platform.grip = g; toast('Хват сохранён для всех ✓');
+  });
+}
+
 function playerRacketCard(p) {
   const lo = p.loadout || {};
   if (!lo.blade) return '';
@@ -3214,6 +3312,7 @@ function afterRender(r) {
   if (r.name === 'shop') { if (!S.shop && feature('shop')) ensureShop().then(render).catch(e => toast(e.message, 'err')); else renderShopList(); }
   if (r.name === 'racket') { if (!S.shop && feature('shop')) ensureShop().then(render).catch(e => toast(e.message, 'err')); else mountRacket(); }
   if (r.name === 'player' && feature('shop')) { ensureThree(); mountPlayerRackets(); }
+  if (r.name === 'avatar' && feature('avatar')) mountAvatarView(r);
   if (document.getElementById('dir-box')) renderDirectory(document.querySelector('[data-input=dir-search]')?.value || '');
   if (document.getElementById('pick-map')) mountPickMap();
   if (r.name === 'invite') renderInvite();
