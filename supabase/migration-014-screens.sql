@@ -31,7 +31,7 @@ begin
   if (select count(*) from club_screens where club_id is null and created_at > now() - interval '10 minutes') > 200 then
     raise exception 'Слишком много запросов, попробуйте позже';
   end if;
-  t := encode(gen_random_bytes(24), 'hex');
+  t := replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '');
   loop
     c := lpad((floor(random() * 1000000))::int::text, 6, '0');
     exit when not exists (select 1 from club_screens where pair_code = c);
