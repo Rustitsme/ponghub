@@ -1,0 +1,1568 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="robots" content="noindex">
+<title>Игрок PongHub 3D</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/meshoptimizer@0.18.1/meshopt_decoder.js"></script>
+<style>
+/* Прототип 3D-игрока на настоящих моделях: телефон слева (игрок, форма, ракетка, жесты), справа — пояснения;
+   ниже — выход игроков на табло (как в UFC) и профиль игрока. Палитра приложения PongHub. */
+:root {
+  --bg: #e9effa; --surface: #ffffff; --text: #0f2742; --muted: #5b7493; --line: rgba(22, 60, 120, .12);
+  --red: #e63946; --blue: #2563b8; --wood: #c98a4b; --wood-l: #f0c48f; --up: #12a061;
+  --display: "Barlow Condensed", "Arial Narrow", sans-serif; --font: "Inter", -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #0b1a2f; --surface: #12243f; --text: #eef3fb; --muted: #a4b8d4; --line: rgba(255, 255, 255, .12); color-scheme: dark; } }
+:root[data-theme="dark"] { --bg: #0b1a2f; --surface: #12243f; --text: #eef3fb; --muted: #a4b8d4; --line: rgba(255, 255, 255, .12); color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--font); }
+.wrap { max-width: 1200px; margin: 0 auto; padding-block: 28px 56px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 40px; }
+h1 { font: 800 clamp(32px, 5vw, 52px)/1 var(--display); margin: 0; text-wrap: balance; }
+h2 { font: 800 clamp(24px, 3.2vw, 32px)/1.05 var(--display); margin: 0 0 6px; text-wrap: balance; }
+h3 { margin: 0; font-size: 16px; }
+.lead { color: var(--muted); max-width: 72ch; margin: 8px 0 0; }
+.eyebrow { font: 700 12px var(--font); letter-spacing: .14em; text-transform: uppercase; color: var(--red); }
+button { font-family: inherit; }
+button:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+.proto { display: grid; grid-template-columns: 390px minmax(0, 1fr); gap: 36px; align-items: start; }
+@media (max-width: 880px) { .proto { grid-template-columns: 1fr; justify-items: center; } }
+
+/* телефон — всегда в светлой теме приложения */
+.phone { width: 390px; max-width: 100%; height: 830px; border: 10px solid #111; border-radius: 46px; background: #e9effa; color: #0f2742; overflow: hidden; position: relative; display: flex; flex-direction: column; box-shadow: 0 30px 70px rgba(10, 30, 70, .3); }
+@media (max-width: 420px) { .phone { height: 780px; border-width: 6px; border-radius: 30px; } }
+.ph-top { display: flex; align-items: center; gap: 8px; padding: 14px 16px 10px; background: rgba(233, 239, 250, .96); border-bottom: 1px solid rgba(22, 60, 120, .12); }
+.ph-top b { font: 800 20px var(--display); letter-spacing: .5px; text-transform: uppercase; flex: 1; }
+.ph-logo { width: 28px; height: 28px; }
+.coins { font: 700 15px var(--display); background: linear-gradient(135deg, var(--wood-l), var(--wood)); color: #3b2410; padding: 4px 10px; border-radius: 20px; }
+.stage { position: relative; height: 400px; flex: none; background: radial-gradient(80% 70% at 50% 35%, #ffffff 0%, #dbe5f5 60%, #b9c9e4 100%); touch-action: none; cursor: grab; overflow: hidden; }
+.stage:active { cursor: grabbing; }
+.stage canvas { display: block; width: 100%; height: 100%; }
+.st-tools { position: absolute; top: 10px; right: 10px; display: grid; gap: 6px; }
+.st-tools button { width: 38px; height: 38px; border-radius: 10px; border: 1px solid rgba(22, 60, 120, .14); background: rgba(255, 255, 255, .92); font: 700 16px var(--font); cursor: pointer; color: #0f2742; }
+.st-emotes { position: absolute; left: 8px; right: 8px; bottom: 10px; display: flex; gap: 5px; justify-content: center; flex-wrap: wrap; }
+.st-emotes button { border: 1px solid rgba(22, 60, 120, .14); background: rgba(255, 255, 255, .94); border-radius: 18px; padding: 6px 10px; font: 600 12px var(--font); cursor: pointer; color: #0f2742; }
+.st-emotes button.on { background: #0f2742; color: #fff; }
+.st-name { position: absolute; left: 12px; top: 10px; background: rgba(255, 255, 255, .92); border-radius: 10px; padding: 5px 10px; font: 800 16px var(--display); }
+.st-name small { display: block; font: 600 10px var(--font); color: #5b7493; letter-spacing: .06em; text-transform: uppercase; }
+.loading { position: absolute; inset: 0; display: grid; place-items: center; color: #5b7493; font: 600 13px var(--font); text-align: center; }
+.loading i { display: block; width: 160px; height: 6px; border-radius: 6px; background: rgba(22, 60, 120, .12); margin: 10px auto 0; overflow: hidden; }
+.loading i b { display: block; height: 100%; width: 0; background: var(--red); transition: width .2s; }
+.tabs { display: grid; grid-template-columns: repeat(4, 1fr); background: #fff; border-bottom: 1px solid rgba(22, 60, 120, .12); flex: none; }
+.tabs button { border: 0; background: none; padding: 10px 2px 9px; font: 600 12px var(--font); color: #5b7493; border-bottom: 3px solid transparent; cursor: pointer; }
+.tabs button.on { color: #0f2742; border-bottom-color: var(--red); }
+.panel { flex: 1; overflow-y: auto; padding: 12px 14px 18px; display: flex; flex-direction: column; gap: 14px; }
+.panel > * { flex: none; }
+.grp > b { display: block; font: 700 11px var(--font); letter-spacing: .08em; text-transform: uppercase; color: #5b7493; margin-bottom: 6px; }
+.who { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.who button { border: 1px solid rgba(22, 60, 120, .16); background: #fff; border-radius: 16px; padding: 12px 8px; cursor: pointer; display: grid; justify-items: center; gap: 4px; color: #0f2742; font: 700 14px var(--font); }
+.who button.on { box-shadow: 0 0 0 2px var(--red); }
+.who img { width: 72px; height: 72px; border-radius: 50%; background: radial-gradient(70% 70% at 50% 40%, #fff, #dfe7f4); object-fit: cover; }
+.items { display: grid; gap: 8px; }
+.it { display: grid; grid-template-columns: 44px 1fr auto; gap: 10px; align-items: center; background: #fff; border: 1px solid rgba(22, 60, 120, .12); border-radius: 14px; padding: 8px 10px; cursor: pointer; text-align: left; color: #0f2742; font: inherit; width: 100%; }
+.it.on { box-shadow: 0 0 0 2px var(--red); }
+.it-sw { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-size: 20px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08); }
+.it b { font: 800 16px/1.1 var(--display); display: block; }
+.it small { color: #5b7493; font-size: 11px; }
+.it .pr { font: 800 14px var(--display); white-space: nowrap; }
+.it .pr.own { color: var(--up); font: 700 11px var(--font); }
+.cols { display: flex; gap: 6px; margin: 6px 0 0 54px; flex-wrap: wrap; }
+.cols button { width: 26px; height: 26px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(22, 60, 120, .25); cursor: pointer; }
+.cols button.on { box-shadow: 0 0 0 2px var(--red); }
+.new { font: 700 9px var(--font); letter-spacing: .06em; background: var(--red); color: #fff; border-radius: 6px; padding: 1px 5px; margin-left: 4px; vertical-align: 2px; }
+.note-in { color: #5b7493; font-size: 12px; margin: 0; }
+.toast { position: absolute; left: 50%; top: 70px; transform: translateX(-50%); background: #0f2742; color: #fff; font: 600 13px var(--font); padding: 9px 14px; border-radius: 12px; z-index: 30; white-space: nowrap; }
+
+.side { display: grid; gap: 16px; min-width: 0; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 18px; }
+.card p { margin: 6px 0 0; color: var(--muted); }
+.list { margin: 8px 0 0; padding-left: 18px; color: var(--muted); }
+.list li { margin: 3px 0; }
+.list b { color: var(--text); }
+
+/* табло */
+.tv-wrap { display: grid; gap: 12px; }
+.tv { position: relative; width: 100%; max-width: 100%; aspect-ratio: 16 / 9; border-radius: 18px; overflow: hidden; background: radial-gradient(90% 80% at 50% 10%, #1b3d73 0%, #0b1a33 55%, #050b17 100%); color: #fff; box-shadow: 0 24px 60px rgba(5, 15, 40, .35); }
+.tv canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.tv .ov { position: absolute; inset: 0; pointer-events: none; }
+.tv-logo { position: absolute; left: 3%; top: 4%; font: 800 clamp(12px, 1.8vw, 20px) var(--display); letter-spacing: .08em; opacity: .85; }
+.tv-names { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 5%; font: 800 clamp(24px, 6vw, 72px)/1 var(--display); text-transform: uppercase; letter-spacing: .02em; transition: opacity .5s; }
+.tv-names .a { color: #ff6b75; text-align: left; transform: translateX(-120%); transition: transform .7s cubic-bezier(.2, .9, .2, 1); text-shadow: 0 6px 30px rgba(230, 57, 70, .6); }
+.tv-names .b { color: #6fb0ff; text-align: right; transform: translateX(120%); transition: transform .7s cubic-bezier(.2, .9, .2, 1); text-shadow: 0 6px 30px rgba(47, 125, 225, .6); }
+.tv-names .vs { font-size: .6em; opacity: 0; transform: scale(2.4); transition: all .5s .45s; color: #ffd75e; }
+.tv-names.in .a, .tv-names.in .b { transform: none; }
+.tv-names.in .vs { opacity: 1; transform: none; }
+.tv-card { position: absolute; top: 22%; width: 34%; padding: 2% 2.4%; border-radius: 14px; background: rgba(8, 18, 38, .78); border: 1px solid rgba(255, 255, 255, .15); backdrop-filter: blur(6px); opacity: 0; transition: opacity .45s, transform .45s; font-size: clamp(9px, 1.5vw, 16px); }
+.tv-card.l { left: 6%; transform: translateX(-20px); border-left: 4px solid #e63946; }
+.tv-card.r { right: 5%; transform: translateX(20px); border-right: 4px solid #2f7de1; text-align: right; }
+.tv-card.on { opacity: 1; transform: none; }
+.tv-card b { display: block; font: 800 2.2em/1 var(--display); text-transform: uppercase; }
+.tv-card .lg { display: inline-block; margin: .5em 0 .3em; padding: .15em .6em; border-radius: 999px; background: linear-gradient(135deg, #ffe08a, #d4a017); color: #3b2a00; font: 800 1em var(--display); }
+.tv-card .lg.s { background: linear-gradient(135deg, #f1f4f8, #a9b4c4); color: #1b2533; }
+.tv-card .row { display: flex; gap: 1.2em; margin-top: .4em; opacity: .9; }
+.tv-card.r .row { justify-content: flex-end; }
+.tv-card .row span b { font-size: 1.6em; }
+.tv-score { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 3%; padding: 6% 5% 8%; opacity: 0; transition: opacity .6s; background: radial-gradient(120% 90% at 50% 0%, #163463 0%, #0b1a33 55%, #070f1f 100%); }
+.tv-score.on { opacity: 1; }
+.tv-score .pl { height: 100%; border-radius: 3vw; display: grid; justify-items: center; align-content: center; gap: 4%; font: 800 clamp(16px, 3.4vw, 40px) var(--display); }
+.tv-score .pl.a { background: linear-gradient(165deg, rgba(230, 57, 70, .75), rgba(230, 57, 70, .25)); }
+.tv-score .pl.b { background: linear-gradient(165deg, rgba(47, 125, 225, .75), rgba(47, 125, 225, .25)); }
+.tv-score .pl img { width: 38%; aspect-ratio: 1; border-radius: 50%; background: rgba(255, 255, 255, .15); object-fit: cover; border: 3px solid rgba(255, 255, 255, .5); }
+.tv-score .pl .pts { font-size: 2.4em; line-height: 1; }
+.tv-score .mid { text-align: center; font: 800 clamp(12px, 2vw, 22px) var(--display); opacity: .85; text-transform: uppercase; letter-spacing: .08em; }
+.tv-flash { position: absolute; inset: 0; background: #fff; opacity: 0; transition: opacity .35s; pointer-events: none; }
+.tv-btns { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.demo-btn { display: inline-flex; align-items: center; gap: 10px; border: 0; border-radius: 14px; background: var(--red); color: #fff; font: 700 16px var(--font); padding: 13px 18px; cursor: pointer; box-shadow: 0 10px 24px rgba(230, 57, 70, .3); }
+.demo-btn:disabled { opacity: .6; cursor: default; }
+.tv-step { color: var(--muted); font-size: 14px; }
+
+/* профиль */
+.prof { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 760px) { .prof { grid-template-columns: 1fr; } }
+.pcard { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
+.pcard-h { display: flex; gap: 12px; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.pcard-h .av { width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(135deg, #2563b8, #e63946); color: #fff; display: grid; place-items: center; font: 800 18px var(--display); }
+.pcard-h b { font: 800 20px var(--display); display: block; }
+.pcard-h small { color: var(--muted); }
+.pcard-body { display: grid; grid-template-columns: 46% 1fr; gap: 12px; padding: 14px 16px; align-items: center; }
+.pcard-body .shot { width: 100%; aspect-ratio: 3 / 4; border-radius: 14px; background: radial-gradient(70% 60% at 50% 40%, #ffffff, #d9e3f3); object-fit: cover; }
+.pcard-body .rk { width: 100%; aspect-ratio: 1; border-radius: 14px; background: radial-gradient(70% 60% at 50% 40%, #ffffff, #d9e3f3); object-fit: contain; }
+.stats { display: grid; gap: 6px; font-size: 14px; }
+.stats div { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px dashed var(--line); padding-bottom: 4px; }
+.stats span:last-child { font-weight: 700; }
+.ideas { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.ideas .card { padding: 16px; }
+.ico { font-size: 22px; display: block; margin-bottom: 6px; }
+.err { color: var(--red); font-weight: 600; }
+body.tune .phone { height: auto; }
+body.tune .stage { height: 620px; }
+body.tune .tabs, body.tune .panel, body.tune .st-emotes, body.tune .st-tools, body.tune .st-name { display: none; }
+.tune-card h2 { margin: 0 0 4px; }
+.tune-row { display: grid; grid-template-columns: 1fr 52px; gap: 2px 10px; align-items: center; margin-top: 10px; font-size: 13px; }
+.tune-row label { grid-column: 1 / -1; color: var(--muted); font-weight: 600; }
+.tune-row input { width: 100%; accent-color: var(--red); }
+.tune-row span { font: 700 13px var(--font); text-align: right; }
+.tune-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.tune-reset { border: 1px solid var(--line); background: var(--surface); color: var(--text); border-radius: 12px; padding: 10px 14px; font: 600 14px var(--font); cursor: pointer; }
+#t-out { width: 100%; margin-top: 10px; font: 12px ui-monospace, Menlo, monospace; border-radius: 10px; border: 1px solid var(--line); padding: 8px; background: var(--bg); color: var(--text); }
+@media (prefers-reduced-motion: reduce) { .tv-names .a, .tv-names .b, .tv-names .vs, .tv-card, .tv-score { transition: none; } }
+</style>
+
+</head><body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Визуализация · ваши модели</div>
+    <h1>Игрок PongHub 3D</h1>
+    <p class="lead">Парень и девушка, которых вы сделали, уже со скелетом и движениями. Вертите игрока пальцем, переодевайте в форму из магазина, вкладывайте в руку ракетку и запускайте жесты. Ниже — выход игроков на табло перед матчем и профиль игрока.</p>
+  </header>
+
+  <section class="proto">
+    <div class="phone" id="phone">
+      <div class="ph-top">
+        <svg class="ph-logo" viewBox="0 0 120 120" aria-hidden="true"><rect width="120" height="120" rx="26" fill="#2563b8"/><g transform="translate(60 60) rotate(-24)"><ellipse rx="45" ry="16" fill="none" stroke="#e63946" stroke-width="7"/></g><circle cx="60" cy="60" r="22" fill="#fff"/><g transform="translate(60 60) rotate(-24)"><path d="M-45 0 A45 16 0 0 0 45 0" fill="none" stroke="#e63946" stroke-width="7" stroke-linecap="round"/></g></svg>
+        <b>Мой игрок</b><span class="coins" id="coins">9 000 PC</span>
+      </div>
+      <div class="stage" id="stage">
+        <div class="loading" id="loading"><div>Загружаю игроков…<i><b id="bar"></b></i></div></div>
+        <div class="st-name" id="stname">Rustam<small>Золото · 70,3</small></div>
+        <div class="st-tools"><button data-v="flip" title="Повернуть" aria-label="Повернуть">⟲</button><button data-v="in" title="Лицо крупно" aria-label="Лицо крупно">🔍</button><button data-v="out" title="Во весь рост" aria-label="Во весь рост">⤢</button></div>
+        <div class="st-emotes"><button data-emote="win">🏆 Победа</button><button data-emote="swing">🏓 Удар</button><button data-emote="wave">👋 Привет</button><button data-emote="clap">👏 Хлопки</button></div>
+      </div>
+      <nav class="tabs">
+        <button data-tab="who" class="on">🙂 Игрок</button>
+        <button data-tab="wear">👕 Форма</button>
+        <button data-tab="ammo">🎽 Амуниция</button>
+        <button data-tab="racket">🏓 Ракетка</button>
+      </nav>
+      <div class="panel" id="panel"></div>
+    </div>
+
+    <div class="side">
+      <div class="card">
+        <h2>Что можно потрогать</h2>
+        <ul class="list">
+          <li><b>Вертеть</b> — проведите пальцем или мышкой по игроку. 🔍 — лицо крупно, ⤢ — во весь рост.</li>
+          <li><b>Жесты</b> — победа, привет, хлопки (движения из Mixamo) и удар ракеткой (сделан под настольный теннис).</li>
+          <li><b>Форма</b> — футболки, шорты и кроссовки из магазина, в своих цветах. Купленное надевается сразу.</li>
+          <li><b>Амуниция</b> — новое: носки (низкие и высокие), напульсники, повязка на голову.</li>
+          <li><b>Ракетка</b> — та, что собрана в магазине: основание, накладки, ручка.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Что будет дальше</h3>
+        <ul class="list">
+          <li><b>Лицо по селфи</b> — отдельный этап: нейросеть переносит черты лица, причёску и бороду на модель.</li>
+          <li><b>Причёски и телосложение</b> — после этого: несколько вариантов на выбор.</li>
+          <li><b>В приложении</b> игрок появится в профиле (свой и чужой) и на табло перед матчем. Аватарка остаётся вашей.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="tv-wrap">
+    <div>
+      <div class="eyebrow">Табло на телевизоре</div>
+      <h2>Выход игроков перед матчем</h2>
+      <p class="lead">Сначала ники, потом игроки выходят с двух сторон, камера показывает лицо каждого с рейтингом — и плавный переход к обычному табло со счётом.</p>
+    </div>
+    <div class="tv" id="tv">
+      <div class="ov">
+        <div class="tv-logo">PONGHUB · МАТЧ</div>
+        <div class="tv-names" id="tvNames"><div class="a">Rustam</div><div class="vs">VS</div><div class="b">Alina</div></div>
+        <div class="tv-card l" id="cardA"><b>Rustam</b><span class="lg">Золото · 70,3</span><div class="row"><span><b>14</b> побед</span><span><b>61%</b> побед</span></div><div class="row"><span>🏓 Longwei Dragon Power 5</span></div></div>
+        <div class="tv-card r" id="cardB"><b>Alina</b><span class="lg s">Серебро · 61,1</span><div class="row"><span><b>9</b> побед</span><span><b>54%</b> побед</span></div><div class="row"><span>🏓 Tsubame Heritage</span></div></div>
+        <div class="tv-score" id="tvScore"><div class="pl a"><img id="avA" alt="">Rustam<span class="pts">0</span></div><div class="mid">Сет 1<br>до 11</div><div class="pl b"><img id="avB" alt="">Alina<span class="pts">0</span></div></div>
+        <div class="tv-flash" id="tvFlash"></div>
+      </div>
+    </div>
+    <div class="tv-btns"><button class="demo-btn" id="tvPlay" disabled>▶ Показать выход игроков</button><span class="tv-step" id="tvStep">Загружаю…</span></div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Профиль игрока</div>
+    <h2>Зашли к сопернику — видно его игрока и ракетку</h2>
+    <p class="lead">Аватарка остаётся той, что человек поставил сам. Игрок — отдельным блоком в профиле, с его формой и ракеткой. Картинки ниже обновляются, когда вы переодеваете игрока выше.</p>
+    <div class="prof" style="margin-top:14px">
+      <div class="pcard"><div class="pcard-h"><div class="av">R</div><div><b>Rustam</b><small>👑⭐ Владелец · Золото · 70,3</small></div></div>
+        <div class="pcard-body"><img class="shot" id="profA" alt="Игрок Rustam"><div class="stats"><div><span>Матчей</span><span>23</span></div><div><span>Побед</span><span>14</span></div><div><span>Серия</span><span>🔥 4</span></div><div><span>Ракетка</span><span id="profRk">Longwei Dragon</span></div></div></div></div>
+      <div class="pcard"><div class="pcard-h"><div class="av" style="background:linear-gradient(135deg,#2f7de1,#12a061)">A</div><div><b>Alina</b><small>Игрок · Серебро · 61,1</small></div></div>
+        <div class="pcard-body"><img class="shot" id="profB" alt="Игрок Alina"><div class="stats"><div><span>Матчей</span><span>17</span></div><div><span>Побед</span><span>9</span></div><div><span>Серия</span><span>2</span></div><div><span>Ракетка</span><span>Tsubame Heritage</span></div></div></div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Идеи</div>
+    <h2>Что ещё можно сделать с игроком</h2>
+    <div class="ideas">
+      <div class="card"><span class="ico">🏆</span><h3>Жест победителя на табло</h3><p>После матча победитель делает свой жест на телевизоре. Редкие жесты — награда за турнир или серию побед.</p></div>
+      <div class="card"><span class="ico">🎽</span><h3>Форма клуба</h3><p>Владелец выбирает цвета клуба — на турнирах игроки клуба выходят в одной форме.</p></div>
+      <div class="card"><span class="ico">🪪</span><h3>Карточка игрока</h3><p>Игрок, рейтинг и ракетка на красивой карточке — отправить в чат или в соцсети.</p></div>
+    </div>
+  </section>
+</div>
+
+<script>
+// Каталог магазина PongHub: вымышленные бренды, предметы, цены, варианты (цвет / форма ручки).
+// Цены дублируются в базе (shop_items) — менять в обоих местах (supabase/migration-015-shop.sql).
+// ───────────── Бренды PongHub (вымышленные) ─────────────
+const BRANDS = {
+  tsubame: { name: 'Tsubame', color: '#d62839', mark: 'bird' },
+  rhein: { name: 'Rheinwerk', color: '#1f5fc4', mark: 'ring' },
+  nordvik: { name: 'Nordvik', color: '#0e3b8c', mark: 'chevron' },
+  falkner: { name: 'Falkner', color: '#e8590c', mark: 'flame' },
+  kraft: { name: 'Kraftmann', color: '#2b2f36', mark: 'box' },
+  shiro: { name: 'Shirokaze', color: '#c1121f', mark: 'sun' },
+  kirameki: { name: 'Kirameki', color: '#0b7a47', mark: 'stars' },
+  raijin: { name: 'Raijin', color: '#6a1b9a', mark: 'bolt' },
+  longwei: { name: 'Longwei', color: '#d62839', mark: 'tri' },
+  baima: { name: 'Baima', color: '#1f5fc4', mark: 'diamond' },
+  qinglan: { name: 'Qinglan', color: '#e8590c', mark: 'wave' },
+  kunlun: { name: 'Kunlun', color: '#16181d', mark: 'mountain' },
+  huaxia: { name: 'Huaxia', color: '#d62839', mark: 'stripes' },
+  aozora: { name: 'Aozora', color: '#1f5fc4', mark: 'diamond' },
+};
+const brandName = bk => BRANDS[bk]?.name || bk;
+
+// ───────────── Каталог ─────────────
+const RG = { cn: 'Китай', eu: 'Европа', jp: 'Япония', acc: 'Аксессуары', wear: 'Форма', rw: 'Награды' };
+const RGSUB = { cn: 'Липкие накладки и мощный накат', eu: 'Германия и Швеция: тензоры и контроль', jp: 'Легенды японских мастеров', acc: 'Обмотки, лента, мячи, чехлы', wear: 'Футболки, шорты, кроссовки', rw: 'Бесплатно за достижения' };
+const C = (key, name, hex, extra = 0) => ({ key, name, hex, extra });
+const RUBBER_COLORS = [C('red', 'красная', '#d62839'), C('black', 'чёрная', '#18191d'), C('blue', 'синяя', '#1f5fc4', 60)];
+// s: скорость, w: вращение, c: контроль (из 10)
+const B = (id, region, bk, name, orig, price, real, style, s, w, c, layers, material, desc, look) => ({ id, region, type: 'blade', bk, name, orig, price, real, style, s, w, c, layers, material, desc, look });
+const R = (id, region, bk, name, orig, price, real, style, s, w, c, rubber, sponge, sp, desc) => ({ id, region, type: 'rubber', bk, name, orig, price, real, style, s, w, c, rubber, sponge, sp, desc, colors: RUBBER_COLORS });
+const ITEMS = [
+  B('cn-b1', 'cn', 'qinglan', 'Start 7', '', 1200, '', 'uni', 6, 7, 9, '7 слоёв', 'дерево', 'Надёжная первая ракетка: прощает ошибки и учит чувствовать мяч.', { face: '#e6bd84', cheek: '#d9b07a', ply: ['#e6bd84', '#c48d4c', '#f1d3a1'] }),
+  B('cn-b2', 'cn', 'baima', 'Breeze T12', '', 1550, '', 'uni', 6.5, 7.5, 9, '5 слоёв', 'лимба', 'Мягкий удар, отличный контроль для подрезки и первого наката.', { face: '#ecc58c', cheek: '#7a4b2a', ply: ['#ecc58c', '#d9a865', '#f6dcae'] }),
+  B('cn-b3', 'cn', 'longwei', 'Force G7', '', 1950, '', 'atk', 7.5, 8, 8, '7 слоёв', 'дерево', 'Жёстче и быстрее — для уверенного наката с обеих сторон.', { face: '#dcab6e', cheek: '#2a2420', ply: ['#dcab6e', '#b8803f', '#ecc890'] }),
+  B('cn-b4', 'cn', 'baima', 'Comet Y31', '', 2750, '', 'atk', 8.5, 8, 7, '5+2 карбон', 'карбон', 'Два слоя карбона добавляют скорость, но требуют техники.', { face: '#d6a468', cheek: '#1d1d1f', ply: ['#d6a468', '#1a1a1a', '#ecc890'] }),
+  B('cn-b5', 'cn', 'longwei', 'Dragon Power 5', '', 3950, '', 'top', 9, 9, 7.5, '5+2 арилат-карбон', 'карбон', 'Основание для мощного наката: сила и вращение.', { face: '#cf9c5f', cheek: '#d6ad78', ply: ['#cf9c5f', '#2a2a2a', '#e8c088'] }),
+  R('cn-r1', 'cn', 'kunlun', 'Grip III', '', 600, '', 'uni', 6, 8, 8, 'липкая', '2.0 мм', '#f2c14e', 'Классическая липкая накладка: вращение и контроль за небольшие деньги.'),
+  R('cn-r2', 'cn', 'baima', 'Meteor II', '', 650, '', 'atk', 7, 8.5, 7.5, 'липкая', '2.1 мм', '#f0a64a', 'Чуть быстрее и мягче — удобна для наката с отскока.'),
+  R('cn-r3', 'cn', 'baima', 'L-90 · длинные шипы', '', 750, '', 'def', 3, 6, 8.5, 'длинные шипы', '0.5 мм', '#f2c14e', 'Путает соперника: возвращает его же вращение. Для защиты.'),
+  R('cn-r4', 'cn', 'qinglan', 'Tiger Spin', '', 950, '', 'atk', 8, 8.5, 7.5, 'полулипкая', '2.15 мм', '#ef8a3c', 'Губка для атаки с хорошим «зацепом» мяча.'),
+  R('cn-r5', 'cn', 'longwei', 'Dragon Spin Neo', '', 1300, '', 'top', 8.5, 10, 7.5, 'липкая «нео»', '2.15 мм', '#e9772f', 'Легенда Китая: максимальное вращение и тяжёлый накат.'),
+
+  B('eu-b1', 'eu', 'nordvik', 'Fjord ALL', '', 1650, '', 'uni', 6, 7, 9.5, '5 слоёв', 'дерево', 'Классика: чувство мяча и контроль.', { face: '#e8c088', cheek: '#dcb27c', ply: ['#e8c088', '#d4a062', '#f3d8a8'] }),
+  B('eu-b2', 'eu', 'rhein', 'Comfort V1', '', 2200, '', 'uni', 6.5, 7.5, 9, '5 слоёв + Sense', 'дерево', 'Вставки в ручке гасят вибрацию — удобный универсал.', { face: '#dfb47c', cheek: '#1b1d22', ply: ['#dfb47c', '#c99858', '#efd09c'] }),
+  B('eu-b3', 'eu', 'falkner', 'Eiche Power', '', 3000, '', 'atk', 8, 8, 8, '7 слоёв', 'дерево', 'Мощное основание без карбона — для любителей дерева.', { face: '#d6a468', cheek: '#232325', ply: ['#d6a468', '#b9813f', '#e9c48d'] }),
+  B('eu-b4', 'eu', 'kraft', 'Turbo CO', '', 4150, '', 'atk', 8.5, 8, 7.5, '5+2 карбон', 'карбон', 'Carbon Offensive: быстрое, но послушное основание.', { face: '#d19f62', cheek: '#1c2230', ply: ['#d19f62', '#1f1f1f', '#e6c088'] }),
+  B('eu-b5', 'eu', 'nordvik', 'Hexa Carbon', '', 6000, '', 'top', 9.5, 9, 7.5, '5+2 карбон', 'карбон', 'Шестиугольная голова: больше «сладкая точка». Самое необычное основание.', { face: '#cb985c', cheek: '#151517', ply: ['#cb985c', '#1d1d1d', '#e2bb82'], hex: true }),
+  R('eu-r1', 'eu', 'rhein', 'Soft Gold', '', 750, '', 'uni', 7, 7.5, 8.5, 'классическая', '2.0 мм', '#f4d35e', 'Мягкая и предсказуемая — для стабильной игры.'),
+  R('eu-r2', 'eu', 'falkner', 'Chaos · шипы', '', 850, '', 'def', 3, 6, 8.5, 'длинные шипы', 'OX', null, 'Самые «злые» шипы Европы: мяч летит непредсказуемо.'),
+  R('eu-r3', 'eu', 'rhein', 'Blitz M1', '', 1050, '', 'atk', 9, 9, 7, 'тензор', '2.0 мм', '#4da3ff', 'Жёсткий тензор: сильный удар и вращение.'),
+  R('eu-r4', 'eu', 'kraft', 'Tempo 47', '', 1200, '', 'atk', 8.5, 9, 8, 'тензор', '2.1 мм', '#ffd23f', 'Баланс атаки и контроля — одна из самых популярных.'),
+  R('eu-r5', 'eu', 'falkner', 'Rakete MX', '', 1450, '', 'top', 9.5, 9.5, 7, 'тензор', 'max', '#ffb627', 'Топ Европы для атакующих: скорость и «выстрел».'),
+
+  B('jp-b1', 'jp', 'shiro', 'Kaze Soft', '', 1900, '', 'uni', 6, 7, 9.5, '5 слоёв', 'дерево', 'Мягкое и лёгкое: идеально для контроля и подрезки.', { face: '#efcb95', cheek: '#e2bd88', ply: ['#efcb95', '#ddb175', '#f7e0b6'] }),
+  B('jp-b2', 'jp', 'shiro', 'Kaminari OFF', '', 2450, '', 'atk', 7.5, 8, 8.5, '5 слоёв', 'дерево', 'Основание для нападения у стола, любимое у азиатских атакующих.', { face: '#e4b67c', cheek: '#b8824e', ply: ['#e4b67c', '#cf9c5c', '#f1d3a1'] }),
+  B('jp-b3', 'jp', 'tsubame', 'Heritage', '', 3300, '', 'atk', 8, 8.5, 8.5, '5 слоёв', 'дерево', 'Легенда: «как продолжение руки».', { face: '#ddb077', cheek: '#dcb684', ply: ['#ddb077', '#c79656', '#eccb95'] }),
+  B('jp-b4', 'jp', 'tsubame', 'Core Layer', '', 6200, '', 'atk', 8.5, 9, 8.5, '5+2 ALC внутри', 'ALC', 'Карбон спрятан ближе к центру: мощь с ощущением дерева.', { face: '#d9ab70', cheek: '#d9b27e', ply: ['#d9ab70', '#c9b27a', '#eac792'] }),
+  B('jp-b5', 'jp', 'tsubame', 'Zenith ZC', '', 9200, '', 'top', 9.5, 9.5, 8, '5+2 ZL-карбон', 'ZLC', 'Вершина каталога: основание чемпионов.', { face: '#d4a468', cheek: '#3a2a1e', ply: ['#d4a468', '#8a8f99', '#e7c38c'] }),
+  R('jp-r1', 'jp', 'shiro', 'Stable 5', '', 900, '', 'uni', 7, 7.5, 9, 'классическая', '2.0 мм', '#f6e27a', 'Надёжная и стабильная — подходит любому стилю.'),
+  R('jp-r2', 'jp', 'tsubame', 'Control One', '', 1000, '', 'uni', 7, 7.5, 9.5, 'классическая', '1.9 мм', '#f8d77a', 'Эталон контроля, на ней учились поколения игроков.'),
+  R('jp-r3', 'jp', 'raijin', 'Raiden · шипы', '', 950, '', 'def', 3, 6.5, 9, 'длинные шипы', 'OX', null, 'Мягкие шипы для защитников у стола.'),
+  R('jp-r4', 'jp', 'tsubame', 'Swift', '', 1450, '', 'atk', 8.5, 8.5, 8.5, 'тензор', '2.1 мм', '#ffc94d', 'Быстрая, но послушная — шаг к профессиональным накладкам.'),
+  R('jp-r5', 'jp', 'tsubame', 'Apex Pro', '', 2000, '', 'top', 9.5, 10, 8.5, 'полулипкий тензор', '2.1 мм', '#ffb000', 'Накладка чемпионов: липкость Китая и скорость Японии.'),
+
+  // аксессуары — у каждого свои цвета
+  { id: 'acc-g1', region: 'acc', type: 'grip', bk: 'baima', name: 'Махровая обмотка', price: 180, style: 'uni', desc: 'Мягкая махровая обмотка: рука не скользит даже в жару.', colors: [C('blue', 'синяя', '#2563b8'), C('white', 'белая', '#f2f4f8'), C('red', 'красная', '#d62839')] },
+  { id: 'acc-g2', region: 'acc', type: 'grip', bk: 'tsubame', name: 'Grip Tape', price: 250, style: 'uni', desc: 'Тонкая липкая лента на ручку.', colors: [C('black', 'чёрная', '#1b1c20'), C('red', 'красная', '#d62839'), C('mint', 'мятная', '#3ccfa8'), C('pink', 'розовая', '#ff6fa7')] },
+  { id: 'acc-g3', region: 'acc', type: 'grip', bk: 'nordvik', name: 'Кожаная обмотка', price: 400, style: 'top', desc: 'Премиальная кожа с прострочкой.', colors: [C('brown', 'коричневая', '#6b4226'), C('black', 'чёрная', '#222'), C('gold', 'золотая', '#c9a227', 150)] },
+  { id: 'acc-t1', region: 'acc', type: 'tape', bk: 'rhein', name: 'Торцевая лента Classic', price: 150, style: 'uni', tape: 'classic', desc: 'Тонкая лента по краю основания: защищает от ударов о стол.', colors: [C('black', 'чёрная', '#1b1c20'), C('blue', 'синяя', '#1f5fc4'), C('red', 'красная', '#d62839'), C('silver', 'серебристая', '#c0c4cc', 50)] },
+  { id: 'acc-t2', region: 'acc', type: 'tape', bk: 'tsubame', name: 'Торцевая лента Pro', price: 220, style: 'top', tape: 'pro', desc: 'Узкая лента с фирменной надписью по всей длине.', colors: [C('black', 'чёрная', '#16171b'), C('white', 'белая', '#f2f4f7'), C('red', 'красная', '#c8102e'), C('green', 'зелёная', '#12a061')] },
+  { id: 'acc-t3', region: 'acc', type: 'tape', bk: 'kraft', name: 'Торцевая лента Carbon', price: 280, style: 'top', tape: 'carbon', desc: 'Плетение «под карбон» с тонкой цветной полосой.', colors: [C('graphite', 'графит', '#2a2d33'), C('gold', 'с золотом', '#d4af37', 60), C('blue', 'с синим', '#2f7de1')] },
+  { id: 'acc-t4', region: 'acc', type: 'tape', bk: 'raijin', name: 'Торцевая лента Neon', price: 200, style: 'atk', tape: 'neon', desc: 'Яркий неон — ракетку видно издалека.', colors: [C('lime', 'лайм', '#b6f400'), C('pink', 'розовая', '#ff3d9a'), C('cyan', 'бирюзовая', '#00d3e6'), C('orange', 'оранжевая', '#ff7a00')] },
+  { id: 'acc-b1', region: 'acc', type: 'ball', bk: 'rhein', name: 'Мячи Training ×6', price: 180, style: 'uni', desc: 'Тренировочные мячи — для отработки ударов.', stars: 1, colors: [C('white', 'белые', '#f5f5f5'), C('orange', 'оранжевые', '#ff8a1f')] },
+  { id: 'acc-b2', region: 'acc', type: 'ball', bk: 'longwei', name: 'Мячи Turnir 40+ ★★★ ×3', price: 250, style: 'uni', desc: 'Мячи турнирного класса.', stars: 3, colors: [C('white', 'белые', '#f5f5f5')] },
+  { id: 'acc-b3', region: 'acc', type: 'ball', bk: 'kirameki', name: 'Мячи Pro 40+ ×3', price: 400, style: 'top', desc: 'Мячи высшего класса, лучший отскок.', stars: 3, colors: [C('white', 'белые', '#f5f5f5')] },
+  { id: 'acc-c1', region: 'acc', type: 'case', bk: 'nordvik', name: 'Чехол для ракетки', price: 450, style: 'uni', desc: 'Мягкий чехол с отделением для мячей.', colors: [C('navy', 'синий', '#14306b'), C('black', 'чёрный', '#1b1c20'), C('red', 'красный', '#b8212f')] },
+  { id: 'acc-c2', region: 'acc', type: 'case', bk: 'tsubame', name: 'Жёсткий кейс', price: 1050, style: 'top', desc: 'Кейс, который защитит ракетку в дороге.', colors: [C('black', 'чёрный', '#1b1c20'), C('white', 'белый', '#eef1f6'), C('carbon', 'карбон', '#33363d', 200)] },
+
+  // форма: чем круче бренд — тем дороже; лимитированные цвета — дороже
+  { id: 'wr-t1', region: 'wear', type: 'shirt', bk: 'qinglan', name: 'Футболка Basic', price: 900, style: 'uni', desc: 'Простая и удобная, для каждой игры.', colors: [C('white', 'белая', '#f4f6fa'), C('black', 'чёрная', '#1b1c20'), C('red', 'красная', '#d62839')] },
+  { id: 'wr-t2', region: 'wear', type: 'shirt', bk: 'baima', name: 'Футболка Pro', price: 1100, style: 'uni', desc: 'Лёгкая сетка на спине — не жарко.', colors: [C('blue', 'синяя', '#1f5fc4'), C('red', 'красная', '#d62839'), C('black', 'чёрная', '#1b1c20')] },
+  { id: 'wr-t3', region: 'wear', type: 'shirt', bk: 'rhein', name: 'Футболка Team', price: 1350, style: 'atk', desc: 'Командная футболка с яркими вставками.', colors: [C('blue', 'синяя', '#1f5fc4'), C('white', 'белая', '#f4f6fa'), C('yellow', 'жёлтая', '#ffd23f')] },
+  { id: 'wr-t4', region: 'wear', type: 'shirt', bk: 'nordvik', name: 'Футболка Nord', price: 1500, style: 'atk', desc: 'Северные цвета: синий и жёлтый.', colors: [C('blue', 'синяя', '#0e3b8c'), C('yellow', 'жёлтая', '#ffcc00'), C('black', 'чёрная', '#1b1c20')] },
+  { id: 'wr-t5', region: 'wear', type: 'shirt', bk: 'falkner', name: 'Футболка Blaze', price: 1650, style: 'atk', desc: 'Огненный принт для смелых.', colors: [C('orange', 'оранжевая', '#ff6b1a'), C('black', 'чёрная', '#1b1c20')] },
+  { id: 'wr-t6', region: 'wear', type: 'shirt', bk: 'tsubame', name: 'Футболка Tour', price: 1900, style: 'top', desc: 'В такой выходят на мировые турниры.', colors: [C('white', 'белая', '#f4f6fa'), C('navy', 'тёмно-синяя', '#14306b'), C('red', 'красная', '#d62839'), C('gold', 'золотая · лимит', '#d4af37', 400)] },
+  { id: 'wr-t7', region: 'wear', type: 'shirt', bk: 'huaxia', name: 'Футболка «Красный дракон»', price: 2300, style: 'top', desc: 'Форма чемпионов. Самая желанная.', colors: [C('red', 'красная', '#c8102e'), C('yellow', 'жёлтая', '#ffcc00')] },
+  { id: 'wr-s1', region: 'wear', type: 'shorts', bk: 'qinglan', name: 'Шорты Basic', price: 700, style: 'uni', desc: 'Лёгкие игровые шорты.', colors: [C('black', 'чёрные', '#1b1c20'), C('navy', 'тёмно-синие', '#14306b')] },
+  { id: 'wr-s2', region: 'wear', type: 'shorts', bk: 'rhein', name: 'Шорты Team', price: 950, style: 'uni', desc: 'Карман для мяча, эластичный пояс.', colors: [C('black', 'чёрные', '#1b1c20'), C('blue', 'синие', '#1f5fc4')] },
+  { id: 'wr-s3', region: 'wear', type: 'shorts', bk: 'nordvik', name: 'Шорты Nord', price: 1050, style: 'atk', desc: 'В пару к футболке Nord.', colors: [C('blue', 'синие', '#0e3b8c'), C('black', 'чёрные', '#1b1c20')] },
+  { id: 'wr-s4', region: 'wear', type: 'shorts', bk: 'tsubame', name: 'Шорты Pro', price: 1300, style: 'top', desc: 'Профессиональный крой.', colors: [C('black', 'чёрные', '#1b1c20'), C('navy', 'тёмно-синие', '#14306b'), C('white', 'белые', '#f4f6fa')] },
+  { id: 'wr-s5', region: 'wear', type: 'shorts', bk: 'huaxia', name: 'Шорты «Красный дракон»', price: 1550, style: 'top', desc: 'Комплект к футболке сборной.', colors: [C('red', 'красные', '#c8102e')] },
+  { id: 'wr-f1', region: 'wear', type: 'shoes', bk: 'nordvik', name: 'Кроссовки Glide', price: 2900, style: 'uni', desc: 'Цепкая подошва для быстрых шагов.', colors: [C('wb', 'бело-синие', '#f4f6fa'), C('black', 'чёрные', '#1b1c20')], accent: ['#1f5fc4', '#ffcc00'] },
+  { id: 'wr-f2', region: 'wear', type: 'shoes', bk: 'rhein', name: 'Кроссовки Air Step', price: 3300, style: 'uni', desc: 'Лёгкие и устойчивые.', colors: [C('wb', 'бело-голубые', '#f4f6fa'), C('navy', 'тёмно-синие', '#14306b')], accent: ['#4da3ff', '#ffffff'] },
+  { id: 'wr-f3', region: 'wear', type: 'shoes', bk: 'raijin', name: 'Кроссовки R-7', price: 3800, style: 'atk', desc: 'Японский дизайн, низкий профиль.', colors: [C('white', 'белые', '#f4f6fa'), C('purple', 'фиолетовые', '#6a1b9a')], accent: ['#6a1b9a', '#ffd23f'] },
+  { id: 'wr-f4', region: 'wear', type: 'shoes', bk: 'aozora', name: 'Кроссовки Sky Pro', price: 5200, style: 'top', desc: 'Любимые у профессионалов.', colors: [C('wb', 'бело-синие', '#f4f6fa'), C('bg', 'чёрно-золотые', '#1b1c20', 500)], accent: ['#1f5fc4', '#d4af37'] },
+  { id: 'wr-f5', region: 'wear', type: 'shoes', bk: 'tsubame', name: 'Кроссовки Phoenix', price: 6300, style: 'top', desc: 'Топовая модель — мечта каждого игрока.', colors: [C('wr', 'бело-красные', '#f4f6fa'), C('neon', 'чёрные неон', '#1b1c20', 500)], accent: ['#d62839', '#c6ff1a'] },
+];
+// внутренние характеристики: основания — вес, толщина, класс; накладки — жёсткость, дуга, липкость, вес
+const BX = { 'cn-b1': [85, 6.0, 'ALL'], 'cn-b2': [80, 5.6, 'ALL+'], 'cn-b3': [88, 6.2, 'OFF−'], 'cn-b4': [86, 5.8, 'OFF'], 'cn-b5': [90, 5.9, 'OFF+'],
+  'eu-b1': [82, 5.7, 'ALL'], 'eu-b2': [84, 5.9, 'ALL+'], 'eu-b3': [89, 6.3, 'OFF−'], 'eu-b4': [85, 5.9, 'OFF'], 'eu-b5': [87, 5.8, 'OFF+'],
+  'jp-b1': [78, 5.5, 'ALL'], 'jp-b2': [83, 6.0, 'OFF−'], 'jp-b3': [86, 6.1, 'OFF'], 'jp-b4': [86, 5.9, 'OFF'], 'jp-b5': [85, 5.7, 'OFF+'] };
+const RX = { 'cn-r1': ['39°', 'средняя', 'высокая', 46], 'cn-r2': ['40°', 'средняя', 'высокая', 47], 'cn-r3': ['—', 'низкая', 'нет', 30], 'cn-r4': ['41°', 'выше средней', 'средняя', 49], 'cn-r5': ['40°', 'низкая', 'очень высокая', 50],
+  'eu-r1': ['40°', 'средняя', 'нет', 44], 'eu-r2': ['—', 'низкая', 'нет', 28], 'eu-r3': ['47,5°', 'высокая', 'нет', 50], 'eu-r4': ['47,5°', 'высокая', 'нет', 48], 'eu-r5': ['47,5°', 'выше средней', 'нет', 50],
+  'jp-r1': ['40°', 'средняя', 'нет', 44], 'jp-r2': ['35°', 'средняя', 'нет', 42], 'jp-r3': ['—', 'низкая', 'нет', 27], 'jp-r4': ['35°', 'высокая', 'нет', 46], 'jp-r5': ['40°', 'выше средней', 'средняя', 50] };
+// форма ручки — выбирается при покупке основания; FL — базовая цена, остальные дороже
+const HANDLES = [C('FL', 'FL — расширяется книзу, самая популярная', '#c98a4b'), C('ST', 'ST — прямая, удобно перехватывать', '#c98a4b', 60), C('AN', 'AN — анатомическая, утолщение под ладонь', '#c98a4b', 100), C('CS', 'CS — короткая китайская для хвата «пером»', '#c98a4b', 150)];
+for (const it of ITEMS) {
+  it.brand = brandName(it.bk);
+  if (it.type === 'blade') { [it.wt, it.th, it.cls] = BX[it.id]; it.colors = HANDLES; it.handles = true; }
+  if (it.type === 'rubber') [it.hard, it.arc, it.tack, it.wt] = RX[it.id];
+}
+const byId = id => ITEMS.find(x => x.id === id);
+const colorOf = (it, key) => it.colors?.find(c => c.key === key) || it.colors?.[0] || null;
+const priceOf = (it, key) => it.price + (colorOf(it, key)?.extra || 0);
+const keyOf = (it, color) => it.colors ? `${it.id}:${colorOf(it, color).key}` : it.id;
+const parseKey = k => { const [id, color] = (k || '').split(':'); return { it: byId(id), color }; };
+const STYLE = { atk: ['Атака', 'atk'], def: ['Защита', 'def'], uni: ['Универсал', 'uni'], top: ['Топ', 'top'] };
+const EQUIP = { blade: 'blade', rubber: 'side', grip: 'grip', tape: 'tape' };
+
+
+// эксклюзив за лигу «Золото» — не продаётся
+ITEMS.push({ id: 'rw-tape-gold', region: 'rw', type: 'tape', bk: 'rhein', brand: 'Rheinwerk', name: 'Золотая торцевая лента', price: 0, style: 'top', tape: 'gold', desc: 'Только для тех, кто дошёл до Золота.', colors: [C('gold', 'золотая', '#d4af37')], reward: true });
+// награды за лиги: что можно выбрать бесплатно
+const LEAGUE_REWARDS = [
+  { league: 'silver', name: 'Серебро', text: 'Аксессуар на выбор (до 250 PC)', types: ['grip', 'tape', 'ball'], cap: 250 },
+  { league: 'gold', name: 'Золото', text: 'Накладка на выбор (до 1 000 PC) + золотая торцевая лента', types: ['rubber'], cap: 1000, bonus: 'rw-tape-gold:gold' },
+  { league: 'platinum', name: 'Платина', text: 'Основание на выбор (до 3 000 PC)', types: ['blade'], cap: 3000 },
+  { league: 'diamond', name: 'Алмаз', text: 'Кроссовки на выбор + алмазная рамка профиля', types: ['shoes'], cap: 99999 },
+];
+const STREAK = [20, 30, 40, 50, 60, 80, 120];
+const STARTER = 'cn-b1:FL';
+
+// Картинки предметов магазина и реалистичная 3D-ракетка (three.js r128, грузится по требованию).
+
+// ───────────── Эмблемы ─────────────
+function emblem(x, bk, cx, cy, s, col) {
+  const b = BRANDS[bk] || { mark: 'box', color: '#333' };
+  x.save(); x.translate(cx, cy); x.fillStyle = col || b.color; x.strokeStyle = col || b.color; x.lineWidth = s * .12; x.lineCap = 'round'; x.lineJoin = 'round';
+  const m = b.mark;
+  if (m === 'bird') { x.beginPath(); x.moveTo(-s * .62, -s * .28); x.quadraticCurveTo(-s * .2, -s * .12, 0, s * .12); x.quadraticCurveTo(s * .2, -s * .12, s * .62, -s * .28); x.quadraticCurveTo(s * .3, s * .1, s * .08, s * .22); x.lineTo(s * .22, s * .5); x.lineTo(0, s * .32); x.lineTo(-s * .22, s * .5); x.lineTo(-s * .08, s * .22); x.quadraticCurveTo(-s * .3, s * .1, -s * .62, -s * .28); x.fill(); }
+  else if (m === 'bolt') { x.beginPath(); x.moveTo(s * .12, -s * .5); x.lineTo(-s * .3, s * .06); x.lineTo(-s * .02, s * .06); x.lineTo(-s * .14, s * .5); x.lineTo(s * .3, -s * .08); x.lineTo(s * .02, -s * .08); x.closePath(); x.fill(); }
+  else if (m === 'flame') { x.beginPath(); x.moveTo(0, -s * .5); x.bezierCurveTo(s * .45, -s * .1, s * .4, s * .45, 0, s * .48); x.bezierCurveTo(-s * .4, s * .45, -s * .42, s * .05, -s * .12, -s * .18); x.quadraticCurveTo(-s * .05, s * .02, s * .02, -s * .05); x.quadraticCurveTo(s * .08, -s * .25, 0, -s * .5); x.fill(); }
+  else if (m === 'mountain') { x.beginPath(); x.moveTo(-s * .62, s * .38); x.lineTo(-s * .2, -s * .3); x.lineTo(0, 0); x.lineTo(s * .22, -s * .42); x.lineTo(s * .62, s * .38); x.closePath(); x.fill(); }
+  else if (m === 'diamond') { x.beginPath(); x.moveTo(0, -s * .48); x.lineTo(s * .4, 0); x.lineTo(0, s * .48); x.lineTo(-s * .4, 0); x.closePath(); x.stroke(); x.beginPath(); x.moveTo(0, -s * .2); x.lineTo(s * .17, 0); x.lineTo(0, s * .2); x.lineTo(-s * .17, 0); x.closePath(); x.fill(); }
+  else if (m === 'chevron') { x.beginPath(); x.moveTo(-s * .55, -s * .4); x.lineTo(0, s * .4); x.lineTo(s * .55, -s * .4); x.stroke(); x.beginPath(); x.moveTo(-s * .3, -s * .4); x.lineTo(0, s * .05); x.lineTo(s * .3, -s * .4); x.stroke(); }
+  else if (m === 'stripes') { for (let i = -2; i <= 2; i++) { x.beginPath(); x.moveTo(i * s * .22 - s * .1, -s * .45); x.lineTo(i * s * .22 + s * .1, s * .45); x.stroke(); } }
+  else if (m === 'ring') { x.beginPath(); x.arc(0, 0, s * .42, 0, 7); x.stroke(); x.beginPath(); x.arc(0, 0, s * .16, 0, 7); x.fill(); }
+  else if (m === 'sun') { x.beginPath(); x.arc(0, 0, s * .3, 0, 7); x.fill(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; x.beginPath(); x.moveTo(Math.cos(a) * s * .42, Math.sin(a) * s * .42); x.lineTo(Math.cos(a) * s * .56, Math.sin(a) * s * .56); x.stroke(); } }
+  else if (m === 'stars') { for (const [dx, dy] of [[-.36, .15], [0, -.2], [.36, .15]]) star(x, dx * s, dy * s, s * .2); }
+  else if (m === 'tri') { x.beginPath(); x.moveTo(0, -s * .45); x.lineTo(s * .5, s * .38); x.lineTo(-s * .5, s * .38); x.closePath(); x.stroke(); }
+  else if (m === 'wave') { x.beginPath(); x.moveTo(-s * .6, 0); for (let i = 0; i <= 12; i++) x.lineTo(-s * .6 + i * s * .1, Math.sin(i / 1.9) * s * .22); x.stroke(); }
+  else { x.strokeRect(-s * .45, -s * .32, s * .9, s * .64); x.font = `800 ${s * .38}px Arial`; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText((b.name || '').slice(0, 3), 0, s * .02); }
+  x.restore();
+}
+function star(x, cx, cy, r) { x.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; x.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); } x.closePath(); x.fill(); }
+function rr(x, l, t, w, h, r) { x.beginPath(); x.moveTo(l + r, t); x.arcTo(l + w, t, l + w, t + h, r); x.arcTo(l + w, t + h, l, t + h, r); x.arcTo(l, t + h, l, t, r); x.arcTo(l, t, l + w, t, r); x.closePath(); }
+const light = hex => { const n = parseInt(hex.slice(1), 16); return ((n >> 16) * .3 + ((n >> 8) & 255) * .59 + (n & 255) * .11) > 150; };
+function shade(hex, amt) { const n = parseInt(hex.slice(1), 16); const f = c => Math.max(0, Math.min(255, c + amt)); return '#' + [f(n >> 16), f((n >> 8) & 255), f(n & 255)].map(v => v.toString(16).padStart(2, '0')).join(''); }
+
+// ───────────── Картинки предметов (2D) ─────────────
+function headPath2D(x, cx, cy, k, hex) {
+  // та же форма головы, что и в 3D (с «плечами» у ручки)
+  x.beginPath();
+  if (hex) { const r = 7.4 * k; const p = [[.62, -1], [1, -.25], [.82, .78], [.18, 1.02], [-.18, 1.02], [-.82, .78], [-1, -.25], [-.62, -1]]; p.forEach(([a, b], i) => i ? x.lineTo(cx + a * r, cy + b * r) : x.moveTo(cx + a * r, cy + b * r)); x.closePath(); return; }
+  const P = (a, b) => [cx + a * k, cy - b * k];
+  x.moveTo(...P(1.25, -7.0));
+  x.bezierCurveTo(...P(3.6, -7.5), ...P(7.0, -5.0), ...P(7.3, -2.0));
+  x.bezierCurveTo(...P(7.6, 1.0), ...P(7.0, 4.4), ...P(5.2, 6.3));
+  x.bezierCurveTo(...P(3.7, 7.7), ...P(1.9, 8.15), ...P(0, 8.15));
+  x.bezierCurveTo(...P(-1.9, 8.15), ...P(-3.7, 7.7), ...P(-5.2, 6.3));
+  x.bezierCurveTo(...P(-7.0, 4.4), ...P(-7.6, 1.0), ...P(-7.3, -2.0));
+  x.bezierCurveTo(...P(-7.0, -5.0), ...P(-3.6, -7.5), ...P(-1.25, -7.0));
+  x.closePath();
+}
+function thumb(it, color, big = false) {
+  // предметы магазина — снимок настоящей 3D-модели, в разрешении экрана
+  const css = big ? 220 : 128, px = Math.round(css * Math.min(3, Math.max(2, window.devicePixelRatio || 1)));
+  if (window.THREE && ['blade', 'rubber', 'grip', 'tape', 'ball', 'case'].includes(it.type)) {
+    const ck = colorOf(it, color)?.key;
+    const url = it.type === 'blade' ? snapshot(`b:${it.id}:${ck}`, { blade: `${it.id}:${ck}`, only: 'blade' }, { rx: -.12, ry: .5, rz: -.55, d: 54, y: .2 }, px)
+      : it.type === 'rubber' ? snapshot(`r:${it.id}:${ck}`, { blade: 'cn-b1:FL', fh: `${it.id}:${ck}`, only: 'rubber' }, { rx: -.2, ry: .45, rz: -.25, d: 33, y: 3.6 }, px)
+      : it.type === 'grip' ? snapshot(`g:${it.id}:${ck}`, { blade: 'eu-b1:FL', grip: `${it.id}:${ck}`, only: 'blade' }, { rx: .2, ry: .65, rz: -.62, d: 50, y: -1.6, x: -1 }, px)
+      : it.type === 'tape' ? snapshot(`t:${it.id}:${ck}`, null, { rx: .55, ry: .4, rz: -.12, d: 46, y: 0 }, px, () => buildTapeRoll(it, ck))
+      : it.type === 'ball' ? snapshot(`ba:${it.id}:${ck}`, null, { rx: .1, ry: 0, rz: 0, d: 40, y: 0 }, px, () => buildBalls(it, ck))
+      : snapshot(`c:${it.id}:${ck}`, null, { rx: -.15, ry: .45, rz: -.42, d: 64, y: -2.5 }, px, () => buildCase(it, ck));
+    if (url) { const img = new Image(); img.src = url; img.alt = ''; img.width = css; img.height = css; img.className = 'snap'; return img; }
+  }
+  const N = big ? 220 : 128;
+  const cv = document.createElement('canvas'); cv.width = cv.height = N; const x = cv.getContext('2d');
+  x.scale(N / 128, N / 128);
+  const col = colorOf(it, color);
+  const t = it.type;
+  if (t === 'blade' || t === 'rubber') {
+    x.save(); x.translate(64, 60); x.rotate(-0.42);
+    const k = 3.9;
+    // ручка
+    const cheek = t === 'blade' ? it.look.cheek : '#c9935a';
+    x.fillStyle = cheek; rr(x, -5.6, 26, 11.2, 40, 4); x.fill();
+    x.fillStyle = 'rgba(255,255,255,.18)'; rr(x, -2.6, 40, 5.2, 14, 2); x.fill();
+    // голова
+    headPath2D(x, 0, 0, k, t === 'blade' && it.look.hex);
+    if (t === 'blade') {
+      x.fillStyle = it.look.face; x.fill(); x.save(); x.clip();
+      x.strokeStyle = 'rgba(90,50,15,.28)'; x.lineWidth = 1;
+      for (let i = -34; i < 34; i += 4) { x.beginPath(); x.moveTo(i, -36); x.bezierCurveTo(i + 4, -14, i - 3, 4, i + 2, 30); x.stroke(); }
+      x.restore(); x.strokeStyle = shade(it.look.face, -40); x.lineWidth = 1.4; headPath2D(x, 0, 0, k, it.look.hex); x.stroke();
+      emblem(x, it.bk, 0, -20, 14, BRANDS[it.bk]?.color);
+    } else {
+      const g = x.createLinearGradient(-30, -30, 30, 30); g.addColorStop(0, shade(col.hex, 30)); g.addColorStop(1, shade(col.hex, -15));
+      x.fillStyle = g; x.fill();
+      x.strokeStyle = it.sp || '#e3b04b'; x.lineWidth = 2; x.stroke();
+      if (it.rubber === 'длинные шипы') { x.save(); headPath2D(x, 0, 0, k); x.clip(); x.fillStyle = 'rgba(255,255,255,.2)'; for (let a = -30; a <= 30; a += 4.5) for (let b = -34; b <= 34; b += 4.5) { x.beginPath(); x.arc(a + ((b / 4.5) % 2) * 2.2, b, 1.2, 0, 7); x.fill(); } x.restore(); }
+      x.fillStyle = 'rgba(255,255,255,.22)'; x.beginPath(); x.ellipse(-10, -12, 10, 16, -0.5, 0, 7); x.fill();
+      const lc = col.key === 'black' ? '#e8e8e8' : '#fff';
+      emblem(x, it.bk, 0, 13, 12, lc);
+      x.fillStyle = lc; x.font = '800 7px Arial'; x.textAlign = 'center'; x.fillText(it.brand.toUpperCase(), 0, 25);
+    }
+    x.restore();
+  } else if (t === 'grip' && false) {
+    x.save(); x.translate(64, 64); x.rotate(-0.4);
+    x.fillStyle = '#c9935a'; rr(x, -10, -44, 20, 88, 8); x.fill();
+    x.save(); rr(x, -10, -44, 20, 88, 8); x.clip();
+    for (let y = -60; y < 60; y += 9) { x.fillStyle = col.hex; x.beginPath(); x.moveTo(-14, y); x.lineTo(14, y - 10); x.lineTo(14, y - 3); x.lineTo(-14, y + 7); x.closePath(); x.fill(); x.fillStyle = 'rgba(0,0,0,.18)'; x.fillRect(-14, y + 6, 28, 1.2); }
+    x.restore();
+    emblem(x, it.bk, 0, 0, 13, light(col.hex) ? '#333' : '#fff');
+    x.restore();
+  } else if (t === 'tape') {
+    x.translate(64, 64); x.shadowColor = 'rgba(10,30,70,.28)'; x.shadowBlur = 8; x.shadowOffsetY = 4;
+    x.strokeStyle = col.hex; x.lineWidth = 18; x.beginPath(); x.arc(0, 0, 32, 0, 7); x.stroke();
+    x.shadowColor = 'transparent';
+    const tg = x.createLinearGradient(-40, -40, 40, 40); tg.addColorStop(0, 'rgba(255,255,255,.35)'); tg.addColorStop(.5, 'rgba(255,255,255,0)'); tg.addColorStop(1, 'rgba(0,0,0,.25)');
+    x.strokeStyle = tg; x.lineWidth = 18; x.beginPath(); x.arc(0, 0, 32, 0, 7); x.stroke();
+    x.strokeStyle = 'rgba(0,0,0,.15)'; x.lineWidth = 1; for (let r2 = 24; r2 < 41; r2 += 3) { x.beginPath(); x.arc(0, 0, r2, 0, 7); x.stroke(); }
+    x.fillStyle = '#e7ecf4'; x.beginPath(); x.arc(0, 0, 22, 0, 7); x.fill();
+    emblem(x, it.bk, 0, 0, 16, BRANDS[it.bk]?.color);
+  } else if (t === 'ball') {
+    x.translate(64, 64);
+    x.fillStyle = 'rgba(10,30,70,.18)'; x.beginPath(); x.ellipse(0, 44, 48, 8, 0, 0, 7); x.fill();
+    const drawBall = (bx, by, r) => {
+      const g = x.createRadialGradient(bx - r * .35, by - r * .4, r * .1, bx, by, r); g.addColorStop(0, '#fff'); g.addColorStop(1, shade(col.hex, -40));
+      x.fillStyle = g; x.beginPath(); x.arc(bx, by, r, 0, 7); x.fill();
+      x.fillStyle = BRANDS[it.bk]?.color || '#333';
+      for (let i = 0; i < it.stars; i++) star(x, bx - (it.stars - 1) * r * .22 + i * r * .44, by - r * .12, r * .18);
+      x.font = `800 ${r * .34}px Arial`; x.textAlign = 'center'; x.fillText(it.brand.toUpperCase(), bx, by + r * .38);
+    };
+    drawBall(-20, 14, 24); drawBall(22, 18, 22); drawBall(0, -20, 26);
+  } else if (t === 'case') {
+    x.translate(64, 64); x.rotate(-0.3); x.shadowColor = 'rgba(10,30,70,.3)'; x.shadowBlur = 10; x.shadowOffsetY = 5;
+    x.fillStyle = col.hex; headPath2D(x, 0, -6, 4.6); x.fill();
+    rr(x, -8, 26, 16, 26, 6); x.fill();
+    x.shadowColor = 'transparent';
+    { const cg = x.createRadialGradient(-12, -22, 4, 0, -6, 44); cg.addColorStop(0, 'rgba(255,255,255,.28)'); cg.addColorStop(1, 'rgba(0,0,0,.22)'); x.fillStyle = cg; headPath2D(x, 0, -6, 4.6); x.fill(); }
+    x.strokeStyle = light(col.hex) ? '#9aa4b2' : 'rgba(255,255,255,.55)'; x.setLineDash([3, 3]); x.lineWidth = 2; headPath2D(x, 0, -6, 4.1); x.stroke(); x.setLineDash([]);
+    x.fillStyle = '#c9ced8'; rr(x, 30, -14, 6, 12, 2); x.fill();
+    if (col.key === 'carbon') { x.save(); headPath2D(x, 0, -6, 4.6); x.clip(); x.fillStyle = 'rgba(255,255,255,.07)'; for (let i = -60; i < 60; i += 6) for (let j = -60; j < 60; j += 6) if ((i + j) / 6 % 2 === 0) x.fillRect(i, j, 6, 6); x.restore(); }
+    emblem(x, it.bk, 0, -8, 22, light(col.hex) ? BRANDS[it.bk]?.color : '#fff');
+  } else if (t === 'shirt') {
+    x.translate(64, 66); x.shadowColor = 'rgba(10,30,70,.28)'; x.shadowBlur = 9; x.shadowOffsetY = 4;
+    x.fillStyle = col.hex;
+    x.beginPath(); x.moveTo(-18, -40); x.lineTo(-42, -26); x.lineTo(-32, -6); x.lineTo(-24, -10); x.lineTo(-24, 42); x.lineTo(24, 42); x.lineTo(24, -10); x.lineTo(32, -6); x.lineTo(42, -26); x.lineTo(18, -40); x.quadraticCurveTo(0, -26, -18, -40); x.closePath(); x.fill();
+    x.shadowColor = 'transparent';
+    { const sg = x.createLinearGradient(-42, -40, 42, 42); sg.addColorStop(0, 'rgba(255,255,255,.22)'); sg.addColorStop(.55, 'rgba(255,255,255,0)'); sg.addColorStop(1, 'rgba(0,0,0,.2)'); x.fillStyle = sg; x.fill();
+      x.strokeStyle = 'rgba(0,0,0,.12)'; x.lineWidth = 1; x.beginPath(); x.moveTo(-10, 0); x.quadraticCurveTo(-6, 20, -12, 40); x.moveTo(12, 4); x.quadraticCurveTo(8, 22, 14, 40); x.stroke();
+      x.fillStyle = 'rgba(0,0,0,.18)'; x.beginPath(); x.moveTo(-18, -40); x.quadraticCurveTo(0, -24, 18, -40); x.quadraticCurveTo(0, -30, -18, -40); x.fill(); }
+    x.strokeStyle = 'rgba(0,0,0,.15)'; x.lineWidth = 1.5;
+    const acc = BRANDS[it.bk]?.color || '#333';
+    x.fillStyle = light(col.hex) ? acc : 'rgba(255,255,255,.9)';
+    x.fillRect(-24, 18, 48, 4);
+    if (it.bk === 'falkner') { x.fillStyle = 'rgba(0,0,0,.35)'; for (let i = -22; i < 24; i += 9) { x.beginPath(); x.moveTo(i, -10); x.lineTo(i + 5, 14); x.lineTo(i + 2, 14); x.closePath(); x.fill(); } }
+    if (it.bk === 'huaxia') { x.fillStyle = col.key === 'red' ? '#ffcc00' : '#c8102e'; for (const [a, b, r] of [[-12, -18, 5], [-3, -24, 2], [2, -19, 2], [2, -12, 2], [-3, -8, 2]]) star(x, a, b, r); }
+    emblem(x, it.bk, 10, -14, 11, light(col.hex) ? acc : '#fff');
+    if (col.key === 'gold') { x.fillStyle = 'rgba(255,255,255,.35)'; x.beginPath(); x.moveTo(-24, -10); x.lineTo(-6, -10); x.lineTo(-24, 20); x.closePath(); x.fill(); }
+  } else if (t === 'shorts') {
+    x.translate(64, 64); x.shadowColor = 'rgba(10,30,70,.28)'; x.shadowBlur = 9; x.shadowOffsetY = 4;
+    x.fillStyle = col.hex;
+    x.beginPath(); x.moveTo(-30, -30); x.lineTo(30, -30); x.lineTo(36, 34); x.lineTo(6, 36); x.lineTo(0, 6); x.lineTo(-6, 36); x.lineTo(-36, 34); x.closePath(); x.fill();
+    x.shadowColor = 'transparent';
+    { const sg = x.createLinearGradient(-36, -30, 36, 36); sg.addColorStop(0, 'rgba(255,255,255,.2)'); sg.addColorStop(1, 'rgba(0,0,0,.22)'); x.fillStyle = sg; x.fill(); }
+    x.fillStyle = 'rgba(0,0,0,.18)'; x.fillRect(-30, -30, 60, 7);
+    const acc = BRANDS[it.bk]?.color || '#333';
+    x.fillStyle = light(col.hex) ? acc : 'rgba(255,255,255,.85)'; x.fillRect(-35, 26, 5, 8); x.fillRect(30, 26, 5, 8);
+    emblem(x, it.bk, -18, 18, 10, light(col.hex) ? acc : '#fff');
+  } else if (t === 'shoes') {
+    x.translate(64, 70);
+    x.fillStyle = 'rgba(10,30,70,.18)'; x.beginPath(); x.ellipse(2, 24, 54, 6, 0, 0, 7); x.fill();
+    const [a1, a2] = it.accent;
+    x.fillStyle = col.hex;
+    x.beginPath(); x.moveTo(-48, 6); x.quadraticCurveTo(-46, -22, -26, -24); x.lineTo(-6, -24); x.quadraticCurveTo(8, -6, 34, -4); x.quadraticCurveTo(50, -2, 50, 10); x.lineTo(50, 14); x.lineTo(-48, 14); x.closePath(); x.fill();
+    x.strokeStyle = 'rgba(0,0,0,.18)'; x.lineWidth = 1.2; x.stroke();
+    { const sg = x.createLinearGradient(0, -24, 0, 14); sg.addColorStop(0, 'rgba(255,255,255,.3)'); sg.addColorStop(1, 'rgba(0,0,0,.15)'); x.fillStyle = sg; x.fill(); }
+    x.fillStyle = col.key === 'black' || col.key === 'bg' || col.key === 'neon' || col.key === 'navy' || col.key === 'purple' ? '#2a2b30' : '#e9edf3';
+    x.fillRect(-48, 12, 98, 7);
+    x.fillStyle = col.key === 'neon' ? a2 : a1;
+    x.beginPath(); x.moveTo(-30, 8); x.quadraticCurveTo(-4, -16, 30, 4); x.quadraticCurveTo(-2, -6, -30, 8); x.fill();
+    x.fillStyle = a2; x.fillRect(-48, 18, 98, 2);
+    x.strokeStyle = light(col.hex) ? '#9aa4b2' : 'rgba(255,255,255,.5)'; x.lineWidth = 1.4;
+    for (let i = 0; i < 4; i++) { x.beginPath(); x.moveTo(-18 + i * 6, -22 + i * 2); x.lineTo(-12 + i * 6, -16 + i * 2); x.stroke(); }
+    emblem(x, it.bk, -30, -4, 10, light(col.hex) ? BRANDS[it.bk]?.color : '#fff');
+  }
+  return cv;
+}
+
+// ───────────── 3D: реалистичная ракетка ─────────────
+
+function canvasTex(w, h, draw, opts = {}) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c); if (!opts.data) t.encoding = THREE.sRGBEncoding; t.anisotropy = 8;
+  if (opts.repeat) { t.wrapS = t.wrapT = THREE.RepeatWrapping; } return t;
+}
+// рисунок торцевой ленты: цвет, кант, надпись бренда по всей длине
+function tapeTexture(it, col, kind, q = 1) {
+  const W = 1024, H = 64;
+  const t = canvasTex(W, H, (x, w, h) => {
+    const base = kind === 'carbon' ? '#23262c' : kind === 'gold' ? '#c9a227' : col.hex;
+    x.fillStyle = base; x.fillRect(0, 0, w, h);
+    if (kind === 'carbon') { for (let i = 0; i < w; i += 8) for (let j = 0; j < h; j += 8) { x.fillStyle = ((i + j) / 8) % 2 ? 'rgba(255,255,255,.07)' : 'rgba(0,0,0,.25)'; x.fillRect(i, j, 8, 4); x.fillRect(i + 4, j + 4, 4, 4); } }
+    if (kind === 'gold' || col.key === 'silver') { const g = x.createLinearGradient(0, 0, 0, h); g.addColorStop(0, 'rgba(255,255,255,.35)'); g.addColorStop(.5, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(0,0,0,.2)'); x.fillStyle = g; x.fillRect(0, 0, w, h); }
+    const ink = kind === 'carbon' ? col.hex : light(base) ? '#15171c' : '#ffffff';
+    // кант по краям торца
+    x.fillStyle = kind === 'carbon' ? col.hex : light(base) ? 'rgba(0,0,0,.35)' : 'rgba(255,255,255,.55)';
+    x.fillRect(0, h * .22, w, 2); x.fillRect(0, h * .78 - 2, w, 2);
+    if (kind === 'pro') { x.fillStyle = BRANDS[it.bk]?.color || ink; x.fillRect(0, h * .3, w, 2); x.fillRect(0, h * .7 - 2, w, 2); }
+    // надпись
+    const word = (kind === 'gold' ? 'PONGHUB GOLD' : (BRANDS[it.bk]?.name || 'PONGHUB').toUpperCase()) + (kind === 'pro' ? ' PRO' : kind === 'carbon' ? ' CARBON' : '');
+    x.font = `800 ${h * .34}px "Barlow Condensed", Arial`; x.textBaseline = 'middle'; x.fillStyle = ink;
+    const gap = h * .9, tw = x.measureText(word).width;
+    for (let px = 12; px < w; px += tw + gap * 2) {
+      x.fillText(word, px, h / 2 + 1);
+      x.save(); x.translate(px + tw + gap * .7, h / 2); emblem(x, it.bk, 0, 0, h * .3, ink); x.restore();
+    }
+  });
+  t.wrapS = THREE.RepeatWrapping; t.anisotropy = 8;
+  return t;
+}
+function woodCanvas(x, w, h, base, seed, dark = 1) {
+  x.fillStyle = base; x.fillRect(0, 0, w, h);
+  let r = seed * 9301 + 7; const rnd = () => (r = (r * 9301 + 49297) % 233280) / 233280;
+  for (let i = 0; i < 150; i++) {
+    const xx = rnd() * w, lw = .6 + rnd() * 2.4, a = (.03 + rnd() * .09) * dark;
+    x.strokeStyle = `rgba(80,45,12,${a})`; x.lineWidth = lw; x.beginPath(); x.moveTo(xx, 0);
+    for (let y = 0; y <= h; y += 24) x.lineTo(xx + Math.sin(y / 90 + i * .7) * 5 + (rnd() - .5) * 2, y);
+    x.stroke();
+  }
+  for (let i = 0; i < 6; i++) { const cx = rnd() * w, cy = rnd() * h; const g = x.createRadialGradient(cx, cy, 2, cx, cy, 30 + rnd() * 40); g.addColorStop(0, 'rgba(110,60,20,.10)'); g.addColorStop(1, 'rgba(110,60,20,0)'); x.fillStyle = g; x.fillRect(0, 0, w, h); }
+}
+// контур головы (см): ширина 15, высота 15.8, «плечи» переходят в ручку шириной 2.5
+function headShape(hex, inset = 0) {
+  const s = new THREE.Shape();
+  const k = 1 - inset / 7.5;
+  if (hex) {
+    const r = 7.4 * k, cy = 0.35;
+    const p = [[.62, -1], [1, -.25], [.82, .78], [.18, 1.02], [-.18, 1.02], [-.82, .78], [-1, -.25], [-.62, -1]].map(([a, b]) => [a * r, cy - b * r]);
+    s.moveTo(p[0][0], p[0][1]); p.slice(1).forEach(q => s.lineTo(q[0], q[1])); s.closePath(); return s;
+  }
+  const P = (a, b) => [a * k, b * k];
+  s.moveTo(...P(1.25, -7.0));
+  s.bezierCurveTo(...P(3.6, -7.5), ...P(7.0, -5.0), ...P(7.3, -2.0));
+  s.bezierCurveTo(...P(7.6, 1.0), ...P(7.0, 4.4), ...P(5.2, 6.3));
+  s.bezierCurveTo(...P(3.7, 7.7), ...P(1.9, 8.15), ...P(0, 8.15));
+  s.bezierCurveTo(...P(-1.9, 8.15), ...P(-3.7, 7.7), ...P(-5.2, 6.3));
+  s.bezierCurveTo(...P(-7.0, 4.4), ...P(-7.6, 1.0), ...P(-7.3, -2.0));
+  s.bezierCurveTo(...P(-7.0, -5.0), ...P(-3.6, -7.5), ...P(-1.25, -7.0));
+  s.closePath();
+  return s;
+}
+// накладка: та же голова, но внизу вырез дугой под «корону» ручки
+function rubberShape(hex) {
+  const s = headShape(hex, 0.02);
+  if (hex) return s;
+  const pts = s.getPoints(120).filter(p => p.y > -6.35);
+  const o = new THREE.Shape();
+  // начинаем справа над ручкой, идём по контуру, закрываем дугой
+  const start = pts.findIndex((p, i) => i > 0 && pts[i - 1].y <= -6.35);
+  const ordered = start > 0 ? pts.slice(start).concat(pts.slice(0, start)) : pts;
+  o.moveTo(ordered[0].x, ordered[0].y);
+  ordered.slice(1).forEach(p => o.lineTo(p.x, p.y));
+  o.quadraticCurveTo(0, -5.75, ordered[0].x, ordered[0].y);
+  return o;
+}
+function setCapUV(geo, size) {
+  const uv = geo.attributes.uv, pos = geo.attributes.position, nor = geo.attributes.normal;
+  for (let i = 0; i < uv.count; i++) if (Math.abs(nor.getZ(i)) > 0.7) uv.setXY(i, pos.getX(i) / size + .5, pos.getY(i) / size + .5);
+  uv.needsUpdate = true;
+}
+function buildEnv(renderer) {
+  // мягкая «студия»: светлые панели вокруг — для бликов на резине и лаке
+  const env = new THREE.Scene();
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), new THREE.MeshBasicMaterial({ side: THREE.BackSide, map: canvasTex(64, 256, (x, w, h) => { const g = x.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#ffffff'); g.addColorStop(.5, '#cfd9ea'); g.addColorStop(1, '#5d6f8f'); x.fillStyle = g; x.fillRect(0, 0, w, h); }) }));
+  env.add(sky);
+  const panel = (w, h, x, y, z, ry, rx = 0) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: '#ffffff', side: THREE.DoubleSide })); m.position.set(x, y, z); m.rotation.set(rx, ry, 0); env.add(m); };
+  panel(30, 14, 0, 26, 0, 0, Math.PI / 2); panel(14, 30, 30, 4, 10, -Math.PI / 2.4); panel(12, 26, -30, 0, 6, Math.PI / 2.2);
+  const pm = new THREE.PMREMGenerator(renderer);
+  return pm.fromScene(env, 0.03).texture;
+}
+// cfg: { blade:'id:FL', fh, bh, grip, tape, only:'rubber'|'blade' } · q — разрешение текстур
+function buildRacket(cfg, q = 1) {
+  const inner = new THREE.Group(); inner.position.y = 3.6;
+  const bk = parseKey(cfg.blade), bl = bk.it, hex = !!bl.look.hex, HAND = bk.color || 'FL';
+  const R = n => Math.round(n * q);
+  const T = 0.58;
+  // ── основание: голова + стержень ручки одной пластиной, кромка — видны слои
+  const bshape = headShape(hex);
+  const bladeGeo = new THREE.ExtrudeGeometry(bshape, { depth: T, bevelEnabled: true, bevelThickness: .03, bevelSize: .035, bevelSegments: 3, curveSegments: 96 });
+  bladeGeo.translate(0, 0, -T / 2); setCapUV(bladeGeo, 16);
+  const seq = bl.look.ply.length === 3 ? [0, 2, 1, 2, 1, 2, 0].map(i => bl.look.ply[i]) : [0, 1, 0, 1, 0].map(i => bl.look.ply[i]);
+  const plyTex = canvasTex(8, 256, (x, w, h) => { const hh = h / seq.length; seq.forEach((c, i) => { x.fillStyle = c; x.fillRect(0, i * hh, w, hh + 1); x.fillStyle = 'rgba(60,30,10,.25)'; x.fillRect(0, i * hh, w, 1); }); });
+  plyTex.wrapT = THREE.ClampToEdgeWrapping; plyTex.repeat.set(1, 1 / (T + .06)); plyTex.offset.set(0, .03 / (T + .06));
+  const faceTex = canvasTex(R(512), R(512), (x, w, h) => woodCanvas(x, w, h, bl.look.face, bl.price), { repeat: true });
+  const bladeMat = [new THREE.MeshPhysicalMaterial({ map: faceTex, roughness: .55, clearcoat: .25, clearcoatRoughness: .5 }), new THREE.MeshStandardMaterial({ map: plyTex, roughness: .7 })];
+  if (cfg.only !== 'rubber') inner.add(new THREE.Mesh(bladeGeo, bladeMat));
+  // ── ручка: стержень + две щёчки с расширением книзу (FL) и выпуклой «короной»
+  const HTOP = -6.15, HBOT = HAND === 'CS' ? -13.1 : -16.3;
+  const stemW = 1.05;
+  const stem = new THREE.Shape(); stem.moveTo(-stemW, -6.8); stem.lineTo(stemW, -6.8); stem.lineTo(stemW * 1.08, HBOT); stem.lineTo(-stemW * 1.08, HBOT); stem.closePath();
+  const stemGeo = new THREE.ExtrudeGeometry(stem, { depth: T, bevelEnabled: false }); stemGeo.translate(0, 0, -T / 2);
+  if (cfg.only !== 'rubber') inner.add(new THREE.Mesh(stemGeo, bladeMat));
+  // формы ручки: FL — расширяется книзу, ST — прямая, AN — утолщение посередине, CS — короткая
+  const HW = { FL: [1.3, 1.16, 1.78], ST: [1.32, 1.32, 1.32], AN: [1.16, 1.62, 1.22], CS: [1.2, 1.1, 1.22] }[HAND];
+  const cheekShape = () => {
+    const s = new THREE.Shape(); const [w0, wm, w1] = HW.map(v => v * .86);
+    // точки контура заданы для длинной ручки — для короткой (CS) пропорционально сжимаем по высоте
+    const Y = y => HTOP + (y - HTOP) * (HTOP - HBOT) / (HTOP + 16.3);
+    s.moveTo(-w0, HTOP - .55); s.quadraticCurveTo(0, HTOP + .32, w0, HTOP - .55);
+    s.bezierCurveTo(w0 + .02, Y(HTOP - 3), wm, Y(-11.6), wm + .05, Y(-12.6));
+    s.bezierCurveTo(wm + .15, Y(-14), w1, Y(-15.2), w1, HBOT + .35);
+    s.quadraticCurveTo(w1, HBOT, w1 - .35, HBOT); s.lineTo(-w1 + .35, HBOT); s.quadraticCurveTo(-w1, HBOT, -w1, HBOT + .35);
+    s.bezierCurveTo(-w1, Y(-15.2), -wm - .15, Y(-14), -wm - .05, Y(-12.6));
+    s.bezierCurveTo(-wm, Y(-11.6), -w0 - .02, Y(HTOP - 3), -w0, HTOP - .55);
+    return s;
+  };
+  const grip = parseKey(cfg.grip);
+  const CT = 0.42, CB = 0.22; // щёчка: толщина + скругление → ручка ≈ 2,3 см
+  const cheekWood = canvasTex(R(256), R(512), (x, w, h) => woodCanvas(x, w, h, bl.look.cheek, bl.price + 3, light(bl.look.cheek) ? 1 : .6), { repeat: true });
+  let cheekMat;
+  if (grip.it) {
+    const gc = colorOf(grip.it, grip.color).hex;
+    const wrap = canvasTex(R(256), R(512), (x, w, h) => {
+      x.fillStyle = gc; x.fillRect(0, 0, w, h);
+      for (let y = -w; y < h + w; y += 34) { x.fillStyle = 'rgba(0,0,0,.22)'; x.beginPath(); x.moveTo(0, y); x.lineTo(w, y - 60); x.lineTo(w, y - 56); x.lineTo(0, y + 4); x.closePath(); x.fill(); x.fillStyle = 'rgba(255,255,255,.12)'; x.beginPath(); x.moveTo(0, y + 6); x.lineTo(w, y - 54); x.lineTo(w, y - 50); x.lineTo(0, y + 10); x.closePath(); x.fill(); }
+      if (grip.it.id === 'acc-g1') for (let i = 0; i < 2500; i++) { x.fillStyle = `rgba(255,255,255,${Math.random() * .12})`; x.fillRect(Math.random() * w, Math.random() * h, 2, 2); }
+    }, { repeat: true });
+    cheekMat = new THREE.MeshStandardMaterial({ map: wrap, roughness: grip.it.id === 'acc-g3' ? .45 : .9 });
+  } else cheekMat = new THREE.MeshPhysicalMaterial({ map: cheekWood, roughness: .45, clearcoat: .5, clearcoatRoughness: .35 });
+  for (const sgn of cfg.only === 'rubber' ? [] : [1, -1]) {
+    const cg = new THREE.ExtrudeGeometry(cheekShape(), { depth: CT, bevelEnabled: true, bevelThickness: CB, bevelSize: .2, bevelSegments: 6, curveSegments: 48 });
+    setCapUV(cg, 6);
+    const m = new THREE.Mesh(cg, cheekMat);
+    if (sgn === 1) m.position.z = T / 2 + CB; else { m.rotation.y = Math.PI; m.position.z = -T / 2 - CB; }
+    inner.add(m);
+    // фирменная плашка на ручке
+    if (!grip.it) {
+      const plate = new THREE.Mesh(new THREE.PlaneGeometry(1.25, 2.8), new THREE.MeshPhysicalMaterial({
+        map: canvasTex(150, 320, (x, w, h) => {
+          const bc = BRANDS[bl.bk]?.color || '#333';
+          const g2 = x.createLinearGradient(0, 0, w, h); g2.addColorStop(0, '#f6f7fa'); g2.addColorStop(.5, '#c9ced8'); g2.addColorStop(1, '#eef0f4');
+          x.fillStyle = g2; rr(x, 4, 4, w - 8, h - 8, 22); x.fill(); x.strokeStyle = bc; x.lineWidth = 6; rr(x, 10, 10, w - 20, h - 20, 18); x.stroke();
+          emblem(x, bl.bk, w / 2, 80, 70, bc);
+          x.save(); x.translate(w / 2, 200); x.rotate(-Math.PI / 2); x.fillStyle = bc; x.font = '800 34px "Barlow Condensed", Arial'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(bl.brand.toUpperCase(), 0, 0); x.restore();
+        }), transparent: true, metalness: .55, roughness: .3, clearcoat: 1,
+      }));
+      plate.position.set(0, HAND === 'CS' ? -9.6 : -10.9, sgn * (T / 2 + CB + CT + CB + .012));
+      if (sgn === -1) plate.rotation.y = Math.PI;
+      inner.add(plate);
+    }
+  }
+  // торец ручки — сплошной, без щели между щёчками
+  if (cfg.only !== 'rubber') {
+    const w1 = HW[2] * .86, depth = T + 2 * (CB + CT * .6);
+    const capS = new THREE.Shape(); const hw = w1 - .12, r0 = .35;
+    capS.moveTo(-hw + r0, 0); capS.lineTo(hw - r0, 0); capS.quadraticCurveTo(hw, 0, hw, r0); capS.lineTo(hw, 1.1); capS.lineTo(-hw, 1.1); capS.lineTo(-hw, r0); capS.quadraticCurveTo(-hw, 0, -hw + r0, 0);
+    const capG = new THREE.ExtrudeGeometry(capS, { depth, bevelEnabled: true, bevelThickness: .06, bevelSize: .06, bevelSegments: 3 });
+    capG.translate(0, HBOT + .06, -depth / 2);
+    inner.add(new THREE.Mesh(capG, cheekMat));
+  }
+  // ── накладки: цветная верхняя резина + губка (видна на торце)
+  for (const side of cfg.only === 'blade' ? [] : ['fh', 'bh'].filter(sd => cfg[sd])) {
+    const { it, color } = parseKey(cfg[side]);
+    const col = colorOf(it, color);
+    const shape = rubberShape(hex);
+    const SP = it.sp ? 0.17 : 0.05, TS = 0.07; // губка, верхний лист
+    const sponge = new THREE.ExtrudeGeometry(shape, { depth: SP, bevelEnabled: false, curveSegments: 96 });
+    const topG = new THREE.ExtrudeGeometry(shape, { depth: TS, bevelEnabled: true, bevelThickness: .015, bevelSize: .012, bevelSegments: 2, curveSegments: 96 });
+    setCapUV(topG, 15.4);
+    const pimples = it.rubber === 'длинные шипы';
+    const lc = col.key === 'black' ? '#e9e9e9' : '#ffffff';
+    const topTex = canvasTex(R(1024), R(1024), (x, w, h) => {
+      x.save(); x.scale(w / 1024, h / 1024); w = 1024; h = 1024;
+      x.fillStyle = col.hex; x.fillRect(0, 0, w, h);
+      const img = x.getImageData(0, 0, w, h), d = img.data;
+      for (let i = 0; i < d.length; i += 4) { const n = (Math.random() - .5) * 6; d[i] += n; d[i + 1] += n; d[i + 2] += n; }
+      x.putImageData(img, 0, 0);
+      x.fillStyle = lc; x.strokeStyle = lc; x.textAlign = 'center';
+      // логотип у ручки, как на настоящих накладках
+      emblem(x, it.bk, w / 2, h * .74, 70, lc);
+      x.font = '800 62px "Barlow Condensed", Arial'; x.fillText(it.brand.toUpperCase(), w / 2, h * .835);
+      x.font = '600 34px Inter, Arial'; x.fillText(it.name.replace(/ ·.*$/, ''), w / 2, h * .875);
+      x.globalAlpha = .55; x.font = '600 18px Inter, Arial'; x.fillText(it.sp ? `${it.sponge} · ${it.region === 'cn' ? 'MADE IN CHINA' : it.region === 'jp' ? 'MADE IN JAPAN' : 'MADE IN GERMANY'}` : 'OX · PIMPLES OUT', w / 2, h * .905);
+      x.globalAlpha = 1; x.restore();
+    });
+    const bump = pimples ? canvasTex(512, 512, (x, w, h) => { x.fillStyle = '#000'; x.fillRect(0, 0, w, h); x.fillStyle = '#fff'; for (let a = 6; a < w; a += 12) for (let b = 6; b < h; b += 12) { x.beginPath(); x.arc(a + ((b / 12) % 2) * 6, b, 3.6, 0, 7); x.fill(); } }, { data: true }) : null;
+    const tacky = it.rubber.includes('лип');
+    const topMat = new THREE.MeshPhysicalMaterial({ map: topTex, roughness: pimples ? .75 : tacky ? .42 : .55, clearcoat: pimples ? 0 : tacky ? .6 : .3, clearcoatRoughness: tacky ? .22 : .45, bumpMap: bump, bumpScale: pimples ? .05 : 0, envMapIntensity: .45 });
+    const edgeMat = new THREE.MeshStandardMaterial({ color: shade(col.hex, -10), roughness: .7 });
+    const spongeMat = new THREE.MeshStandardMaterial({ color: it.sp || col.hex, roughness: .95 });
+    const grp = new THREE.Group();
+    const spM = new THREE.Mesh(sponge, spongeMat); grp.add(spM);
+    const tpM = new THREE.Mesh(topG, [topMat, edgeMat]); tpM.position.z = SP; grp.add(tpM);
+    if (side === 'fh') grp.position.z = T / 2 + .005; else { grp.rotation.y = Math.PI; grp.position.z = -T / 2 - .005; }
+    grp.userData = { side, baseZ: grp.position.z };
+    inner.add(grp);
+  }
+  // ── торцевая лента: тонкая полоса, приклеенная по торцу головы и чуть заходящая на накладки
+  const tape = parseKey(cfg.tape);
+  if (tape.it && cfg.only !== 'rubber') {
+    const tc = colorOf(tape.it, tape.color), kind = tape.it.tape || 'classic';
+    const sideZ = sd => { if (!cfg[sd]) return T / 2; const r = parseKey(cfg[sd]).it; return T / 2 + .005 + (r.sp ? .17 : .05) + .07; };
+    const zF = sideZ('fh') + .012, zB = sideZ('bh') + .012;
+    // контур головы с небольшим отступом наружу; лента заканчивается у «плеч» ручки
+    const raw = headShape(hex, -0.03).getPoints(hex ? 24 : 220);
+    let pts = raw.filter(p => p.y > -6.05);
+    if (hex) { const dense = []; const loop = raw.concat([raw[0]]); for (let i = 0; i < loop.length - 1; i++) for (let k = 0; k < 12; k++) dense.push(loop[i].clone().lerp(loop[i + 1], k / 12)); pts = dense.filter(p => p.y > -6.05); }
+    // контур замкнут: начинаем сразу после разрыва у ручки, чтобы лента шла одним куском от плеча до плеча
+    let gi = 0, gmax = -1;
+    for (let i = 0; i < pts.length; i++) { const d = pts[i].distanceTo(pts[(i + 1) % pts.length]); if (d > gmax) { gmax = d; gi = i; } }
+    pts = pts.slice(gi + 1).concat(pts.slice(0, gi + 1));
+    if (pts[0].x < pts[pts.length - 1].x) pts.reverse(); // всегда от правого плеча к левому — надпись читается одинаково
+    const N = pts.length, lip = .16, th = .022, P = [], U = [], I = [];
+    let len = 0;
+    for (let i = 0; i < N; i++) {
+      const p = pts[i], a = pts[Math.max(0, i - 1)], c = pts[Math.min(N - 1, i + 1)];
+      if (i) len += p.distanceTo(pts[i - 1]);
+      let nx = c.y - a.y, ny = -(c.x - a.x); const nl = Math.hypot(nx, ny) || 1; nx /= nl; ny /= nl;
+      if (nx * p.x + ny * (p.y - .5) < 0) { nx = -nx; ny = -ny; }
+      const u = len / 6.0;
+      // сечение: губа на лицевой стороне → торец → губа на тыльной (снаружи и изнутри — толщина ленты)
+      const sec = [[-lip, zF, 1], [0, zF + th * .5, .86], [th, zF * .55, .7], [th, -zB * .55, .3], [0, -zB - th * .5, .14], [-lip, -zB, 0]];
+      for (const [o, z, v] of sec) { P.push(p.x + nx * o, p.y + ny * o, z); U.push(u, v); }
+    }
+    const S = 6;
+    for (let i = 0; i < N - 1; i++) for (let k = 0; k < S - 1; k++) { const a0 = i * S + k, b0 = a0 + S; I.push(a0, b0, a0 + 1, a0 + 1, b0, b0 + 1); }
+    const tg = new THREE.BufferGeometry();
+    tg.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); tg.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2)); tg.setIndex(I); tg.computeVertexNormals();
+    const tex = tapeTexture(tape.it, tc, kind, q);
+    const metal = kind === 'gold' || tc.key === 'silver';
+    const tm = new THREE.Mesh(tg, new THREE.MeshPhysicalMaterial({ map: tex, side: THREE.DoubleSide, roughness: metal ? .28 : kind === 'neon' ? .45 : .38, metalness: metal ? .75 : 0, clearcoat: .7, clearcoatRoughness: .25 }));
+    inner.add(tm);
+  }
+  return inner;
+}
+// ── картинки для карточек: снимок той же 3D-модели ──
+const SNAP = new Map();
+let snapR = null;
+// снимок 3D-объекта для карточки; size — в пикселях (с учётом плотности экрана)
+function snapshot(key, cfg, view, size = 256, build = null) {
+  key += '@' + size;
+  if (SNAP.has(key)) return SNAP.get(key);
+  if (!window.THREE) return null;
+  if (!snapR) {
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+    renderer.setPixelRatio(1); renderer.outputEncoding = THREE.sRGBEncoding; renderer.toneMapping = THREE.LinearToneMapping; renderer.toneMappingExposure = .95; renderer.physicallyCorrectLights = true;
+    const scene = new THREE.Scene(); scene.environment = buildEnv(renderer);
+    const key2 = new THREE.DirectionalLight('#ffffff', 1.6); key2.position.set(10, 14, 16); scene.add(key2);
+    const rim = new THREE.DirectionalLight('#cfe0ff', 1.3); rim.position.set(-12, 6, -14); scene.add(rim);
+    scene.add(new THREE.AmbientLight('#ffffff', .3));
+    snapR = { renderer, scene, camera: new THREE.PerspectiveCamera(30, 1, .1, 200) };
+  }
+  const { renderer, scene, camera } = snapR;
+  renderer.setSize(size, size, false);
+  const g = new THREE.Group(); g.add(build ? build() : buildRacket(cfg, size > 300 ? 1 : .6)); scene.add(g);
+  const v = view || { rx: -.15, ry: .55, rz: -.5, d: 50, y: 0 };
+  g.rotation.set(v.rx, v.ry, v.rz); camera.position.set(v.x || 0, v.y, v.d); camera.lookAt(v.x || 0, v.y, 0);
+  renderer.render(scene, camera);
+  const url = renderer.domElement.toDataURL('image/png');
+  scene.remove(g); g.traverse(o => { o.geometry?.dispose?.(); [].concat(o.material || []).forEach(m => { m.map?.dispose?.(); m.dispose?.(); }); });
+  SNAP.set(key, url);
+  return url;
+}
+// рулон торцевой ленты
+function buildTapeRoll(it, color) {
+  const col = colorOf(it, color), kind = it.tape || 'classic', grp = new THREE.Group();
+  const tex = tapeTexture(it, col, kind); tex.repeat.set(3, 1);
+  const metal = kind === 'gold' || col.key === 'silver';
+  const outer = new THREE.Mesh(new THREE.CylinderGeometry(9, 9, 3.4, 96, 1, true), new THREE.MeshPhysicalMaterial({ map: tex, roughness: metal ? .3 : .42, metalness: metal ? .7 : 0, clearcoat: .6 }));
+  grp.add(outer);
+  const sideTex = canvasTex(256, 256, (x, w, h) => { const base = kind === 'carbon' ? '#26292f' : kind === 'gold' ? '#c9a227' : col.hex; x.fillStyle = base; x.fillRect(0, 0, w, h); x.strokeStyle = light(base) ? 'rgba(0,0,0,.12)' : 'rgba(255,255,255,.1)'; for (let r = 60; r < 128; r += 3) { x.beginPath(); x.arc(w / 2, h / 2, r, 0, 7); x.stroke(); } });
+  const ringG = new THREE.RingGeometry(5.6, 9, 96, 1);
+  for (const sgn of [1, -1]) { const r = new THREE.Mesh(ringG, new THREE.MeshPhysicalMaterial({ map: sideTex, roughness: .5, metalness: metal ? .6 : 0, side: THREE.DoubleSide })); r.rotation.x = -sgn * Math.PI / 2; r.position.y = sgn * 1.7; grp.add(r); }
+  const core = new THREE.Mesh(new THREE.CylinderGeometry(5.6, 5.6, 3.5, 64, 1, true), new THREE.MeshStandardMaterial({ map: canvasTex(256, 64, (x, w, h) => { x.fillStyle = '#d8c3a0'; x.fillRect(0, 0, w, h); for (let i = 0; i < 300; i++) { x.fillStyle = `rgba(120,90,50,${Math.random() * .15})`; x.fillRect(Math.random() * w, Math.random() * h, 3, 1); } emblem(x, it.bk, w * .25, h / 2, 26, BRANDS[it.bk]?.color); emblem(x, it.bk, w * .75, h / 2, 26, BRANDS[it.bk]?.color); }), roughness: .9, side: THREE.DoubleSide }));
+  grp.add(core);
+  // хвостик ленты
+  const tail = new THREE.Mesh(new THREE.PlaneGeometry(6, 3.4), new THREE.MeshPhysicalMaterial({ map: tapeTexture(it, col, kind), roughness: .42, metalness: metal ? .7 : 0, side: THREE.DoubleSide }));
+  tail.position.set(9.05, 0, 2.6); tail.rotation.y = -1.25; grp.add(tail);
+  return grp;
+}
+// мячи: три шарика с логотипом и звёздами
+function buildBalls(it, color) {
+  const col = colorOf(it, color), grp = new THREE.Group();
+  const tex = canvasTex(512, 256, (x, w, h) => {
+    x.fillStyle = col.hex; x.fillRect(0, 0, w, h);
+    const ink = BRANDS[it.bk]?.color || '#333';
+    x.fillStyle = ink; x.textAlign = 'center'; x.textBaseline = 'middle';
+    for (let i = 0; i < (it.stars || 1); i++) star(x, w * .25 - ((it.stars || 1) - 1) * 14 + i * 28, h * .42, 12);
+    x.font = '800 34px "Barlow Condensed", Arial'; x.fillText((BRANDS[it.bk]?.name || '').toUpperCase(), w * .25, h * .6, w * .2);
+    x.font = '700 18px Arial'; x.fillText('40+', w * .75, h * .5);
+  });
+  const mat = new THREE.MeshPhysicalMaterial({ map: tex, roughness: .35, clearcoat: .4 });
+  const geo = new THREE.SphereGeometry(4, 48, 32);
+  for (const [px, py, pz, ry] of [[-4.3, -2.2, 1.5, .2], [4.1, -2.4, .6, -.4], [0, 4.4, -.4, .05]]) { const b = new THREE.Mesh(geo, mat); b.position.set(px, py, pz); b.rotation.y = ry; grp.add(b); }
+  return grp;
+}
+// чехол / кейс в форме ракетки
+function buildCase(it, color) {
+  const col = colorOf(it, color), grp = new THREE.Group(), hard = it.id === 'acc-c2';
+  const sh = headShape(false, -0.9);
+  const body = new THREE.ExtrudeGeometry(sh, { depth: hard ? 2.4 : 1.6, bevelEnabled: true, bevelThickness: hard ? 1.2 : 1.6, bevelSize: hard ? .9 : 1.3, bevelSegments: 8, curveSegments: 96 });
+  body.translate(0, 0, -(hard ? 1.2 : .8)); setCapUV(body, 18);
+  const face = canvasTex(512, 512, (x, w, h) => {
+    x.fillStyle = col.hex; x.fillRect(0, 0, w, h);
+    if (col.key === 'carbon' || hard) { for (let i = 0; i < w; i += 12) for (let j = 0; j < h; j += 12) { x.fillStyle = ((i + j) / 12) % 2 ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.12)'; x.fillRect(i, j, 12, 6); } }
+    else { for (let i = 0; i < 4000; i++) { x.fillStyle = `rgba(${Math.random() < .5 ? '255,255,255' : '0,0,0'},${Math.random() * .06})`; x.fillRect(Math.random() * w, Math.random() * h, 2, 2); } }
+    const ink = light(col.hex) ? BRANDS[it.bk]?.color || '#333' : '#ffffff';
+    emblem(x, it.bk, w / 2, h * .42, 120, ink);
+    x.fillStyle = ink; x.font = '800 54px "Barlow Condensed", Arial'; x.textAlign = 'center'; x.fillText((BRANDS[it.bk]?.name || '').toUpperCase(), w / 2, h * .66);
+  });
+  const mat = new THREE.MeshPhysicalMaterial({ map: face, roughness: hard ? .35 : .85, clearcoat: hard ? .8 : 0, metalness: 0 });
+  const side = new THREE.MeshStandardMaterial({ color: shade(col.hex, -18), roughness: .8 });
+  grp.add(new THREE.Mesh(body, [mat, side]));
+  // отделение для ручки
+  const hs = new THREE.Shape(); const hw = 2.6, ht = -5.5, hb = -14.5, rc = 1.4;
+  hs.moveTo(-hw + rc, hb); hs.lineTo(hw - rc, hb); hs.quadraticCurveTo(hw, hb, hw, hb + rc); hs.lineTo(hw, ht); hs.lineTo(-hw, ht); hs.lineTo(-hw, hb + rc); hs.quadraticCurveTo(-hw, hb, -hw + rc, hb);
+  const hg = new THREE.ExtrudeGeometry(hs, { depth: hard ? 2.2 : 1.4, bevelEnabled: true, bevelThickness: hard ? 1 : 1.3, bevelSize: .7, bevelSegments: 6 }); hg.translate(0, 0, -(hard ? 1.1 : .7));
+  grp.add(new THREE.Mesh(hg, side));
+  // молния по периметру
+  const pts = headShape(false, -1.05).getPoints(200).map(p => new THREE.Vector3(p.x, p.y, 0));
+  const zip = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), 300, .28, 8, true), new THREE.MeshStandardMaterial({ color: '#2a2c31', roughness: .5, metalness: .3 }));
+  grp.add(zip);
+  const pull = new THREE.Mesh(new THREE.BoxGeometry(1, 2.4, .5), new THREE.MeshStandardMaterial({ color: '#c9ced8', metalness: .8, roughness: .3 }));
+  pull.position.set(7.9, 1.5, .4); pull.rotation.z = -.2; grp.add(pull);
+  return grp;
+}
+
+function loadThree() {
+  if (window.THREE) return Promise.resolve(window.THREE);
+  return new Promise((res, rej) => {
+    const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+    s.onload = () => res(window.THREE); s.onerror = () => rej(new Error('3D не загрузилось — проверьте интернет')); document.head.appendChild(s);
+  });
+}
+// 3D-просмотр ракетки: вертеть пальцем, перевернуть, приблизить. Один на экран.
+let viewer = null;
+function mountViewer(el, cfg, opts = {}) {
+  const THREE = window.THREE;
+  if (!THREE) return null;
+  if (!viewer) {
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(2, devicePixelRatio)); renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping = THREE.LinearToneMapping; renderer.toneMappingExposure = .95; renderer.physicallyCorrectLights = true;
+    const scene = new THREE.Scene(); scene.environment = buildEnv(renderer);
+    const camera = new THREE.PerspectiveCamera(30, 1, .1, 200);
+    const key = new THREE.DirectionalLight('#ffffff', 1.6); key.position.set(10, 14, 16); scene.add(key);
+    const rim = new THREE.DirectionalLight('#cfe0ff', 1.4); rim.position.set(-12, 6, -14); scene.add(rim);
+    scene.add(new THREE.AmbientLight('#ffffff', .25));
+    viewer = { renderer, scene, camera, group: null, inner: null, target: { x: -0.18, y: 0.35 }, cur: { x: -0.18, y: 0.35 }, zoom: 1, dragging: false, idleAt: 0, anim: null, onSide: null };
+    const loop = () => {
+      requestAnimationFrame(loop);
+      const v = viewer;
+      if (!v.group || !v.renderer.domElement.isConnected) return;
+      if (!v.dragging && Date.now() - v.idleAt > 2500 && !v.anim) v.target.y += 0.005;
+      v.cur.x += (v.target.x - v.cur.x) * .1; v.cur.y += (v.target.y - v.cur.y) * .1;
+      v.group.rotation.set(v.cur.x, v.cur.y, 0);
+      v.onSide?.(Math.cos(v.cur.y) >= 0 ? 1 : 2);
+      v.camera.position.set(0, 0, 52 / v.zoom); v.camera.lookAt(0, 0, 0);
+      if (v.anim) {
+        v.anim.t = Math.min(1, v.anim.t + 0.025);
+        const e = 1 - Math.pow(1 - v.anim.t, 3);
+        v.inner.children.forEach(m => { if (m.userData.side === v.anim.slot) { m.position.z = m.userData.baseZ + (m.userData.side === 'fh' ? 1 : -1) * (1 - e) * 7; m.scale.setScalar(.9 + .1 * e); } });
+        if (v.anim.t >= 1) v.anim = null;
+      }
+      v.renderer.render(v.scene, v.camera);
+    };
+    loop();
+  }
+  const v = viewer;
+  const w = el.clientWidth, h = el.clientHeight;
+  v.renderer.setSize(w, h, false); v.camera.aspect = w / h; v.camera.updateProjectionMatrix();
+  el.prepend(v.renderer.domElement);
+  if (v.group) { v.scene.remove(v.group); v.group.traverse(o => { o.geometry?.dispose?.(); [].concat(o.material || []).forEach(m => { m.map?.dispose?.(); m.dispose?.(); }); }); }
+  v.group = new THREE.Group(); v.inner = buildRacket(cfg); v.group.add(v.inner); v.scene.add(v.group);
+  v.onSide = opts.onSide || null;
+  if (opts.zoom) v.zoom = opts.zoom;
+  if (opts.apply) { v.anim = { slot: opts.apply, t: 0 }; v.target.y = opts.apply === 'bh' ? Math.PI + .35 : opts.apply === 'grip' ? .6 : .35; v.target.x = opts.apply === 'grip' ? .35 : -.18; }
+  let last = null;
+  el.onpointerdown = e => { if (e.target.closest('button')) return; v.dragging = true; last = [e.clientX, e.clientY]; el.setPointerCapture(e.pointerId); };
+  el.onpointermove = e => { if (!v.dragging) return; v.target.y += (e.clientX - last[0]) * .012; v.target.x = Math.max(-1.3, Math.min(1.3, v.target.x + (e.clientY - last[1]) * .008)); last = [e.clientX, e.clientY]; v.idleAt = Date.now(); };
+  el.onpointerup = el.onpointercancel = () => { v.dragging = false; v.idleAt = Date.now(); };
+  el.onwheel = e => { e.preventDefault(); v.zoom = Math.max(.7, Math.min(2.2, v.zoom * (e.deltaY < 0 ? 1.08 : .92))); };
+  return {
+    flip() { v.target.y += Math.PI; v.idleAt = Date.now(); },
+    zoomIn() { v.zoom = Math.min(2.2, v.zoom * 1.15); },
+    zoomOut() { v.zoom = Math.max(.7, v.zoom / 1.15); },
+  };
+}
+
+// снимок целой ракетки (для профиля игрока)
+function racketShot(cfg) {
+  return snapshot('R:' + JSON.stringify(cfg), cfg, { rx: -.12, ry: .45, rz: -.45, d: 50, y: -.6 }, 480);
+}
+
+</script>
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const lin = hex => new THREE.Color(hex).convertSRGBToLinear();
+
+// ───────────── Каталог формы (из магазина) + новая амуниция ─────────────
+const WEAR_SLOTS = [['shirt', 'Футболка'], ['shorts', 'Шорты'], ['shoes', 'Кроссовки']];
+const AMMO = {
+  socks: { name: 'Носки', items: [
+    { id: 'k0', name: 'Носки Basic', bk: 'qinglan', price: 0, own: true, h: 0, colors: [['#f4f6fa', 'белые']] },
+    { id: 'k1', name: 'Носки высокие', bk: 'tsubame', price: 350, h: 1, fresh: true, colors: [['#f4f6fa', 'белые'], ['#1b1c20', 'чёрные'], ['#d62839', 'красные'], ['#1f5fc4', 'синие']] },
+    { id: 'k2', name: 'Носки цветные', bk: 'rhein', price: 250, h: 0, fresh: true, colors: [['#1f5fc4', 'синие'], ['#d62839', 'красные'], ['#ffcc00', 'жёлтые'], ['#12a061', 'зелёные']] },
+  ] },
+  bands: { name: 'Напульсники', items: [
+    { id: 'w0', name: 'Без напульсников', price: 0, own: true, none: true },
+    { id: 'w1', name: 'Напульсники', bk: 'rhein', price: 200, fresh: true, colors: [['#1f5fc4', 'синие'], ['#f4f6fa', 'белые'], ['#1b1c20', 'чёрные']] },
+    { id: 'w2', name: 'Напульсники Pro', bk: 'tsubame', price: 300, fresh: true, colors: [['#d62839', 'красные'], ['#ffcc00', 'жёлтые'], ['#12a061', 'зелёные']] },
+  ] },
+  head: { name: 'Повязка на голову', items: [
+    { id: 'h0', name: 'Без повязки', price: 0, own: true, none: true },
+    { id: 'h1', name: 'Повязка', bk: 'nordvik', price: 250, fresh: true, colors: [['#1b1c20', 'чёрная'], ['#f4f6fa', 'белая'], ['#0e3b8c', 'синяя']] },
+    { id: 'h2', name: 'Повязка Pro', bk: 'tsubame', price: 350, fresh: true, colors: [['#d62839', 'красная'], ['#ffcc00', 'жёлтая'], ['#e8590c', 'оранжевая']] },
+  ] },
+};
+const RACKETS = [
+  { id: 'r1', name: 'Стартовая', desc: 'Qinglan Start 7 · без накладок', cfg: { blade: 'cn-b1:FL' } },
+  { id: 'r2', name: 'Longwei Dragon Power 5', desc: 'Dragon Spin Neo красная / чёрная · лента Pro', cfg: { blade: 'cn-b5:FL', fh: 'cn-r5:red', bh: 'cn-r5:black', tape: 'acc-t2:black' } },
+  { id: 'r3', name: 'Tsubame Heritage', desc: 'Control One синяя / чёрная · ручка ST · лента Neon', cfg: { blade: 'jp-b3:ST', fh: 'jp-r2:blue', bh: 'jp-r2:black', tape: 'acc-t4:pink' } },
+  { id: 'r4', name: 'Nordvik Hexa Carbon', desc: 'Blitz M1 красная / чёрная · AN · лента Carbon', cfg: { blade: 'eu-b5:AN', fh: 'eu-r3:red', bh: 'eu-r3:black', tape: 'acc-t3:gold' } },
+];
+const wearItems = type => ITEMS.filter(x => x.type === type);
+
+// внешний вид по умолчанию — как на исходной картинке: белая футболка, чёрные шорты, белые носки и кроссовки
+const LOOK0 = () => ({ shirt: 'wr-t1:white', shorts: 'wr-s1:black', shoes: 'wr-f1:wb', socks: 'k0:#f4f6fa', bands: 'w0', head: 'h0', racket: 'r2' });
+const S = { who: 'boy', tab: 'who', coins: 9000, owned: new Set(['wr-t1', 'wr-s1', 'wr-f1', 'k0', 'w0', 'h0', 'r1', 'r2']), look: { boy: LOOK0(), girl: LOOK0() } };
+S.look.girl.racket = 'r3';
+
+// ───────────── Модели ─────────────
+// пороги зон на модели (доля роста от пола): футболка, шорты, носки, кроссовки; ширина торса — где начинается рукав
+const ZONES = {
+  boy: { shirt: [.505, .838], shorts: [.335, .52], shoe: .072, sock: .125, high: .24, sleeve: .118, sole: .016, file: '../models/boy.glb' },
+  girl: { shirt: [.535, .848], shorts: [.40, .55], shoe: .068, sock: .12, high: .24, sleeve: .098, sole: .016, file: '../models/girl.glb' },
+};
+const BUF = {};
+let glbScript = null;
+const loadGLBScript = () => glbScript || (glbScript = new Promise((ok, bad) => { const sc = document.createElement('script'); sc.src = 'models.js'; sc.onload = ok; sc.onerror = () => bad(new Error('models.js')); document.head.appendChild(sc); }));
+async function fetchModel(key, onp) {
+  if (BUF[key]) return BUF[key];
+  if (false) {
+    await loadGLBScript(); onp && onp(1);
+    const bin = atob(window.PH_GLB[key]), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    return (BUF[key] = u.buffer);
+  }
+  const res = await fetch(ZONES[key].file);
+  if (!res.ok) throw new Error('нет файла ' + ZONES[key].file);
+  const total = +res.headers.get('content-length') || 0, rd = res.body ? res.body.getReader() : null;
+  if (!rd) return (BUF[key] = await res.arrayBuffer());
+  const parts = []; let got = 0;
+  for (;;) { const { done, value } = await rd.read(); if (done) break; parts.push(value); got += value.length; onp && total && onp(got / total); }
+  const out = new Uint8Array(got); let o = 0; for (const p of parts) { out.set(p, o); o += p.length; }
+  return (BUF[key] = out.buffer);
+}
+const loader = new THREE.GLTFLoader();
+if (window.MeshoptDecoder) loader.setMeshoptDecoder(window.MeshoptDecoder);
+const parseGLB = buf => new Promise((ok, bad) => loader.parse(buf.slice(0), '', ok, bad));
+
+// перекраска одежды прямо в шейдере: зона по высоте + цвет исходной раскраски
+function wearMaterial(map, z, bbox, axis, sideAxis) {
+  const m = new THREE.MeshStandardMaterial({ map, roughness: .78, metalness: 0, skinning: true });
+  const U = m.userData.u = {
+    uAxis: { value: axis }, uSide: { value: sideAxis }, uMin: { value: bbox.min.dot(axis) }, uLen: { value: bbox.max.dot(axis) - bbox.min.dot(axis) },
+    uSideC: { value: bbox.getCenter(new THREE.Vector3()).dot(sideAxis) },
+    uShirtR: { value: new THREE.Vector3(z.shirt[0], z.shirt[1], z.sleeve) }, uShortR: { value: new THREE.Vector2(...z.shorts) },
+    uFeet: { value: new THREE.Vector4(z.shoe, z.sock, z.high, z.sole) },
+    uSole: { value: lin('#eef0f3') },
+    uShirt: { value: lin('#ffffff') }, uSleeve: { value: lin('#ffffff') }, uStripe: { value: lin('#ffffff') }, uStripeOn: { value: 0 },
+    uShorts: { value: lin('#1b1c20') }, uShortsOn: { value: 0 }, uShirtOn: { value: 0 },
+    uSock: { value: lin('#f4f6fa') }, uHigh: { value: 0 }, uSockOn: { value: 0 },
+    uShoe: { value: lin('#ffffff') }, uShoeAcc: { value: lin('#1b1c20') }, uShoeOn: { value: 0 },
+  };
+  m.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, U);
+    sh.vertexShader = 'varying vec3 vBind;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vBind = position;');
+    sh.fragmentShader = `varying vec3 vBind; uniform vec3 uAxis, uSide; uniform float uMin, uLen, uSideC; uniform vec3 uShirtR; uniform vec2 uShortR; uniform vec4 uFeet;
+      uniform vec3 uShirt, uSleeve, uStripe, uShorts, uSock, uShoe, uShoeAcc, uSole; uniform float uStripeOn, uShortsOn, uShirtOn, uHigh, uSockOn, uShoeOn;\n` +
+      sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+      {
+        vec3 c0 = diffuseColor.rgb;
+        float h = (dot(vBind, uAxis) - uMin) / uLen;
+        float sd = abs(dot(vBind, uSide) - uSideC) / uLen;
+        float l = dot(c0, vec3(.2126, .7152, .0722));
+        float mx = max(c0.r, max(c0.g, c0.b)), mn = min(c0.r, min(c0.g, c0.b));
+        float sat = (mx - mn) / max(mx, 1e-4);
+        float warm = (c0.r - c0.b) / max(l, .04);
+        float white = smoothstep(.16, .30, l) * (1. - smoothstep(.20, .34, warm)) * (1. - smoothstep(.22, .40, sat));
+        float dark = (1. - smoothstep(.03, .075, l)) * (1. - smoothstep(.40, .65, sat));
+        float shade = clamp(l / .70, .35, 1.25);
+        // футболка: тело / рукава / полоса на груди
+        float inShirt = step(uShirtR.x, h) * step(h, uShirtR.y);
+        float sleeve = smoothstep(uShirtR.z - .006, uShirtR.z + .006, sd);
+        vec3 sc = mix(uShirt, uSleeve, sleeve);
+        sc = mix(sc, uStripe, uStripeOn * (1. - sleeve) * (1. - smoothstep(.006, .009, abs(h - (uShirtR.y - .085)))));
+        // ткань футболки: всё нетелесное в зоне футболки, включая затенённые складки и подмышки
+        float cloth = (1. - smoothstep(.18, .32, warm)) * smoothstep(.035, .09, l) * (1. - smoothstep(.28, .48, sat));
+        diffuseColor.rgb = mix(diffuseColor.rgb, sc * clamp(l / .70, .22, 1.25), cloth * inShirt * uShirtOn);
+        // шорты (исходно чёрные): берём складки из яркости
+        float inShorts = step(uShortR.x, h) * step(h, uShortR.y);
+        diffuseColor.rgb = mix(diffuseColor.rgb, uShorts * clamp(.55 + l * 9., .5, 1.3), dark * inShorts * uShortsOn);
+        // носки (белые); высокие — поверх кожи до середины голени
+        float inSock = step(uFeet.x, h) * step(h, uFeet.y);
+        float inHigh = step(uFeet.x, h) * step(h, mix(uFeet.y, uFeet.z, uHigh)) * uHigh;
+        float sockM = max(white * inSock, inHigh * (1. - smoothstep(uFeet.z - .004, uFeet.z, h)));
+        diffuseColor.rgb = mix(diffuseColor.rgb, uSock * mix(shade, .92, inHigh * (1. - white)), sockM * uSockOn);
+        if (uHigh > .5) diffuseColor.rgb = mix(diffuseColor.rgb, uSock * .75, uSockOn * step(abs(h - uFeet.z + .006), .004));
+        // кроссовки: белое — основной цвет, тёмные полосы — акцент
+        float inShoe = step(h, uFeet.x);
+        diffuseColor.rgb = mix(diffuseColor.rgb, uShoe * shade, white * inShoe * uShoeOn);
+        diffuseColor.rgb = mix(diffuseColor.rgb, uShoeAcc * clamp(.6 + l * 6., .5, 1.2), dark * inShoe * uShoeOn);
+        // подошва — отдельной полосой, чтобы её было видно у любых кроссовок
+        float sole = step(h, uFeet.w) * uShoeOn;
+        diffuseColor.rgb = mix(diffuseColor.rgb, uSole * clamp(l / .55, .7, 1.1), sole);
+        diffuseColor.rgb = mix(diffuseColor.rgb, uSole * .55, uShoeOn * (1. - smoothstep(.0015, .004, abs(h - uFeet.w))));
+      }`);
+  };
+  return m;
+}
+
+// кольцо, которое облегает модель вокруг кости (повязка, напульсник): точки кожи → радиус по углам
+function hugRing(mesh, boneName, t0, t1, inflate, color) {
+  const sk = mesh.skeleton, bi = sk.bones.findIndex(b => b.name.endsWith(boneName));
+  if (bi < 0) return null;
+  const g = mesh.geometry, pos = g.attributes.position, si = g.attributes.skinIndex, sw = g.attributes.skinWeight;
+  const v = new THREE.Vector3(), pts = [];
+  for (let i = 0; i < pos.count; i++) {
+    let w = 0; const ix = [si.getX(i), si.getY(i), si.getZ(i), si.getW(i)], wx = [sw.getX(i), sw.getY(i), sw.getZ(i), sw.getW(i)]; for (let k = 0; k < 4; k++) if (ix[k] === bi) w += wx[k];
+    if (w < .45) continue;
+    v.fromBufferAttribute(pos, i).applyMatrix4(mesh.bindMatrix).applyMatrix4(sk.boneInverses[bi]);
+    pts.push(v.clone());
+  }
+  if (pts.length < 20) return null;
+  let y0 = Infinity, y1 = -Infinity; for (const p of pts) { y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y); }
+  const a = y0 + (y1 - y0) * t0, b = y0 + (y1 - y0) * t1;
+  const sl = pts.filter(p => p.y >= a && p.y <= b);
+  const cx = sl.reduce((s, p) => s + p.x, 0) / sl.length, cz = sl.reduce((s, p) => s + p.z, 0) / sl.length;
+  const N = 48, rad = new Array(N).fill(0);
+  for (const p of sl) { const ang = Math.atan2(p.z - cz, p.x - cx), k = ((Math.round(ang / (Math.PI * 2) * N) % N) + N) % N, r = Math.hypot(p.x - cx, p.z - cz); rad[k] = Math.max(rad[k], r); }
+  const avg = rad.reduce((s, r) => s + r, 0) / N;
+  for (let k = 0; k < N; k++) if (!rad[k]) rad[k] = avg;
+  const sm = rad.map((r, k) => (rad[(k + N - 1) % N] + 2 * r + rad[(k + 1) % N]) / 4);
+  // кольцо с толщиной: внешняя стенка, внутренняя, торцы
+  const H = b - a, th = avg * .06, geo = new THREE.BufferGeometry(), P = [], I = [];
+  const ring = (rr, yy) => { const base = P.length / 3; for (let k = 0; k <= N; k++) { const ang = k / N * Math.PI * 2, r = sm[k % N] * inflate + rr; P.push(cx + Math.cos(ang) * r, yy, cz + Math.sin(ang) * r); } return base; };
+  const o0 = ring(th, a), o1 = ring(th, b), i0 = ring(0, a), i1 = ring(0, b);
+  const quad = (r0, r1, flip) => { for (let k = 0; k < N; k++) { const p = [r0 + k, r0 + k + 1, r1 + k + 1, r1 + k]; flip ? I.push(p[0], p[2], p[1], p[0], p[3], p[2]) : I.push(p[0], p[1], p[2], p[0], p[2], p[3]); } };
+  quad(o0, o1, true); quad(i0, i1, false); quad(i1, o1, true); quad(i0, o0, false);
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); geo.setIndex(I); geo.computeVertexNormals();
+  const ringMesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color, roughness: .95, side: THREE.DoubleSide }));
+  ringMesh.userData.h = H;
+  return { mesh: ringMesh, bone: sk.bones[bi] };
+}
+
+// игрок: модель + анимации + форма + ракетка
+async function makePlayer(key) {
+  const gltf = await parseGLB(BUF[key]);
+  const scene = gltf.scene, z = ZONES[key];
+  let mesh = null; scene.traverse(n => { if (n.isSkinnedMesh && !mesh) mesh = n; });
+  const bones = {}; mesh.skeleton.bones.forEach(b => bones[b.name.replace(/^mixamorig:?/, '')] = b);
+  // ось роста и ширины по геометрии в позе привязки
+  const g = mesh.geometry; g.computeBoundingBox(); const bb = g.boundingBox, sz = bb.getSize(new THREE.Vector3());
+  const axis = sz.y >= sz.z ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1);
+  const map = mesh.material.map; if (map) { map.encoding = THREE.sRGBEncoding; map.anisotropy = 8; }
+  mesh.material = wearMaterial(map, z, bb, axis, new THREE.Vector3(1, 0, 0));
+  mesh.frustumCulled = false; mesh.castShadow = false;
+  // масштаб: рост 1.75 м, ноги на полу
+  const holder = new THREE.Group(); holder.add(scene);
+  scene.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(scene), k = 1.75 / (box.max.y - box.min.y);
+  scene.scale.multiplyScalar(k); scene.updateMatrixWorld(true);
+  const box2 = new THREE.Box3().setFromObject(scene); scene.position.y -= box2.min.y; scene.position.x -= (box2.min.x + box2.max.x) / 2; scene.position.z -= (box2.min.z + box2.max.z) / 2;
+  const mixer = new THREE.AnimationMixer(scene), clips = {};
+  for (const c of gltf.animations) clips[c.name] = c;
+  const fbase = {}; for (const n in bones) if (/^(Right|Left)Hand/.test(n)) fbase[n] = bones[n].quaternion.clone();
+  const P = { key, holder, scene, mesh, bones, mixer, clips, cur: null, z, acc: {}, fbase };
+  P.play = (name, once) => {
+    if (name === 'idle' && clips.ready && window.USE_READY) name = 'ready';
+    const c = clips[name]; if (!c) return;
+    const a = mixer.clipAction(c); a.reset(); a.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat); a.clampWhenFinished = !!once;
+    if (P.cur && P.cur !== a) a.crossFadeFrom(P.cur, .35, false); a.play(); P.cur = a; P.curName = name;
+    if (P.rk) P.rk.visible = name !== 'clap' && name !== 'wave';
+  };
+  clips.swing = buildSwing(P);
+  clips.ready = buildReady(P);
+  mixer.addEventListener('finished', e => { if (e.action === P.cur && P.curName !== 'idle' && P.curName !== 'ready') { P.play('idle'); if (P === cur && view.tz < 1.5) fullView(); } });
+  P.play('idle');
+  // ступни на полу именно в стойке (анимация чуть опускает тело относительно исходной позы)
+  {
+    const toes = ['LeftToeBase', 'RightToeBase', 'LeftFoot', 'RightFoot'].map(n => bones[n]).filter(Boolean), v = new THREE.Vector3();
+    const low = () => { holder.updateMatrixWorld(true); return Math.min(...toes.map(b => b.getWorldPosition(v).y)); };
+    const a0 = mixer.clipAction(clips.idle); mixer.stopAllAction();
+    const bind = low();
+    a0.reset().play(); mixer.update(0); const idle = low();
+    scene.position.y += bind - idle;
+    P.cur = null; P.play('idle');
+  }
+  // аксессуары, облегающие модель
+  const hb = hugRing(mesh, 'Head', .63, .73, 1.03, '#d62839');
+  if (hb) { hb.bone.add(hb.mesh); P.acc.head = hb.mesh; hb.mesh.visible = false; }
+  for (const s of ['Left', 'Right']) {
+    const wb = hugRing(mesh, s + 'ForeArm', .70, .90, 1.07, '#1f5fc4');
+    if (wb) { wb.bone.add(wb.mesh); P.acc['band' + s] = wb.mesh; wb.mesh.visible = false; }
+  }
+  return P;
+}
+
+// удар справа (топспин): строим ключевые кадры в мировых направлениях — замах, удар, проводка, возврат
+// направления в системе игрока: x — его левая рука, y — вверх, z — вперёд
+const SWING_KEYS = [
+  { t: 0, tw: 0, ua: [-.3, -.9, .35], fa: [-.25, -.05, 1], roll: -1.25 },
+  { t: .45, tw: -.75, ua: [-.75, -.55, -.35], fa: [-.75, -.55, .1], roll: -.7 },
+  { t: .68, tw: -.1, ua: [-.6, -.5, .5], fa: [-.7, .15, .7], roll: -1.2 },
+  { t: .84, tw: .55, ua: [.05, .35, .95], fa: [.75, .65, .15], roll: -1.4 },
+  { t: 1.3, tw: .2, ua: [-.2, -.5, .8], fa: [.2, .3, 1], roll: -1.3 },
+  { t: 1.8, tw: 0, ua: [-.3, -.9, .35], fa: [-.25, -.05, 1], roll: -1.25 },
+];
+// стойка с ракеткой: как idle, но правая рука согнута и держит ракетку перед собой
+const READY = window.READYK || { ua: [-.3, -.9, .35], fa: [-.25, -.05, 1], roll: -1.25 };
+function buildReady(P) {
+  const b = P.bones, idle = P.clips.idle, names = ['RightArm', 'RightForeArm'];
+  const a = P.mixer.clipAction(idle); P.mixer.stopAllAction(); a.reset().play(); P.mixer.update(0);
+  const base = {}; names.forEach(n => base[n] = b[n].quaternion.clone());
+  P.holder.updateMatrixWorld(true);
+  const R = window.READYK || READY;
+  poseArm(b, R);
+  const vals = names.map(n => b[n].quaternion.toArray());
+  names.forEach(n => b[n].quaternion.copy(base[n]));
+  const keepTr = idle.tracks.filter(t => !names.some(n => t.name === b[n].name + '.quaternion'));
+  const fixed = names.map((n, i) => new THREE.QuaternionKeyframeTrack(b[n].name + '.quaternion', [0, idle.duration], [...vals[i], ...vals[i]]));
+  return new THREE.AnimationClip('ready', idle.duration, keepTr.concat(fixed));
+}
+// поставить плечо/предплечье в мировые направления + развернуть предплечье
+function poseArm(b, k) {
+  const pq = new THREE.Quaternion(), wq = new THREE.Quaternion(), dq = new THREE.Quaternion(), p0 = new THREE.Vector3(), p1 = new THREE.Vector3();
+  const setWorld = (bone, fn) => { bone.parent.getWorldQuaternion(pq); wq.copy(pq).multiply(bone.quaternion); fn(wq); bone.quaternion.copy(pq.invert().multiply(wq)); bone.updateMatrixWorld(true); };
+  const aim = (bone, child, dir) => { bone.getWorldPosition(p0); child.getWorldPosition(p1); const cur = p1.sub(p0).normalize(), d = new THREE.Vector3(...dir).normalize(); setWorld(bone, q => q.premultiply(dq.setFromUnitVectors(cur, d))); };
+  aim(b.RightArm, b.RightForeArm, k.ua); aim(b.RightForeArm, b.RightHand, k.fa);
+  if (k.roll) { b.RightForeArm.getWorldPosition(p0); b.RightHand.getWorldPosition(p1); const ax = p1.sub(p0).normalize(); setWorld(b.RightForeArm, q => q.premultiply(dq.setFromAxisAngle(ax, k.roll))); }
+}
+function buildSwing(P) {
+  const b = P.bones, names = ['Hips', 'Spine', 'Spine1', 'Spine2', 'RightArm', 'RightForeArm', 'RightHand'].filter(n => b[n]);
+  const a = P.mixer.clipAction(P.clips.idle); P.mixer.stopAllAction(); a.reset().play(); P.mixer.update(0);
+  const base = {}; names.forEach(n => base[n] = b[n].quaternion.clone());
+  const Y = new THREE.Vector3(0, 1, 0), pq = new THREE.Quaternion(), wq = new THREE.Quaternion(), dq = new THREE.Quaternion(), p0 = new THREE.Vector3(), p1 = new THREE.Vector3();
+  const setWorld = (bone, fn) => { bone.parent.getWorldQuaternion(pq); wq.copy(pq).multiply(bone.quaternion); fn(wq); bone.quaternion.copy(pq.invert().multiply(wq)); bone.updateMatrixWorld(true); };
+  const twist = (bone, th) => bone && setWorld(bone, q => q.premultiply(dq.setFromAxisAngle(Y, th)));
+  const aim = (bone, child, dir) => { bone.getWorldPosition(p0); child.getWorldPosition(p1); const cur = p1.sub(p0).normalize(), d = new THREE.Vector3(...dir).normalize(); setWorld(bone, q => q.premultiply(dq.setFromUnitVectors(cur, d))); };
+  const vals = {}; names.forEach(n => vals[n] = []);
+  const KEYS = window.SWINGK || SWING_KEYS;
+  for (const k of KEYS) {
+    names.forEach(n => b[n].quaternion.copy(base[n])); P.holder.updateMatrixWorld(true);
+    twist(b.Hips, k.tw * .35); twist(b.Spine, k.tw * .25); twist(b.Spine1, k.tw * .2); twist(b.Spine2, k.tw * .2);
+    aim(b.RightArm, b.RightForeArm, k.ua); aim(b.RightForeArm, b.RightHand, k.fa);
+    // поворот предплечья вокруг своей оси (ракетка разворачивается лицом к мячу) и сгиб кисти
+    if (k.roll) { b.RightForeArm.getWorldPosition(p0); b.RightHand.getWorldPosition(p1); const ax = p1.sub(p0).normalize(); setWorld(b.RightForeArm, q => q.premultiply(dq.setFromAxisAngle(ax, k.roll))); }
+    names.forEach(n => vals[n].push(...b[n].quaternion.toArray()));
+  }
+  names.forEach(n => b[n].quaternion.copy(base[n]));
+  const T = KEYS.map(k => k.t);
+  return new THREE.AnimationClip('swing', T[T.length - 1], names.map(n => new THREE.QuaternionKeyframeTrack(b[n].name + '.quaternion', T, vals[n])));
+}
+
+// ───────────── Ракетка ─────────────
+// пальцы сгибаются вокруг оси X своих костей (вокруг Z они уходили вбок); кулак чуть приоткрыт под толщину ручки
+const GRIP = { Index1: [.75, 0, .25], Index2: [.95, 0, .15], Index3: [.65, 0, .08], Thumb1: [.45, 0, 0], Thumb2: [.45, 0, 0] };
+// хват подобран Рустамом в редакторе (17.10)
+const RK = { tilt: 2.62, spin: -1.74, pitch: -0.78, roll: -0.11, slide: 5.9, sx: 0, sz: 0, grip: -5.8, side: -0.2, ox: 0, oz: -0.8, curl: .75, thumb: 1, fside: -0.66, tside: -0.46, wx: -0.2, wz: 0.06, ...(window.RKFIT || {}) };
+function attachRacket(P, cfg) {
+  if (P.rk) { P.rk.parent && P.rk.parent.remove(P.rk); P.rk = null; }
+  const B = P.bones, hand = B.RightHand, idx = B.RightHandIndex1, th = B.RightHandThumb1; if (!hand || !idx || !th) return;
+  const G = window.GRIP || GRIP, v = new THREE.Vector3(), q = new THREE.Quaternion();
+  // 1) сжимаем кулак (как в игре) и берём реальные точки: костяшки, кончик пальца, ладонь
+  const names = Object.keys(P.fbase).filter(n => n.startsWith('RightHand') && n !== 'RightHand'), keep = names.map(n => B[n].quaternion.clone());
+  names.forEach(n => { B[n].quaternion.copy(P.fbase[n]); const g = gripOf(n.slice(9), G); if (g) B[n].quaternion.multiply(q.setFromEuler(new THREE.Euler(...g))); });
+  hand.updateWorldMatrix(true, true);
+  const inv = hand.matrixWorld.clone().invert(), loc = b => b.getWorldPosition(new THREE.Vector3()).applyMatrix4(inv);
+  const knuckle = idx.position.clone(), tip = loc(B.RightHandIndex4 || B.RightHandIndex3), mid = loc(B.RightHandIndex2 || idx);
+  // ось ручки — та, вокруг которой сгибаются пальцы (линия костяшек), к большому пальцу
+  let axis = new THREE.Vector3(1, 0, 0).applyQuaternion(P.fbase.RightHandIndex1).normalize();
+  if (axis.dot(th.position) > 0) axis.negate(); // голова ракетки выходит со стороны большого и указательного пальцев
+  names.forEach((n, i) => B[n].quaternion.copy(keep[i])); hand.updateWorldMatrix(true, true);
+  // 2) центр кулака: между ладонью у костяшек, серединой пальца и согнутым кончиком
+  const palm = knuckle.clone().multiplyScalar(.62);
+  const C = palm.add(mid).add(tip).multiplyScalar(1 / 3);
+  const cmU = knuckle.length() / 9.5;
+  C.add(axis.clone().multiplyScalar(RK.side * cmU));
+  // 3) плоскость ракетки параллельна ладони: нормаль — от ладони к пальцам в сжатом кулаке
+  const f = knuckle.clone().normalize();
+  const Y = axis.clone().multiplyScalar(Math.cos(RK.tilt)).add(f.clone().multiplyScalar(Math.sin(RK.tilt))).normalize();
+  let n = tip.clone().sub(knuckle.clone().multiplyScalar(.62)); n.sub(Y.clone().multiplyScalar(n.dot(Y))).normalize();
+  const X = new THREE.Vector3().crossVectors(Y, n).normalize(), Z = new THREE.Vector3().crossVectors(X, Y);
+  const r = new THREE.Group(); r.add(buildRacket({ ...cfg }, .5));
+  r.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(X, Y, Z));
+  r.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(RK.pitch, RK.spin, RK.roll || 0)));
+  r.scale.setScalar(cmU);
+  // середина ручки (−7.6 см от центра головы) — в центре кулака, со сдвигом к голове
+  r.position.copy(C).add(Y.clone().multiplyScalar((7.6 + RK.grip) * cmU));
+  r.position.add(X.clone().multiplyScalar(RK.ox * cmU)).add(Z.clone().multiplyScalar(RK.oz * cmU));
+  // сдвиг по осям самой ракетки (после всех поворотов): вдоль ручки, вбок, по нормали к накладке
+  r.position.add(new THREE.Vector3(RK.sx || 0, RK.slide || 0, RK.sz || 0).applyQuaternion(r.quaternion).multiplyScalar(cmU));
+  r.traverse(o => { if (o.isMesh) [].concat(o.material).forEach(m => { m.toneMapped = false; }); });
+  if (window.RKDBG) { const m = new THREE.Mesh(new THREE.SphereGeometry(.6 * cmU, 12, 8), new THREE.MeshBasicMaterial({ color: '#00ff00', depthTest: false })); m.position.copy(C); m.renderOrder = 9; hand.add(m); }
+  hand.add(r); P.rk = r; r.visible = P.curName !== 'clap' && P.curName !== 'wave';
+}
+// перед обновлением анимации пальцы возвращаются в исходное положение — поворот не накапливается
+function gripOf(n, F) {
+  const g = F[n]; if (!g) return null; const th = n.startsWith('Thumb'), k = th ? RK.thumb : RK.curl;
+  const w = { Index1: 1, Index2: .5, Index3: .3, Thumb1: 1, Thumb2: .5 }[n] || 0;
+  return [g[0] * k, g[1] * k + (th ? RK.tside * w : 0), g[2] * k + (th ? 0 : RK.fside * w)];
+}
+function resetFingers(P) { for (const n in P.fbase) P.bones[n].quaternion.copy(P.fbase[n]); }
+function gripFingers(P) {
+  if (!P.rk || !P.rk.visible) return;
+  const b = P.bones, F = window.GRIP || GRIP;
+  for (const n in F) { const bn = b['RightHand' + n], g = gripOf(n, F); if (bn && g) bn.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(...g))); }
+  if (RK.wx || RK.wz) b.RightHand.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(RK.wx, 0, RK.wz)));
+}
+function stepPlayer(P, dt) { resetFingers(P); if (window.TUNE && P.cur && (P.curName === 'idle' || P.curName === 'ready')) { P.cur.time = 0; dt = 0; } P.mixer.update(dt); gripFingers(P); }
+
+// ───────────── Сцена в телефоне ─────────────
+const stage = $('stage');
+const R1 = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+R1.outputEncoding = THREE.sRGBEncoding; R1.toneMapping = THREE.ACESFilmicToneMapping; R1.toneMappingExposure = 1.05; R1.setPixelRatio(Math.min(2, devicePixelRatio));
+stage.prepend(R1.domElement);
+const scene1 = new THREE.Scene(), cam1 = new THREE.PerspectiveCamera(24, 1, .05, 50);
+let ENV = null;
+function lights(sc, strong) {
+  sc.add(new THREE.HemisphereLight('#ffffff', '#9aa8c4', strong ? .55 : .7));
+  const key = new THREE.DirectionalLight('#ffffff', strong ? 1.6 : 1.2); key.position.set(2.5, 4, 4); sc.add(key);
+  const rim = new THREE.DirectionalLight('#cfe0ff', strong ? 1.4 : .7); rim.position.set(-3, 3, -3); sc.add(rim);
+  const fill = new THREE.DirectionalLight('#ffe8d6', .35); fill.position.set(-3, 1.5, 3); sc.add(fill);
+}
+lights(scene1);
+const shadowTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d'); const g = x.createRadialGradient(64, 64, 4, 64, 64, 64); g.addColorStop(0, 'rgba(10,25,50,.42)'); g.addColorStop(1, 'rgba(10,25,50,0)'); x.fillStyle = g; x.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c); })();
+const blob = () => { const m = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 1.3), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.position.y = .002; return m; };
+scene1.add(blob());
+// подиум
+const pod = new THREE.Mesh(new THREE.CylinderGeometry(.62, .66, .06, 64), new THREE.MeshStandardMaterial({ color: '#2a64b8', roughness: .6 })); pod.position.y = -.031; scene1.add(pod);
+const podLine = new THREE.Mesh(new THREE.TorusGeometry(.57, .006, 6, 96), new THREE.MeshBasicMaterial({ color: '#ffffff' })); podLine.rotation.x = Math.PI / 2; podLine.position.y = .001; scene1.add(podLine);
+
+const view = { ry: .35, target: .35, zoom: 1, tz: 1, fy: .84, tfy: .84, drag: false, idle: 0 };
+const PL = {}; let cur = null;
+function size1() { const w = stage.clientWidth, h = stage.clientHeight; R1.setSize(w, h, false); cam1.aspect = w / h; cam1.updateProjectionMatrix(); }
+const headY = P => { const v = new THREE.Vector3(); (P.bones.Head || P.scene).getWorldPosition(v); return v.y + .08; };
+function faceView() { view.tz = 3.1; view.tfy = cur ? headY(cur) - .04 : 1.6; }
+function fullView() { view.tz = 1; view.tfy = .84; }
+let last = null;
+stage.addEventListener('pointerdown', e => { if (e.target.closest('button')) return; view.drag = true; last = e.clientX; stage.setPointerCapture(e.pointerId); });
+stage.addEventListener('pointermove', e => { if (!view.drag) return; view.target += (e.clientX - last) * .012; last = e.clientX; view.idle = performance.now(); });
+const up = () => { view.drag = false; view.idle = performance.now(); };
+stage.addEventListener('pointerup', up); stage.addEventListener('pointercancel', up);
+stage.querySelectorAll('.st-tools button').forEach(b => b.onclick = () => { const v = b.dataset.v; if (v === 'flip') view.target += Math.PI; if (v === 'in') faceView(); if (v === 'out') fullView(); view.idle = performance.now(); });
+stage.querySelectorAll('[data-emote]').forEach(b => b.onclick = () => { if (!cur) return; const e = b.dataset.emote; cur.play(e, true); if (e === 'win') { view.tz = .8; view.tfy = 1.0; } else if (view.tz > 1.5) fullView(); view.target = Math.round(view.target / (Math.PI * 2)) * Math.PI * 2 + (e === 'swing' ? .9 : .25); view.idle = performance.now(); });
+
+const clock = new THREE.Clock();
+function tick() {
+  requestAnimationFrame(tick);
+  const dt = Math.min(.05, clock.getDelta());
+  for (const k in PL) stepPlayer(PL[k], dt);
+  if (cur) {
+    if (!window.TUNE && !view.drag && performance.now() - view.idle > 3000) view.target += .0035;
+    view.ry += (view.target - view.ry) * .1; view.zoom += (view.tz - view.zoom) * .1; view.fy += (view.tfy - view.fy) * .1;
+    cur.holder.rotation.y = view.ry;
+    const d = 5.1 / view.zoom; cam1.position.set(0, view.fy + .22 / view.zoom, d); cam1.lookAt(0, view.fy, 0);
+    if (window.TUNE) { const hp = cur.bones.RightHand.getWorldPosition(new THREE.Vector3()); cam1.position.set(hp.x, hp.y + .02, hp.z + TUNE.dist); cam1.lookAt(hp.x, hp.y - TUNE.dy, hp.z); }
+    R1.render(scene1, cam1);
+  }
+  if (TV.on) tvFrame(dt);
+}
+
+// ───────────── Применение формы ─────────────
+function hexOf(key) { const { it, color } = parseKey(key); return colorOf(it, color)?.hex || '#ffffff'; }
+function applyLook(P, look) {
+  const U = P.mesh.material.userData.u;
+  const sh = parseKey(look.shirt), so = parseKey(look.shorts), sf = parseKey(look.shoes);
+  const shHex = hexOf(look.shirt);
+  // фирменные вставки: рукава и полоса в цвете бренда у дорогих футболок
+  const brand = BRANDS[sh.it.bk]?.color || shHex;
+  const pro = ['wr-t3', 'wr-t4', 'wr-t6', 'wr-t7'].includes(sh.it.id);
+  const isWhite = sh.color === 'white';
+  U.uShirtOn.value = 1; U.uShirt.value = lin(shHex);
+  U.uSleeve.value = lin(pro ? (isWhite ? brand : (sh.it.id === 'wr-t7' ? '#ffcc00' : '#ffffff')) : shHex);
+  U.uStripe.value = lin(sh.it.id === 'wr-t7' ? '#ffcc00' : isWhite ? brand : '#ffffff'); U.uStripeOn.value = pro ? 1 : 0;
+  U.uShortsOn.value = 1; U.uShorts.value = lin(hexOf(look.shorts));
+  const fHex = hexOf(look.shoes), wbase = /^w/.test(sf.color);
+  const acc = fHex.toLowerCase() === '#f4f6fa' ? (BRANDS[sf.it.bk]?.color || '#1b1c20') : fHex;
+  U.uSole.value = lin(wbase ? '#e9ecf1' : '#f2f2f2');
+  U.uShoeOn.value = 1; U.uShoe.value = lin(wbase ? '#f6f7fa' : fHex); U.uShoeAcc.value = lin(wbase ? acc : '#f6f7fa');
+  const [kid, kcol] = look.socks.split(':'); const sock = AMMO.socks.items.find(x => x.id === kid);
+  U.uSockOn.value = 1; U.uSock.value = lin(kcol || '#f4f6fa'); U.uHigh.value = sock && sock.h ? 1 : 0;
+  const [bid, bcol] = look.bands.split(':');
+  for (const s of ['Left', 'Right']) { const m = P.acc['band' + s]; if (m) { m.visible = bid !== 'w0'; if (bcol) m.material.color.set(bcol); } }
+  const [hid, hcol] = look.head.split(':');
+  if (P.acc.head) { P.acc.head.visible = hid !== 'h0'; if (hcol) P.acc.head.material.color.set(hcol); }
+  const rk = RACKETS.find(r => r.id === look.racket) || RACKETS[0];
+  if (P.rkId !== rk.id) { attachRacket(P, rk.cfg); P.rkId = rk.id; }
+}
+
+// ───────────── Панели ─────────────
+const panel = $('panel');
+const fmt = n => n.toLocaleString('ru-RU');
+function render() {
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab));
+  $('coins').textContent = fmt(S.coins) + ' PC';
+  const L = S.look[S.who];
+  if (S.tab === 'who') {
+    panel.innerHTML = `<div class="grp"><b>Персонаж</b><div class="who">
+      <button data-who="boy" class="${S.who === 'boy' ? 'on' : ''}"><img id="faceBoy" alt="" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==">Парень</button>
+      <button data-who="girl" class="${S.who === 'girl' ? 'on' : ''}"><img id="faceGirl" alt="" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==">Девушка</button></div></div>
+      <p class="note-in">Сейчас — две базовые модели. Следующий этап — лицо по селфи: нейросеть перенесёт черты лица, причёску и бороду, чтобы игрок был похож на вас.</p>`;
+    if (FACES.boy) $('faceBoy').src = FACES.boy; if (FACES.girl) $('faceGirl').src = FACES.girl;
+  } else if (S.tab === 'wear') {
+    panel.innerHTML = WEAR_SLOTS.map(([type, title]) => `<div class="grp"><b>${title}</b><div class="items">${wearItems(type).map(it => itemRow(type, it, L[type])).join('')}</div></div>`).join('');
+  } else if (S.tab === 'ammo') {
+    panel.innerHTML = Object.entries(AMMO).map(([slot, g]) => `<div class="grp"><b>${g.name}</b><div class="items">${g.items.map(it => ammoRow(slot, it, L[slot])).join('')}</div></div>`).join('');
+  } else {
+    panel.innerHTML = `<div class="grp"><b>Ракетка в руке</b><div class="items">${RACKETS.map(r => `<button class="it ${L.racket === r.id ? 'on' : ''}" data-rk="${r.id}"><span class="it-sw" style="background:#eef2f9">🏓</span><span><b>${r.name}</b><small>${r.desc}</small></span><span class="pr own">${L.racket === r.id ? '✓ в руке' : 'есть'}</span></button>`).join('')}</div></div>
+      <p class="note-in">В приложении в руке будет ракетка, которую игрок собрал в магазине. Здесь — несколько собранных для примера.</p>`;
+  }
+  bind();
+}
+function itemRow(type, it, curKey) {
+  const [cid, ccol] = curKey.split(':'), on = cid === it.id, own = S.owned.has(it.id);
+  const sel = on ? ccol : it.colors[0].key, col = colorOf(it, sel);
+  return `<div><button class="it ${on ? 'on' : ''}" data-type="${type}" data-id="${it.id}" data-color="${sel}"><span class="it-sw" style="background:${col.hex}"></span><span><b>${it.name}</b><small>${it.brand} · ${col.name}</small></span>${own ? `<span class="pr own">${on ? '✓ надето' : 'есть'}</span>` : `<span class="pr">${fmt(priceOf(it, sel))} PC</span>`}</button>
+    ${it.colors.length > 1 ? `<div class="cols">${it.colors.map(c => `<button title="${c.name}" aria-label="${c.name}" data-type="${type}" data-id="${it.id}" data-color="${c.key}" class="${on && ccol === c.key ? 'on' : ''}" style="background:${c.hex}"></button>`).join('')}</div>` : ''}</div>`;
+}
+function ammoRow(slot, it, curKey) {
+  const [cid, ccol] = curKey.split(':'), on = cid === it.id, own = S.owned.has(it.id);
+  const sel = it.colors ? (on && ccol ? ccol : it.colors[0][0]) : '';
+  const cname = it.colors ? (it.colors.find(c => c[0] === sel) || it.colors[0])[1] : '';
+  return `<div><button class="it ${on ? 'on' : ''}" data-slot="${slot}" data-id="${it.id}" data-color="${sel}"><span class="it-sw" style="background:${it.none ? '#eef2f9' : sel}">${it.none ? '∅' : ''}</span><span><b>${it.name}${it.fresh ? '<span class="new">новое</span>' : ''}</b><small>${it.none ? '—' : brandName(it.bk) + ' · ' + cname}</small></span>${own ? `<span class="pr own">${on ? '✓ надето' : 'есть'}</span>` : `<span class="pr">${fmt(it.price)} PC</span>`}</button>
+    ${it.colors && it.colors.length > 1 ? `<div class="cols">${it.colors.map(c => `<button title="${c[1]}" aria-label="${c[1]}" data-slot="${slot}" data-id="${it.id}" data-color="${c[0]}" class="${on && ccol === c[0] ? 'on' : ''}" style="background:${c[0]}"></button>`).join('')}</div>` : ''}</div>`;
+}
+function buy(id, price, name) {
+  if (S.owned.has(id)) return true;
+  if (S.coins < price) { toast('Не хватает PC'); return false; }
+  S.coins -= price; S.owned.add(id); toast(`Куплено: ${name} — надето`); return true;
+}
+function bind() {
+  panel.querySelectorAll('[data-who]').forEach(b => b.onclick = () => { setWho(b.dataset.who); });
+  panel.querySelectorAll('[data-type]').forEach(b => b.onclick = () => {
+    const it = byId(b.dataset.id); if (!buy(it.id, priceOf(it, b.dataset.color), it.name)) return;
+    S.look[S.who][b.dataset.type] = it.id + ':' + b.dataset.color; changed();
+  });
+  panel.querySelectorAll('[data-slot]').forEach(b => b.onclick = () => {
+    const it = AMMO[b.dataset.slot].items.find(x => x.id === b.dataset.id); if (!buy(it.id, it.price, it.name)) return;
+    S.look[S.who][b.dataset.slot] = it.id + (b.dataset.color ? ':' + b.dataset.color : ''); changed();
+    if (b.dataset.slot === 'head' && it.id !== 'h0') faceView();
+  });
+  panel.querySelectorAll('[data-rk]').forEach(b => b.onclick = () => { S.look[S.who].racket = b.dataset.rk; changed(); });
+}
+function changed() { const st = panel.scrollTop; render(); panel.scrollTop = st; if (cur) applyLook(cur, S.look[S.who]); clearTimeout(changed.t); changed.t = setTimeout(shots, 400); }
+function toast(m) { const t = document.createElement('div'); t.className = 'toast'; t.textContent = m; $('phone').appendChild(t); setTimeout(() => t.remove(), 1800); }
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => { S.tab = b.dataset.tab; render(); panel.scrollTop = 0; });
+function setWho(w) {
+  if (!PL[w]) return; S.who = w;
+  if (cur) scene1.remove(cur.holder);
+  cur = PL[w]; scene1.add(cur.holder); applyLook(cur, S.look[w]);
+  $('stname').innerHTML = w === 'boy' ? 'Rustam<small>Золото · 70,3</small>' : 'Alina<small>Серебро · 61,1</small>';
+  render(); fullView();
+}
+
+// ───────────── Снимки: лица для выбора и табло, игрок в профиле ─────────────
+const FACES = {};
+const RS = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+RS.outputEncoding = THREE.sRGBEncoding; RS.toneMapping = THREE.ACESFilmicToneMapping; RS.setPixelRatio(1);
+const sceneS = new THREE.Scene(); lights(sceneS); const camS = new THREE.PerspectiveCamera(24, 1, .05, 50);
+function snap(P, look, kind) {
+  const par = P.holder.parent, rot = P.holder.rotation.y; if (par) par.remove(P.holder);
+  applyLook(P, look); sceneS.add(P.holder); P.holder.rotation.y = kind === 'face' ? .25 : .45;
+  stepPlayer(P, 0); P.holder.updateMatrixWorld(true);
+  if (kind === 'face') { RS.setSize(256, 256); camS.aspect = 1; const hy = headY(P); camS.position.set(0, hy + .02, 1.55); camS.lookAt(0, hy - .02, 0); }
+  else { RS.setSize(360, 480); camS.aspect = .75; camS.position.set(0, 1.0, 6.4); camS.lookAt(0, .93, 0); }
+  camS.updateProjectionMatrix(); RS.render(sceneS, camS);
+  const url = RS.domElement.toDataURL('image/png');
+  sceneS.remove(P.holder); P.holder.rotation.y = rot; if (par) par.add(P.holder);
+  if (P === cur) applyLook(P, S.look[S.who]);
+  return url;
+}
+function shots() {
+  if (!PL.boy || !PL.girl) return;
+  FACES.boy = snap(PL.boy, S.look.boy, 'face'); FACES.girl = snap(PL.girl, S.look.girl, 'face');
+  $('profA').src = snap(PL.boy, S.look.boy, 'full'); $('profB').src = snap(PL.girl, S.look.girl, 'full');
+  $('avA').src = FACES.boy; $('avB').src = FACES.girl;
+  $('profRk').textContent = (RACKETS.find(r => r.id === S.look.boy.racket) || RACKETS[0]).name;
+  const fb = $('faceBoy'), fg = $('faceGirl'); if (fb) fb.src = FACES.boy; if (fg) fg.src = FACES.girl;
+}
+
+// ───────────── Табло: выход игроков ─────────────
+const tvEl = $('tv');
+const R2 = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+R2.outputEncoding = THREE.sRGBEncoding; R2.toneMapping = THREE.ACESFilmicToneMapping; R2.setPixelRatio(Math.min(2, devicePixelRatio));
+tvEl.prepend(R2.domElement);
+const scene2 = new THREE.Scene(), cam2 = new THREE.PerspectiveCamera(30, 16 / 9, .05, 60);
+lights(scene2, true);
+const floorTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d'); const g = x.createRadialGradient(128, 128, 10, 128, 128, 128); g.addColorStop(0, 'rgba(60,110,200,.55)'); g.addColorStop(.45, 'rgba(25,60,130,.35)'); g.addColorStop(1, 'rgba(10,25,60,0)'); x.fillStyle = g; x.fillRect(0, 0, 256, 256); const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t; })();
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(7, 4), new THREE.MeshBasicMaterial({ map: floorTex, transparent: true, depthWrite: false, toneMapped: false })); floor.rotation.x = -Math.PI / 2; scene2.add(floor);
+const ringA = new THREE.Mesh(new THREE.RingGeometry(.55, .6, 64), new THREE.MeshBasicMaterial({ color: '#e63946', transparent: true, opacity: .9 })); ringA.rotation.x = -Math.PI / 2; ringA.position.set(-1.05, .003, 0); scene2.add(ringA);
+const ringB = ringA.clone(); ringB.material = ringA.material.clone(); ringB.material.color.set('#2f7de1'); ringB.position.x = 1.05; scene2.add(ringB);
+const beam = col => { const m = new THREE.Mesh(new THREE.CylinderGeometry(.18, .7, 5, 32, 1, true), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending })); m.position.y = 2.5; return m; };
+const beamA = beam('#ff5964'), beamB = beam('#4f9dff'); beamA.position.x = -1.05; beamB.position.x = 1.05; scene2.add(beamA, beamB);
+const TV = { on: false, t: 0, A: null, B: null, run: 0 };
+function sizeTV() { const w = tvEl.clientWidth, h = tvEl.clientHeight; R2.setSize(w, h, false); cam2.aspect = w / h; cam2.updateProjectionMatrix(); }
+const ease = t => t < 0 ? 0 : t > 1 ? 1 : t * t * (3 - 2 * t);
+const lerpV = (a, b, t) => a.clone().lerp(b, t);
+let tvCam = { pos: new THREE.Vector3(0, 1.1, 6.5), look: new THREE.Vector3(0, 1, 0) };
+function tvFrame(dt) {
+  TV.t += dt; const t = TV.t;
+  for (const P of [TV.A, TV.B]) if (P) stepPlayer(P, dt);
+  // выход: игроки поднимаются из пола в столбе света
+  const rise = (P, t0) => { const k = ease((t - t0) / .9); P.holder.position.y = -1.9 * (1 - k); P.holder.visible = t > t0; return k; };
+  const kA = rise(TV.A, 1.6), kB = rise(TV.B, 2.0);
+  beamA.material.opacity = .16 * Math.sin(Math.min(1, Math.max(0, (t - 1.4) / 1.6)) * Math.PI);
+  beamB.material.opacity = .16 * Math.sin(Math.min(1, Math.max(0, (t - 1.8) / 1.6)) * Math.PI);
+  const W = { pos: new THREE.Vector3(0, 1.05, 6.6), look: new THREE.Vector3(0, .95, 0) };
+  const faceA = { pos: new THREE.Vector3(-1.3, headY(TV.A) + .02, 1.95), look: new THREE.Vector3(-1.62, headY(TV.A) - .05, 0) };
+  const faceB = { pos: new THREE.Vector3(1.3, headY(TV.B) + .02, 1.95), look: new THREE.Vector3(1.62, headY(TV.B) - .05, 0) };
+  let from = W, to = W, k = 0;
+  if (t < 3.6) { from = { pos: new THREE.Vector3(0, 1.3, 8.5), look: W.look }; to = W; k = ease((t - 1.2) / 2.2); }
+  else if (t < 6.0) { from = W; to = faceA; k = ease((t - 3.6) / 1.1); }
+  else if (t < 8.4) { from = faceA; to = faceB; k = ease((t - 6.0) / 1.2); }
+  else { from = faceB; to = W; k = ease((t - 8.4) / 1.2); }
+  cam2.position.copy(lerpV(from.pos, to.pos, k)); cam2.lookAt(lerpV(from.look, to.look, k));
+  R2.render(scene2, cam2);
+}
+async function playTV() {
+  if (!PL.boy || !PL.girl) return;
+  const run = ++TV.run, btn = $('tvPlay'); btn.disabled = true;
+  // свои копии моделей для табло
+  if (!TV.A) { TV.A = await makePlayer('boy'); TV.B = await makePlayer('girl'); TV.A.holder.position.x = -1.05; TV.B.holder.position.x = 1.05; TV.A.holder.rotation.y = .25; TV.B.holder.rotation.y = -.25; scene2.add(TV.A.holder, TV.B.holder); }
+  applyLook(TV.A, S.look.boy); applyLook(TV.B, S.look.girl); TV.A.play('idle'); TV.B.play('idle');
+  const names = $('tvNames'), score = $('tvScore'), cA = $('cardA'), cB = $('cardB'), flash = $('tvFlash'), step = $('tvStep');
+  names.style.opacity = 1; names.classList.remove('in'); score.classList.remove('on'); cA.classList.remove('on'); cB.classList.remove('on');
+  TV.t = 0; TV.on = true; sizeTV();
+  const at = async s => { while (TV.t < s) { if (run !== TV.run) throw 0; await sleep(30); } };
+  try {
+    step.textContent = 'Ники игроков'; await sleep(60); names.classList.add('in');
+    await at(1.4); names.style.opacity = 0; step.textContent = 'Игроки выходят';
+    await at(1.65); flash.style.opacity = .35; await sleep(120); flash.style.opacity = 0;
+    await at(2.6); TV.A.play('swing', true);
+    await at(3.0); TV.B.play('clap', true);
+    await at(4.4); cA.classList.add('on'); step.textContent = 'Rustam: рейтинг и ракетка';
+    await at(6.0); cA.classList.remove('on');
+    await at(6.9); cB.classList.add('on'); step.textContent = 'Alina: рейтинг и ракетка';
+    await at(8.4); cB.classList.remove('on'); step.textContent = 'Общий план';
+    await at(9.0); TV.A.play('win', true); TV.B.play('win', true);
+    await at(10.6); score.classList.add('on'); step.textContent = 'Табло: матч начинается';
+    await at(11.4); TV.on = false; btn.disabled = false; btn.textContent = '↻ Показать ещё раз';
+  } catch (e) { /* перезапуск */ }
+}
+$('tvPlay').onclick = playTV;
+
+// ───────────── Редактор хвата (для подбора вручную) ─────────────
+function tunePanel() {
+  document.body.classList.add('tune');
+  const F = [['tilt', 'Наклон ракетки в ладони', -3.14, 3.14, .01], ['spin', 'Поворот вокруг ручки', -3.14, 3.14, .01], ['pitch', 'Наклон вперёд / назад', -1.6, 1.6, .01],
+    ['grip', 'Сдвиг вдоль ручки, см', -8, 10, .1], ['side', 'Сдвиг вдоль кулака, см', -5, 5, .1], ['ox', 'Сдвиг вбок, см', -5, 5, .1], ['oz', 'Сдвиг к ладони / от ладони, см', -5, 5, .1],
+    ['curl', 'Сжатие пальцев', 0, 1.6, .01], ['fside', 'Пальцы влево — вправо', -1.2, 1.2, .01], ['thumb', 'Сжатие большого пальца', 0, 1.6, .01], ['tside', 'Большой палец влево — вправо', -1.2, 1.2, .01],
+    ['wx', 'Кисть вверх — вниз', -1.2, 1.2, .01], ['wz', 'Кисть влево — вправо', -1.2, 1.2, .01]];
+  const box = document.createElement('div'); box.className = 'card tune-card';
+  box.innerHTML = `<h2>Редактор хвата</h2><p>Двигайте ползунки — ракетка и пальцы меняются сразу. Средний, безымянный и мизинец в этой модели двигаются вместе с указательным — поэтому «сжатие» и «влево-вправо» общие для четырёх пальцев. Кисть вертится мышкой или пальцем по окну слева. Колёсико / «Ближе-дальше» — приблизить.</p>
+    <div class="tune-row"><label>Ближе — дальше</label><input type="range" id="t-dist" min=".25" max="1.6" step=".01" value="${TUNE.dist}"><span id="v-dist">${TUNE.dist}</span></div>
+    ${F.map(([k, l, a, b, st]) => `<div class="tune-row"><label>${l}</label><input type="range" data-k="${k}" min="${a}" max="${b}" step="${st}" value="${RK[k]}"><span id="v-${k}">${(+RK[k]).toFixed(2)}</span></div>`).join('')}
+    <div class="tune-btns"><button class="demo-btn" id="t-copy">📋 Скопировать настройки</button><button class="tune-reset" id="t-reset">Сбросить</button><button class="tune-reset" id="t-swing">Показать удар</button></div>
+    <textarea id="t-out" readonly rows="3"></textarea>`;
+  document.querySelector('.side').prepend(box);
+  const out = () => { const o = {}; ['tilt', 'spin', 'pitch', 'grip', 'side', 'ox', 'oz', 'curl', 'thumb', 'fside', 'tside', 'wx', 'wz'].forEach(k => o[k] = +(+RK[k]).toFixed(2)); $('t-out').value = 'ХВАТ ' + JSON.stringify(o); };
+  const re = () => { if (!cur) return; cur.rkId = null; applyLook(cur, S.look[S.who]); out(); };
+  box.querySelectorAll('input[data-k]').forEach(i => i.oninput = () => { RK[i.dataset.k] = +i.value; $('v-' + i.dataset.k).textContent = (+i.value).toFixed(2); re(); });
+  $('t-dist').oninput = e => { TUNE.dist = +e.target.value; $('v-dist').textContent = TUNE.dist; };
+  stage.addEventListener('wheel', e => { e.preventDefault(); TUNE.dist = Math.max(.25, Math.min(1.6, TUNE.dist * (e.deltaY < 0 ? .92 : 1.08))); $('t-dist').value = TUNE.dist; $('v-dist').textContent = TUNE.dist.toFixed(2); }, { passive: false });
+  const R0 = { ...RK };
+  $('t-reset').onclick = () => { Object.assign(RK, R0); box.querySelectorAll('input[data-k]').forEach(i => { i.value = RK[i.dataset.k]; $('v-' + i.dataset.k).textContent = (+RK[i.dataset.k]).toFixed(2); }); re(); };
+  $('t-swing').onclick = () => cur && cur.play('swing', true);
+  $('t-copy').onclick = async () => { out(); try { await navigator.clipboard.writeText($('t-out').value); $('t-copy').textContent = '✓ Скопировано — пришлите в чат'; } catch { $('t-out').select(); $('t-copy').textContent = 'Выделено — скопируйте и пришлите'; } };
+  out();
+}
+
+// ───────────── Запуск ─────────────
+(async () => {
+  size1(); sizeTV(); addEventListener('resize', () => { size1(); sizeTV(); });
+  requestAnimationFrame(tick);
+  try {
+    const prog = { boy: 0, girl: 0 }, upd = () => $('bar').style.width = ((prog.boy + prog.girl) * 50) + '%';
+    await Promise.all(['boy', 'girl'].map(k => fetchModel(k, p => { prog[k] = p; upd(); })));
+    PL.boy = await makePlayer('boy'); PL.girl = await makePlayer('girl');
+    $('loading').remove(); setWho('boy'); shots();
+    if (window.TUNE) { view.idle = performance.now() + 1e12; view.target = view.ry = -0.6; tunePanel(); }
+    $('tvPlay').disabled = false; $('tvStep').textContent = 'Готово — нажмите, чтобы посмотреть';
+    // первый кадр табло — общий план с игроками
+    TV.A = await makePlayer('boy'); TV.B = await makePlayer('girl');
+    TV.A.holder.position.x = -1.05; TV.B.holder.position.x = 1.05; TV.A.holder.rotation.y = .25; TV.B.holder.rotation.y = -.25;
+    scene2.add(TV.A.holder, TV.B.holder); applyLook(TV.A, S.look.boy); applyLook(TV.B, S.look.girl);
+    TV.t = 9.6; tvFrame(0); TV.t = 0;
+    window.__dbg = { PL, TV, S, applyLook, RK, attachRacket, buildSwing, view, stepPlayer, GRIP, buildReady };
+  } catch (e) {
+    console.error(e); $('loading').innerHTML = '<div class="err">Не удалось загрузить модели<br><small>' + (e.message || e) + '</small></div>';
+  }
+})();
+render();
+})();
+</script>
+
+</body></html>
