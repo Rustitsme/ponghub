@@ -40,10 +40,10 @@ export function leagueDelta(S, winnerR, loserR, free) {
 
 export const LEAGUES = [
   { min: -Infinity, name: 'Бронза', cls: 'bronze' },
-  { min: 45, name: 'Серебро', cls: 'silver' },
-  { min: 55, name: 'Золото', cls: 'gold' },
-  { min: 70, name: 'Платина', cls: 'platinum' },
-  { min: 90, name: 'Алмаз', cls: 'diamond' },
+  { min: 55, name: 'Серебро', cls: 'silver' },
+  { min: 70, name: 'Золото', cls: 'gold' },
+  { min: 95, name: 'Платина', cls: 'platinum' },
+  { min: 120, name: 'Алмаз', cls: 'diamond' },
 ];
 
 export function leagueOf(r) {
