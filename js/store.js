@@ -261,6 +261,7 @@ class SupaStore {
   buyItem(key) { return this.rpc('buy_item', { cid: this.cid, p_key: key }); }
   equipItem(slot, key) { return this.rpc('equip_item', { p_slot: slot, p_key: key }); }
   claimDaily() { return this.rpc('claim_daily', { cid: this.cid }); }
+  sellItem(key) { return this.rpc('sell_item', { cid: this.cid, p_key: key }); }
   async claimLeague(league, item) {
     const { data, error } = await this.sb.functions.invoke('notify', { body: { action: 'league_reward', cid: this.cid, league, item } });
     if (error) { let msg = 'Не удалось получить награду'; try { const j = await error.context?.json(); if (j?.error) msg = j.error; } catch { /* */ } throw new Error(msg); }
@@ -636,7 +637,7 @@ class LocalStore {
     const day = !last ? 1 : last.day === today ? last.streak : last.day === yest ? (last.streak >= 7 ? 1 : last.streak + 1) : 1;
     const balance = await this.rpc('ensure_wallet');
     this.save();
-    return JSON.parse(JSON.stringify({ items: d.user_items.filter(x => x.user_id === me).map(x => x.item_key), loadout: p.loadout, balance, streak: { day, claimed: last?.day === today }, rewards: Object.fromEntries(d.league_rewards.filter(x => x.user_id === me).map(x => [x.league, x.item_key])) }));
+    return JSON.parse(JSON.stringify({ items: d.user_items.filter(x => x.user_id === me).map(x => x.item_key), paid: Object.fromEntries(d.user_items.filter(x => x.user_id === me).map(x => [x.item_key, x.source === 'shop' ? x.price || 0 : 0])), loadout: p.loadout, balance, streak: { day, claimed: last?.day === today }, rewards: Object.fromEntries(d.league_rewards.filter(x => x.user_id === me).map(x => [x.league, x.item_key])) }));
   }
   async buyItem(key) {
     const d = this.shopDb(), me = this.db.session;
@@ -667,6 +668,16 @@ class LocalStore {
     await this.rpc('ensure_wallet');
     d.daily.push({ user_id: me, day: today, streak: n, amount: arr[n - 1] }); this.tx(me, arr[n - 1], 'streak'); this.save();
     return { streak: n, amount: arr[n - 1], balance: this.coinBal(me) };
+  }
+  async sellItem(key) {
+    const d = this.shopDb(), me = this.db.session, p = d.profiles.find(x => x.id === me);
+    const ui = d.user_items.find(x => x.user_id === me && x.item_key === key);
+    if (!ui) throw new Error('Этой вещи у вас нет');
+    if (ui.source !== 'shop' || !ui.price) throw new Error('Стартовое основание и награды продать нельзя');
+    if (Object.values(p.loadout || {}).includes(key)) throw new Error('Сначала снимите эту деталь с ракетки');
+    const back = Math.round(ui.price * 0.3);
+    d.user_items = d.user_items.filter(x => x !== ui); this.tx(me, back, 'sell'); this.save();
+    return { amount: back, balance: this.coinBal(me) };
   }
   async claimLeague(league, item) {
     const d = this.shopDb(), me = this.db.session;
@@ -983,5 +994,5 @@ function seedDemo(opts = {}) {
     club_members.push({ club_id: 'demo-club', user_id: p.id, role: p.role === 'admin' ? 'owner' : p.role === 'editor' ? 'helper' : 'player', status: p.status === 'pending' ? 'pending' : 'active', initial_rating: p.initial_rating });
   });
   club_members.push({ club_id: 'demo-club2', user_id: 'demo-4', role: 'player', status: 'active' });
-  return { users, profiles, matches: [...matches, ...xm], tournaments, events, challenges, audit: [], settings: {}, clubs, invites, club_members, platform: { migration_done: true, features: { shop: 'founder' } }, session: null };
+  return { users, profiles, matches: [...matches, ...xm], tournaments, events, challenges, audit: [], settings: {}, clubs, invites, club_members, platform: { migration_done: true, features: { shop: 'founder', resale: 'founder' } }, session: null };
 }

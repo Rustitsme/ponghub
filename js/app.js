@@ -1799,7 +1799,8 @@ async function renderFounder() {
       ${!st.migration_done && !legacyRows && clubs.length ? '<section class="card"><p class="muted small">Истории до клубов нет — переносить нечего.</p></section>' : ''}
       <section class="card stack"><div class="card-h"><h3>🚀 Обновления</h3></div>
         <p class="muted small">Новые функции сначала видны только вам. Проверьте их — и включите для всех.</p>
-        ${[['shop', '🛍️ Магазин и новая экономика', 'Магазин, моя ракетка, бонус дня, +15 за матч, призы турниров, награды за лиги. При включении для всех: балансы × 0,3, старт 300 PC, ставка до 300, еженедельные +100 отменяются.']].map(([k, t, d]) => {
+        ${[['shop', '🛍️ Магазин и новая экономика', 'Магазин, моя ракетка, бонус дня, +15 за матч, призы турниров, награды за лиги. При включении для всех: балансы × 0,3, старт 300 PC, ставка до 300, еженедельные +100 отменяются.'],
+           ['resale', '♻️ Продажа вещей', 'Купленное в магазине можно продать обратно за 30% от цены покупки. Стартовое основание и награды не продаются.']].map(([k, t, d]) => {
           const mode = S.ctx?.platform?.features?.[k] ?? 'all';
           return `<div class="pl-row"><div class="pl-top"><span class="rn"><b>${t}</b><small class="muted">${d}</small></span></div>
             <div class="pl-ctl"><span class="badge ${mode === 'all' ? 'ok' : 'warn'}">${mode === 'all' ? 'включено у всех' : 'только у вас'}</span>
@@ -2076,15 +2077,23 @@ function openShopItem(it, color, mode = 'buy') {
       return;
     }
     if (own) {
-      act.innerHTML = can ? `<button class="btn primary full" id="sh-eq">Поставить на ракетку</button>` : '<button class="btn full" disabled>Уже у вас</button>';
+      const paid = S.shop.paid?.[k] || 0, back = Math.round(paid * 0.3), worn = Object.values(S.shop.loadout || {}).includes(k);
+      act.innerHTML = (can ? `<button class="btn primary full" id="sh-eq">${worn ? 'Уже на ракетке' : 'Поставить на ракетку'}</button>` : '<button class="btn full" disabled>Уже у вас</button>')
+        + (feature('resale') && paid > 0 ? `<button class="btn ghost full" id="sh-sell">Продать за ${fmtC(back)} PC <small class="muted">(30% от ${fmtC(paid)})</small></button>` : '');
       act.querySelector('#sh-eq')?.addEventListener('click', () => askEquip(it, k, act));
+      act.querySelector('#sh-sell')?.addEventListener('click', () => {
+        if (worn) { toast('Сначала снимите эту деталь с ракетки', 'err'); return; }
+        act.innerHTML = `<p class="small">Продать <b>${esc(it.name)}</b> за <b>${fmtC(back)} PC</b>? Вещь исчезнет из ваших.</p><div class="row-btns"><button class="btn ghost" id="sl-no">Отмена</button><button class="btn danger" id="sl-yes">Продать</button></div>`;
+        act.querySelector('#sl-no').onclick = () => draw();
+        act.querySelector('#sl-yes').onclick = e => busy(e.currentTarget, async () => { const r = await S.store.sellItem(k); await ensureShop(true); closeModal(); render(); toast(`Продано: +${fmtC(r.amount)} PC`); });
+      });
     } else {
       act.innerHTML = `<button class="btn primary full" id="sh-buy" ${S.coins < price ? 'disabled' : ''}>${S.coins < price ? `Не хватает ${fmtC(price - S.coins)} PC` : `Купить за ${fmtC(price)} PC`}</button>`;
       act.querySelector('#sh-buy').addEventListener('click', () => {
         act.innerHTML = `<p class="muted small">Списать <b>${fmtC(price)} PC</b>? Останется ${fmtC(S.coins - price)} PC.</p><div class="row-btns"><button class="btn ghost" id="sh-no">Отмена</button><button class="btn primary" id="sh-yes">Купить</button></div>`;
         act.querySelector('#sh-no').onclick = () => draw();
         act.querySelector('#sh-yes').onclick = e => busy(e.currentTarget, async () => {
-          S.coins = await S.store.buyItem(k); S.shop.items.push(k); S.shop.balance = S.coins;
+          S.coins = await S.store.buyItem(k); S.shop.items.push(k); S.shop.balance = S.coins; (S.shop.paid = S.shop.paid || {})[k] = price;
           act.innerHTML = `<p class="small">🎉 <b>${esc(it.name)}</b> теперь ваша.</p>${can ? '<button class="btn primary full" id="sh-eq">Поставить на ракетку</button>' : '<button class="btn full" id="sh-ok">Отлично</button>'}`;
           act.querySelector('#sh-eq')?.addEventListener('click', () => askEquip(it, k, act));
           act.querySelector('#sh-ok')?.addEventListener('click', () => { closeModal(); render(); });
