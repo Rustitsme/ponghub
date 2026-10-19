@@ -10,6 +10,7 @@ const LS = 'ponghub_tv_token';
 const POLL = 2000;            // как часто спрашиваем текущую игру
 const FULL_EVERY = 60000;     // как часто обновляем рейтинг и сетку
 const RESULT_SHOW = 40;       // сколько секунд показываем итоги матча
+const RESULT_TOUR = 12;       // турнирный матч: итог 12 секунд, дальше — сетка турнира
 const ROTATE = 15000;         // несколько игр одновременно — меняем раз в 15 секунд
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -326,7 +327,9 @@ export async function startTV(root, store) {
       if (Date.now() - T.rotAt > ROTATE) { T.rot++; T.rotAt = Date.now(); }
       html = liveScreen(live[T.rot % live.length]);
     } else if (d.recent && (Date.parse(d.now) - Date.parse(d.recent.updated_at)) / 1000 < RESULT_SHOW) {
-      html = resultScreen(d.recent);
+      // турнирный матч: короткий итог, затем сетка турнира с подсвеченной следующей парой
+      const age = (Date.parse(d.now) - Date.parse(d.recent.updated_at)) / 1000;
+      html = d.recent.tournament_id && age > RESULT_TOUR ? breakScreen() : resultScreen(d.recent);
     } else html = breakScreen();
     // экран сменился — плавно
     const kind = live.length ? 'live' : d.recent && html.includes('tvx-res') ? 'res' : 'brk';

@@ -1080,26 +1080,28 @@ function viewLive(r) {
   const log = liveLog(l);
   const g = replayLive(log, l.best_of, l.points_to, l.first_server);
   const scorer = l.scorer_id === S.me.id;
+  // до первого очка счёт не начинается, пока не выбрали, кто подаёт
+  const needServe = !log.length && !(S.served || {})[l.id];
   const t = l.tournament_id ? tById(l.tournament_id) : null;
   const panel = side => {
     const ids = sideIds(l, side);
     const flag = g.matchPoint[side] ? 'Матчпоинт' : '';
     return `<div class="lv-panel p${side} ${g.winner === side ? 'won' : ''}">
-      <div class="lv-who">${ids.map(id => ava(P(id), 'sm')).join('')}<b>${esc(sideName(l, side))}</b>${g.winner === null && g.server === side && log.length ? '<span class="lv-serve" title="Подаёт">🏓</span>' : ''}</div>
+      <div class="lv-who">${ids.map(id => ava(P(id), 'sm')).join('')}<b>${esc(sideName(l, side))}</b>${g.winner === null && g.server === side && !needServe ? '<span class="lv-serve" title="Подаёт">🏓</span>' : ''}</div>
       <div class="lv-pts">${g.cur[side]}</div>
       <div class="lv-sub"><span>партии: <b>${g.won[side]}</b></span>${flag ? `<span class="lv-flag">${flag}</span>` : ''}</div>
-      ${scorer && g.winner === null ? `<div class="lv-btns"><button class="btn lv-minus" data-act="live-minus" data-id="${l.id}" data-side="${side}" aria-label="Минус очко">−</button><button class="btn lv-plus" data-act="live-pt" data-id="${l.id}" data-side="${side}">+1</button></div>` : ''}
+      ${scorer && g.winner === null && !needServe ? `<div class="lv-btns"><button class="btn lv-minus" data-act="live-minus" data-id="${l.id}" data-side="${side}" aria-label="Минус очко">−</button><button class="btn lv-plus" data-act="live-pt" data-id="${l.id}" data-side="${side}">+1</button></div>` : ''}
     </div>`;
   };
   const sets = g.sets.map((x, i) => `<span>П${i + 1} <b>${x[0]}:${x[1]}</b></span>`).join('');
   const ev = S.data.predEvents.find(e => e.source_id === l.id);
   const imPlayer = [l.player1_id, l.player2_id, l.player3_id, l.player4_id].includes(S.me.id);
   const myP = ev && S.data.predictions.find(p => p.event_id === ev.id);
-  const predBar = !ev ? '' : `<div class="card lv-pred">🎯 <span>${myP ? `Ваш прогноз: <b>${esc(sideName(l, myP.side - 1))}</b> · ${myP.stake} PC × ${myP.odds}` : ev.status === 'open' ? `Прогнозы открыты до первого очка · уже ${ev.bets_count}` : `Прогнозов: ${ev.bets_count} · приём закрыт`}</span>
+  const predBar = !ev ? '' : `<div class="card lv-pred">🎯 <span>${myP ? `Ваш прогноз: <b>${esc(sideName(l, myP.side - 1))}</b> · ${myP.stake} PC × ${myP.odds}` : ev.status === 'open' ? `Прогнозы открыты · коэффициенты меняются по ходу игры · уже ${ev.bets_count}` : `Прогнозов: ${ev.bets_count} · приём закрыт`}</span>
     ${!myP && !imPlayer && ev.status === 'open' ? `<button class="btn sm primary" data-act="predict" data-id="${ev.id}">×${ev.odds1} / ×${ev.odds2}</button>` : ''}</div>`;
   return `<div class="page-h"><a href="#/home" class="back">← Главная</a><span class="live">● LIVE</span></div>
     <div class="lv-meta">${l.kind === 'doubles' ? 'Пары 2×2' : t ? '🏆 ' + esc(t.name) : l.type === 'tournament' ? 'Турнирный матч' : 'Свободная игра'} · до ${g.need} ${plural(g.need, 'победы', 'побед', 'побед')} · партия до ${l.points_to}${g.deuce && g.winner === null ? ' · <b>баланс</b>' : ''}</div>
-    ${scorer && !log.length ? `<div class="card lv-first"><b>Кто подаёт первым?</b><div class="seg">${[0, 1].map(sd => `<button class="${l.first_server === sd ? 'on' : ''}" data-act="live-first" data-id="${l.id}" data-side="${sd}">${esc(sideName(l, sd))}</button>`).join('')}</div></div>` : ''}
+    ${scorer && needServe ? `<div class="card lv-first"><b>🏓 Кто подаёт первым?</b><span class="muted small">Разыграйте подачу и нажмите на того, кто начинает</span><div class="lv-first-btns">${[0, 1].map(sd => `<button class="lv-first-b p${sd}" data-act="live-first" data-id="${l.id}" data-side="${sd}">${sideIds(l, sd).map(id => ava(P(id), 'sm')).join('')}<b>${esc(sideName(l, sd))}</b></button>`).join('')}</div></div>` : ''}
     ${predBar}
     <div class="lv-board">${panel(0)}<div class="lv-sets-score">${g.won[0]}<i>:</i>${g.won[1]}</div>${panel(1)}</div>
     ${sets ? `<div class="lv-sets">${sets}</div>` : ''}
@@ -2985,7 +2987,7 @@ const ACT = {
     const i = log.lastIndexOf(side); log.splice(i, 1); pushLive(l, log);
   },
   'live-undo': el => { const l = S.data.live.find(x => x.id === el.dataset.id); const log = liveLog(l); if (log.length) pushLive(l, log.slice(0, -1)); },
-  'live-first': el => busy(el, async () => { await S.store.update('live_matches', el.dataset.id, { first_server: +el.dataset.side }); await refresh(); }),
+  'live-first': el => busy(el, async () => { await S.store.update('live_matches', el.dataset.id, { first_server: +el.dataset.side }); (S.served = S.served || {})[el.dataset.id] = true; await refresh(); }),
   'live-take': el => busy(el, async () => { await S.store.update('live_matches', el.dataset.id, { scorer_id: S.me.id }); await refresh(); toast('Теперь счёт ведёте вы'); }),
   'live-cancel': async el => {
     if (!(await confirmDialog('Отменить игру? Счёт не сохранится.', 'Отменить игру', true))) return;
