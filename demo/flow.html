@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="robots" content="noindex">
+<base href="../">
+<title>Табло PongHub — от кода до победы</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<style>
+/* Демо табло без входа: настоящий код табло (js/tv.js) получает заранее расписанный матч вместо базы. */
+body { margin: 0; background: #050b17; }
+#cap { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); z-index: 200; max-width: 92vw; padding: 10px 18px; border-radius: 14px; background: rgba(255,255,255,.95); color: #10203d; font: 600 15px/1.35 Inter, sans-serif; box-shadow: 0 8px 30px rgba(0,0,0,.35); text-align: center; transition: opacity .4s; }
+#cap b { color: #e63946; }
+#go { position: fixed; inset: 0; z-index: 300; display: grid; place-items: center; background: rgba(5,11,23,.92); color: #fff; font: 600 16px Inter, sans-serif; text-align: center; }
+#go button { margin-top: 18px; padding: 16px 30px; border: 0; border-radius: 999px; background: #e63946; color: #fff; font: 800 20px Inter, sans-serif; cursor: pointer; }
+</style></head>
+<body><div id="app"></div><div id="cap" style="opacity:0"></div>
+<div id="go"><div><div style="font:800 34px 'Barlow Condensed',sans-serif">ТАБЛО PONGHUB · ДЕМО</div><p>Матч 1 на 1 от кода табло до победы — около 1,5 минуты.<br>Включите звук: будет голос диктора.<br><small style="opacity:.7">Лучше смотреть на компьютере или повернуть телефон.</small></p><button id="start">▶ Смотреть со звуком</button></div></div>
+<script type="module">
+import { startTV } from './js/tv.js';
+import { unlock } from './js/voice.js';
+
+const A = 'demo-a', B = 'demo-b', t0 = () => Date.now();
+const players = [
+  { id: A, nickname: 'Рустам', avatar: '🔥', color: '#e63946', photo_url: null, initial_rating: 52, created_at: '2026-01-01', status: 'approved' },
+  { id: B, nickname: 'Мухаммет', avatar: '⚡', color: '#2f7de1', photo_url: null, initial_rating: 47, created_at: '2026-01-01', status: 'approved' },
+];
+// счёт по шагам: 0 — очко Рустаму, 1 — Мухаммету
+const P = (a, b) => [...Array(a).fill(0), ...Array(b).fill(1)];
+const set1 = P(8, 6), steps = [
+  set1, [...set1, 0], [...set1, 0, 0], [...set1, 0, 0, 1], [...set1, 0, 0, 1, 1], [...set1, 0, 0, 1, 1, 1],
+  [...set1, 0, 0, 1, 1, 1, 1], [...set1, 0, 0, 1, 1, 1, 1, 0], [...set1, 0, 0, 1, 1, 1, 1, 0, 0],
+];
+const after1 = steps[steps.length - 1], set2 = P(9, 8);
+steps.push([...after1, ...set2], [...after1, ...set2, 0], [...after1, ...set2, 0, 0]);
+
+const CAPS = [
+  [0, '1. Включили табло — оно показывает <b>код</b>. Владелец вводит его в приложении: Профиль → Управление клубом → Табло'],
+  [7, '2. Табло привязано к клубу: <b>перерыв</b> — последние игры и рейтинг'],
+  [13, '3. На телефоне нажали <b>«Начать матч»</b> Рустам — Мухаммет → <b>выход игроков</b>'],
+  [31, '4. На телефоне считают <b>очки</b> — табло и диктор сразу подхватывают'],
+  [0, ''],
+];
+let T = null, stage = 'pair', step = -1, stepAt = 0, endAt = 0;
+const live = log => ({ id: 'demo-live', club_id: 'c', player1_id: A, player2_id: B, kind: 'singles', type: 'free', best_of: 3, points_to: 11, first_server: 0, scoring: true, log, tournament_id: null, created_at: new Date(T).toISOString(), updated_at: new Date().toISOString() });
+const store = {
+  async rpc(name) {
+    const now = new Date().toISOString(), el = (t0() - T) / 1000;
+    if (name === 'screen_start') return { token: 'demo', code: '482913' };
+    if (name === 'screen_avatars') return { grip: {}, players: [{ id: A, avatar3d: 'boy', loadout: { shirt: 'wr-t7:red', shorts: 'wr-s5:red', shoes: 'wr-f5:wr', head: 'wr-h1:red', blade: 'jp-b5:FL' }, on: true }, { id: B, avatar3d: 'boy', loadout: { shirt: 'wr-t3:blue', shorts: 'wr-s2:blue', shoes: 'wr-f2:wb', socks: 'wr-k2:white', wrist: 'wr-w1:blue', blade: 'eu-b4:FL' }, on: true }] };
+    if (el < 7) return { status: 'pairing', code: '482913' };
+    const base = { status: 'ok', now, screen: { id: 's', name: 'Табло', theme: 'night' }, club: { id: 'c', name: 'Пинг-понг в коворкинге', code: 'PONG' }, preds: [], next: [], settings: {}, players,
+      matches: [{ id: 'm0', played_at: '2026-10-18T18:00:00Z', created_at: '2026-10-18T18:00:00Z', type: 'free', kind: 'singles', player1_id: B, player2_id: A, sets: [[11, 8], [9, 11], [11, 9]], sets1: 2, sets2: 1, winner_id: B, rated: true, best_of: 3, points_to: 11, status: 'approved' }],
+      tournaments: [] };
+    if (el < 13) return { ...base, live: [], recent: null };
+    // матч начался: сначала пустой счёт (выход), с 31-й секунды — очки каждые 3 секунды
+    if (el >= 31 && step < steps.length - 1 && t0() - stepAt > 3000) { step++; stepAt = t0(); }
+    if (step < steps.length - 1 || t0() - stepAt < 3000) return { ...base, live: [live(step < 0 ? [] : steps[step])], recent: null };
+    if (!endAt) endAt = t0();
+    const fin = { ...live(steps[steps.length - 1]), updated_at: new Date(endAt).toISOString() };
+    return { ...base, live: [], recent: fin, recent_match: { id: 'm1', status: 'pending', sets: [[12, 10], [11, 8]], sets1: 2, sets2: 0 } };
+  },
+};
+function caption() {
+  const el = (t0() - T) / 1000, cap = document.getElementById('cap');
+  let txt = CAPS.filter(c => c[1] && el >= c[0]).pop()?.[1] || '';
+  if (endAt) txt = (t0() - endAt) / 1000 < 9 ? '5. Последнее очко → <b>жест победителя</b> и фанфары' : '6. Итоги матча. Рейтинг обновится после подтверждения. <a href="demo/flow.html" style="color:#e63946">Смотреть снова</a>';
+  cap.innerHTML = txt; cap.style.opacity = txt ? 1 : 0;
+}
+document.getElementById('start').onclick = () => {
+  unlock(); document.getElementById('go').remove(); T = t0();
+  // настоящее табло на этом же устройстве не должно потерять привязку: прячем его ключ и возвращаем через 3 секунды
+  const K = 'ponghub_tv_token'; let old = null; try { old = localStorage.getItem(K); localStorage.removeItem(K); } catch { /* */ }
+  startTV(document.getElementById('app'), store);
+  setTimeout(() => { try { old ? localStorage.setItem(K, old) : localStorage.removeItem(K); } catch { /* */ } }, 3000);
+  setInterval(caption, 500);
+};
+</script></body></html>
