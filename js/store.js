@@ -111,7 +111,8 @@ class SupaStore {
     const platform = Object.fromEntries((pl.data || []).map(r => [r.key, r.value]));
     const clubs = (mem.data || []).filter(m => m.club && ['active', 'pending'].includes(m.status))
       .map(m => ({ ...m.club, my_role: m.role, my_status: m.status }));
-    return { me: me.data, clubs, platform };
+    // нововведения, открытые мне (тестировщикам — раньше всех)
+    return { me: me.data, clubs, platform, myFeatures: mf.error ? [] : (mf.data || []) };
   }
 
   setClub(club) { this.club = club || null; this.cid = club?.id || null; }
