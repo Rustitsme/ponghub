@@ -165,6 +165,29 @@ function thumb(it, color, big = false) {
     x.strokeStyle = light(col.hex) ? '#9aa4b2' : 'rgba(255,255,255,.5)'; x.lineWidth = 1.4;
     for (let i = 0; i < 4; i++) { x.beginPath(); x.moveTo(-18 + i * 6, -22 + i * 2); x.lineTo(-12 + i * 6, -16 + i * 2); x.stroke(); }
     emblem(x, it.bk, -30, -4, 10, light(col.hex) ? BRANDS[it.bk]?.color : '#fff');
+  } else if (t === 'socks') {
+    // пара носков: высокие гетры или короткие
+    x.translate(64, 64); const acc = BRANDS[it.bk]?.color || '#333', top = it.high ? -44 : -14;
+    for (const [dx, rot] of [[-14, -.12], [14, .1]]) {
+      x.save(); x.translate(dx, 0); x.rotate(rot); x.shadowColor = 'rgba(10,30,70,.25)'; x.shadowBlur = 8; x.shadowOffsetY = 4;
+      x.fillStyle = col.hex; x.beginPath(); x.moveTo(-10, top); x.lineTo(10, top); x.lineTo(10, 22); x.quadraticCurveTo(30, 22, 30, 34); x.quadraticCurveTo(30, 44, 14, 44); x.lineTo(-4, 44); x.quadraticCurveTo(-12, 44, -10, 30); x.closePath(); x.fill();
+      x.shadowColor = 'transparent';
+      { const g = x.createLinearGradient(-10, 0, 30, 0); g.addColorStop(0, 'rgba(255,255,255,.2)'); g.addColorStop(1, 'rgba(0,0,0,.18)'); x.fillStyle = g; x.fill(); }
+      x.fillStyle = 'rgba(0,0,0,.12)'; x.fillRect(-10, top, 20, 5);
+      x.fillStyle = light(col.hex) ? acc : 'rgba(255,255,255,.85)'; x.fillRect(-10, top + 8, 20, 3); if (it.high) x.fillRect(-10, top + 14, 20, 3);
+      x.restore();
+    }
+  } else if (t === 'wrist' || t === 'head') {
+    // махровое кольцо в перспективе
+    x.translate(64, 66); const head = t === 'head', rx = head ? 46 : 30, ry = head ? 16 : 13, hh = head ? 18 : 26, acc = BRANDS[it.bk]?.color || '#333';
+    const g = x.createLinearGradient(-rx, 0, rx, 0); g.addColorStop(0, shade(col.hex, -40)); g.addColorStop(.4, shade(col.hex, 25)); g.addColorStop(1, shade(col.hex, -55));
+    x.shadowColor = 'rgba(10,30,70,.25)'; x.shadowBlur = 9; x.shadowOffsetY = 5;
+    x.fillStyle = g; x.beginPath(); x.ellipse(0, hh / 2, rx, ry, 0, 0, Math.PI); x.lineTo(-rx, -hh / 2); x.ellipse(0, -hh / 2, rx, ry, 0, Math.PI, 0, true); x.closePath(); x.fill();
+    x.shadowColor = 'transparent';
+    x.fillStyle = shade(col.hex, -70); x.beginPath(); x.ellipse(0, -hh / 2, rx * .86, ry * .72, 0, 0, 7); x.fill();
+    x.strokeStyle = shade(col.hex, 30); x.lineWidth = 2; x.beginPath(); x.ellipse(0, -hh / 2, rx, ry, 0, 0, 7); x.stroke();
+    x.strokeStyle = 'rgba(0,0,0,.08)'; x.lineWidth = 1; for (let i = -rx + 4; i < rx; i += 4) { x.beginPath(); x.moveTo(i, -hh / 2 + Math.sqrt(Math.max(0, 1 - (i / rx) ** 2)) * ry); x.lineTo(i, hh / 2 + Math.sqrt(Math.max(0, 1 - (i / rx) ** 2)) * ry); x.stroke(); }
+    emblem(x, it.bk, 0, ry * .75, head ? 13 : 12, light(col.hex) ? acc : '#fff');
   }
   return cv;
 }

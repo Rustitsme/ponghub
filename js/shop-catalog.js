@@ -21,7 +21,7 @@ const brandName = bk => BRANDS[bk]?.name || bk;
 
 // ───────────── Каталог ─────────────
 const RG = { cn: 'Китай', eu: 'Европа', jp: 'Япония', acc: 'Аксессуары', wear: 'Форма', rw: 'Награды' };
-const RGSUB = { cn: 'Липкие накладки и мощный накат', eu: 'Германия и Швеция: тензоры и контроль', jp: 'Легенды японских мастеров', acc: 'Обмотки, лента, мячи, чехлы', wear: 'Футболки, шорты, кроссовки', rw: 'Бесплатно за достижения' };
+const RGSUB = { cn: 'Липкие накладки и мощный накат', eu: 'Германия и Швеция: тензоры и контроль', jp: 'Легенды японских мастеров', acc: 'Обмотки, лента, мячи, чехлы', wear: 'Футболки, шорты, кроссовки, носки, напульсники, повязки', rw: 'Бесплатно за достижения' };
 const C = (key, name, hex, extra = 0) => ({ key, name, hex, extra });
 const RUBBER_COLORS = [C('red', 'красная', '#d62839'), C('black', 'чёрная', '#18191d'), C('blue', 'синяя', '#1f5fc4', 60)];
 // s: скорость, w: вращение, c: контроль (из 10)
@@ -93,6 +93,12 @@ const ITEMS = [
   { id: 'wr-f3', region: 'wear', type: 'shoes', bk: 'raijin', name: 'Кроссовки R-7', price: 3800, style: 'atk', desc: 'Японский дизайн, низкий профиль.', colors: [C('white', 'белые', '#f4f6fa'), C('purple', 'фиолетовые', '#6a1b9a')], accent: ['#6a1b9a', '#ffd23f'] },
   { id: 'wr-f4', region: 'wear', type: 'shoes', bk: 'aozora', name: 'Кроссовки Sky Pro', price: 5200, style: 'top', desc: 'Любимые у профессионалов.', colors: [C('wb', 'бело-синие', '#f4f6fa'), C('bg', 'чёрно-золотые', '#1b1c20', 500)], accent: ['#1f5fc4', '#d4af37'] },
   { id: 'wr-f5', region: 'wear', type: 'shoes', bk: 'tsubame', name: 'Кроссовки Phoenix', price: 6300, style: 'top', desc: 'Топовая модель — мечта каждого игрока.', colors: [C('wr', 'бело-красные', '#f4f6fa'), C('neon', 'чёрные неон', '#1b1c20', 500)], accent: ['#d62839', '#c6ff1a'] },
+  { id: 'wr-k1', region: 'wear', type: 'socks', bk: 'qinglan', name: 'Носки Basic', price: 250, style: 'uni', desc: 'Короткие спортивные носки.', colors: [C('white', 'белые', '#f4f6fa'), C('black', 'чёрные', '#1b1c20')] },
+  { id: 'wr-k2', region: 'wear', type: 'socks', bk: 'rhein', name: 'Гетры Team', price: 450, style: 'atk', high: true, desc: 'Высокие, почти до колена — как у профи.', colors: [C('white', 'белые', '#f4f6fa'), C('black', 'чёрные', '#1b1c20'), C('blue', 'синие', '#1f5fc4'), C('red', 'красные', '#d62839')] },
+  { id: 'wr-w1', region: 'wear', type: 'wrist', bk: 'baima', name: 'Напульсники', price: 300, style: 'uni', desc: 'Пара на обе руки: пот не мешает хвату.', colors: [C('white', 'белые', '#f4f6fa'), C('black', 'чёрные', '#1b1c20'), C('red', 'красные', '#d62839'), C('blue', 'синие', '#1f5fc4')] },
+  { id: 'wr-w2', region: 'wear', type: 'wrist', bk: 'tsubame', name: 'Напульсники Pro', price: 550, style: 'top', desc: 'Плотная махра и эмблема бренда.', colors: [C('red', 'красные', '#d62839'), C('navy', 'тёмно-синие', '#14306b'), C('gold', 'золотые · лимит', '#d4af37', 200)] },
+  { id: 'wr-h1', region: 'wear', type: 'head', bk: 'longwei', name: 'Повязка', price: 350, style: 'uni', desc: 'Держит волосы и пот — взгляд только на мяч.', colors: [C('red', 'красная', '#d62839'), C('black', 'чёрная', '#1b1c20'), C('white', 'белая', '#f4f6fa'), C('blue', 'синяя', '#1f5fc4')] },
+  { id: 'wr-h2', region: 'wear', type: 'head', bk: 'falkner', name: 'Повязка Blaze', price: 600, style: 'top', desc: 'Яркая, заметна с другого конца зала.', colors: [C('orange', 'оранжевая', '#ff6b1a'), C('lime', 'салатовая', '#9be31a'), C('pink', 'розовая', '#ff4f9a')] },
 ];
 // внутренние характеристики: основания — вес, толщина, класс; накладки — жёсткость, дуга, липкость, вес
 const BX = { 'cn-b1': [85, 6.0, 'ALL'], 'cn-b2': [80, 5.6, 'ALL+'], 'cn-b3': [88, 6.2, 'OFF−'], 'cn-b4': [86, 5.8, 'OFF'], 'cn-b5': [90, 5.9, 'OFF+'],

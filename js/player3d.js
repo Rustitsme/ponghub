@@ -307,7 +307,12 @@ function applyLook(P, lo) {
     U.uSole.value = lin(wbase ? '#e9ecf1' : '#f2f2f2');
     U.uShoeOn.value = 1; U.uShoe.value = lin(wbase ? '#f6f7fa' : fHex); U.uShoeAcc.value = lin(wbase ? acc : '#f6f7fa');
   }
-  U.uSockOn.value = 1; U.uSock.value = lin('#f4f6fa'); U.uHigh.value = 0;
+  const sk = parseKey(lo.socks || ''), wr = parseKey(lo.wrist || ''), hd = parseKey(lo.head || '');
+  U.uSockOn.value = 1; U.uSock.value = lin(sk.it ? hexOf(lo.socks) : '#f4f6fa'); U.uHigh.value = sk.it?.high ? 1 : 0;
+  // напульсники и повязка — кольца по форме руки и головы
+  for (const [m, it, key] of [[P.acc.bandLeft, wr.it, lo.wrist], [P.acc.bandRight, wr.it, lo.wrist], [P.acc.head, hd.it, lo.head]]) {
+    if (!m) continue; m.visible = !!it; if (it) m.material.color.set(hexOf(key)).convertSRGBToLinear();
+  }
   const rcfg = { blade: lo.blade || 'cn-b1:FL', fh: lo.fh, bh: lo.bh, grip: lo.grip, tape: lo.tape }, rk = JSON.stringify(rcfg) + JSON.stringify(RK);
   if (P.rkId !== rk) { attachRacket(P, rcfg); P.rkId = rk; }
 }
