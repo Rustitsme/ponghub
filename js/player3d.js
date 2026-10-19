@@ -185,6 +185,8 @@ async function makePlayer(key) {
   for (const c of gltf.animations) clips[c.name] = c;
   const fbase = {}; for (const n in bones) if (/^(Right|Left)Hand/.test(n)) fbase[n] = bones[n].quaternion.clone();
   const P = { key, holder, scene, mesh, bones, mixer, clips, cur: null, z, acc: {}, fbase };
+  // «лицо вперёд» в системе головы: в позе привязки модель смотрит вдоль +Z
+  if (bones.Head) { holder.updateMatrixWorld(true); P.headF = new THREE.Vector3(0, 0, 1).applyQuaternion(bones.Head.getWorldQuaternion(new THREE.Quaternion()).invert()).normalize(); }
   P.play = (name, once) => {
     if (name === 'idle' && clips.ready && window.USE_READY) name = 'ready';
     const c = clips[name]; if (!c) return;
@@ -330,7 +332,23 @@ function gripFingers(P) {
   for (const n in F) { const bn = b['RightHand' + n], g = gripOf(n, F); if (bn && g) bn.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(...g))); }
   if (RK.wx || RK.wz) b.RightHand.quaternion.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(RK.wx, 0, RK.wz)));
 }
-function stepPlayer(P, dt) { resetFingers(P); if (TUNE_ON && P.cur && (P.curName === 'idle' || P.curName === 'ready')) { P.cur.time = 0; dt = 0; } P.mixer.update(dt); gripFingers(P); }
+function stepPlayer(P, dt) { resetFingers(P); if (TUNE_ON && P.cur && (P.curName === 'idle' || P.curName === 'ready')) { P.cur.time = 0; dt = 0; } P.mixer.update(dt); gripFingers(P); lookHead(P, dt); }
+// взгляд в камеру: поверх анимации доворачиваем голову к точке P.lookAt (плавно, не больше ~70°)
+let _q, _q2, _v, _v2;
+function lookHead(P, dt) {
+  if (!_q) { _q = new THREE.Quaternion(); _q2 = new THREE.Quaternion(); _v = new THREE.Vector3(); _v2 = new THREE.Vector3(); }
+  const h = P.bones.Head; if (!h) return;
+  P.lookW = (P.lookW || 0) + ((P.lookAt ? 1 : 0) - (P.lookW || 0)) * Math.min(1, dt * 4);
+  if (P.lookW < .01 || !P.lookAt) return;
+  if (!P.headF) return;
+  P.holder.updateMatrixWorld(true);
+  h.getWorldQuaternion(_q); const cur = _v.copy(P.headF).applyQuaternion(_q);
+  const want = h.getWorldPosition(_v2); want.subVectors(P.lookAt, want).normalize();
+  const d = new THREE.Quaternion().setFromUnitVectors(cur, want);
+  const ang = 2 * Math.acos(Math.min(1, Math.abs(d.w))); if (ang > 1.2) d.slerp(new THREE.Quaternion(), 1 - 1.2 / ang);
+  d.slerp(new THREE.Quaternion(), 1 - P.lookW);
+  const world = d.multiply(_q); h.parent.getWorldQuaternion(_q2); h.quaternion.copy(_q2.invert().multiply(world));
+}
 
 
 // ───────────── Форма и ракетка на игроке ─────────────
@@ -430,18 +448,20 @@ const tvCss = `.p3-ov{position:absolute;inset:0;z-index:50;overflow:hidden;backg
 .p3-names .b{color:#6fb0ff;text-align:right;transform:translateX(120%);transition:transform .7s cubic-bezier(.2,.9,.2,1);text-shadow:0 6px 30px rgba(47,125,225,.6)}
 .p3-names .vs{font-size:.6em;color:#ffd75e;opacity:0;transform:scale(2.4);transition:all .5s .45s}
 .p3-names.in .a,.p3-names.in .b{transform:none}.p3-names.in .vs{opacity:1;transform:none}
-.p3-card{position:absolute;top:22%;width:30%;padding:1.6% 2%;border-radius:1vw;background:rgba(8,18,38,.8);border:1px solid rgba(255,255,255,.15);opacity:0;transition:opacity .45s,transform .45s;font-size:clamp(12px,1.5vw,26px)}
+.p3-card{position:absolute;bottom:12%;width:26%;padding:1.6% 2%;border-radius:1vw;background:rgba(8,18,38,.8);border:1px solid rgba(255,255,255,.15);opacity:0;transition:opacity .45s,transform .45s;font-size:clamp(12px,1.5vw,26px)}
 .p3-card.l{left:6%;transform:translateX(-20px);border-left:5px solid #e63946}.p3-card.r{right:6%;transform:translateX(20px);border-right:5px solid #2f7de1;text-align:right}
 .p3-card.on{opacity:1;transform:none}.p3-card b{display:block;font:800 2.2em/1 "Barlow Condensed","Arial Narrow",sans-serif;text-transform:uppercase}
 .p3-card .lg{display:inline-block;margin:.5em 0 .3em;padding:.15em .7em;border-radius:999px;background:rgba(255,255,255,.14);font-weight:800}
 .p3-card .rk{opacity:.85;margin-top:.3em}
+.p3-ava{width:4.2em;height:4.2em;border-radius:50%;overflow:hidden;display:grid;place-items:center;font-size:1.6em;background:rgba(255,255,255,.12);border:3px solid rgba(255,255,255,.35);margin-bottom:.4em}.p3-card.r .p3-ava{margin-left:auto}.p3-ava img{width:100%;height:100%;object-fit:cover}
 .p3-logo{position:absolute;left:3%;top:4%;font:800 clamp(14px,1.8vw,30px) "Barlow Condensed",sans-serif;letter-spacing:.08em;opacity:.85}
 .p3-win{position:absolute;left:0;right:0;bottom:9%;text-align:center;opacity:0;transform:translateY(20px);transition:all .6s}
 .p3-win.on{opacity:1;transform:none}.p3-win b{display:block;font:800 clamp(30px,6vw,100px)/1 "Barlow Condensed",sans-serif;text-transform:uppercase;color:#ffd75e;text-shadow:0 8px 40px rgba(255,200,60,.5)}
 .p3-win span{font:700 clamp(14px,2vw,34px) "Barlow Condensed",sans-serif;opacity:.9}`;
 const lerp3 = (a, b, t) => a.clone().lerp(b, t);
 const ease = t => t < 0 ? 0 : t > 1 ? 1 : t * t * (3 - 2 * t);
-const wait = ms => new Promise(r => setTimeout(r, ms));
+// пауза для демо: window.P3_PAUSED останавливает сцены табло (ожидания и анимацию)
+const wait = ms => new Promise(r => { let left = ms, last = performance.now(); const go = () => { const now = performance.now(); if (!window.P3_PAUSED) left -= now - last; last = now; left <= 0 ? r() : setTimeout(go, Math.min(50, Math.max(1, left))); }; go(); });
 
 async function tvScene(root) {
   await libs();
@@ -462,7 +482,7 @@ async function tvScene(root) {
   size();
   const S = { R, scene, cam, ov, ring, size, frame: null, run: true, players: [] };
   const clock = new THREE.Clock();
-  const loop = () => { if (!S.run) return; requestAnimationFrame(loop); const dt = Math.min(.05, clock.getDelta()); S.players.forEach(p => stepPlayer(p, dt)); S.frame && S.frame(dt); R.render(scene, cam); };
+  const loop = () => { if (!S.run) return; requestAnimationFrame(loop); const dt = window.P3_PAUSED ? (clock.getDelta(), 0) : Math.min(.05, clock.getDelta()); S.players.forEach(p => stepPlayer(p, dt)); S.frame && S.frame(dt); R.render(scene, cam); };
   loop();
   S.end = async () => { ov.classList.remove('on'); await wait(650); S.run = false; R.dispose(); ov.remove(); };
   return S;
@@ -471,7 +491,8 @@ async function tvPlayer(S, info) {
   const P = await makePlayer(info.gender === 'girl' ? 'girl' : 'boy');
   applyLook(P, info.loadout || {}); applyFace(P, info.face || null); S.scene.add(P.holder); S.players.push(P); return P;
 }
-const cardHtml = (who, side) => `<div class="p3-card ${side}"><b>${who.nick}</b><span class="lg">${who.league ? who.league.name + ' · ' : ''}${who.rating ?? ''}</span>${who.racket ? `<div class="rk">🏓 ${who.racket}</div>` : ''}</div>`;
+const avaHtml = w => w.photo ? `<img src="${safe(w.photo)}" alt="">` : safe(w.icon || (String(w.nick || '?')[0]));
+const cardHtml = (who, side) => `<div class="p3-card ${side}"><div class="p3-ava">${avaHtml(who)}</div><b>${who.nick}</b><span class="lg">${who.league ? who.league.name + ' · ' : ''}${who.rating ?? ''}</span>${who.racket ? `<div class="rk">🏓 ${who.racket}</div>` : ''}</div>`;
 const safe = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 
 export async function tvIntro(root, { A, B, grip, cue = () => {} }) {
@@ -498,14 +519,15 @@ export async function tvIntro(root, { A, B, grip, cue = () => {} }) {
   S.frame = dt => {
     t += dt;
     walk(PA, -START, XA, 1.5, 2.3, .25); walk(PB, START, XB, 1.8, 2.3, -.25);
-    const fA = { pos: new THREE.Vector3(XA - .25, hy(PA) + .02, 1.95), look: new THREE.Vector3(XA - .57, hy(PA) - .05, 0) };
-    const fB = { pos: new THREE.Vector3(XB + .25, hy(PB) + .02, 1.95), look: new THREE.Vector3(XB + .57, hy(PB) - .05, 0) };
+    const fA = { pos: new THREE.Vector3(XA, hy(PA) - .1, 2.6), look: new THREE.Vector3(XA, hy(PA) - .22, 0) };
+    const fB = { pos: new THREE.Vector3(XB, hy(PB) - .1, 2.6), look: new THREE.Vector3(XB, hy(PB) - .22, 0) };
     let from = W, to = W, k = 0;
     if (t < 4.6) { from = { pos: new THREE.Vector3(0, 1.3, 8.5), look: W.look }; k = ease((t - .5) / 3.5); }
-    else if (t < 7.2) { from = W; to = fA; k = ease((t - 4.6) / 1.1); if (t > 4.8) PA.holder.rotation.y += (Math.atan2(fA.pos.x - XA, fA.pos.z) - PA.holder.rotation.y) * .08; }
-    else if (t < 9.8) { from = fA; to = fB; k = ease((t - 7.2) / 1.2); if (t > 7.4) PB.holder.rotation.y += (Math.atan2(fB.pos.x - XB, fB.pos.z) - PB.holder.rotation.y) * .08; }
-    else { from = fB; to = W; k = ease((t - 9.8) / 1.2); PA.holder.rotation.y += (.25 - PA.holder.rotation.y) * .06; PB.holder.rotation.y += (-.25 - PB.holder.rotation.y) * .06; }
+    else if (t < 7.2) { from = W; to = fA; k = ease((t - 4.6) / 1.1); if (t > 4.4) PA.holder.rotation.y += (0 - PA.holder.rotation.y) * .1; }
+    else if (t < 9.8) { from = fA; to = fB; k = ease((t - 7.2) / 1.2); if (t > 7.0) PB.holder.rotation.y += (0 - PB.holder.rotation.y) * .1; }
+    else { from = fB; to = W; k = ease((t - 9.8) / 1.2); PA.holder.rotation.y += (.15 - PA.holder.rotation.y) * .06; PB.holder.rotation.y += (-.15 - PB.holder.rotation.y) * .06; }
     S.cam.position.copy(lerp3(from.pos, to.pos, k)); S.cam.lookAt(lerp3(from.look, to.look, k));
+    PA.lookAt = PB.lookAt = t > 4 ? S.cam.position : null;
   };
   requestAnimationFrame(() => S.ov.classList.add('on'));
   await wait(80); names.classList.add('in'); cue('names');
@@ -526,13 +548,14 @@ export async function tvWinner(root, { W, score, grip, cue = () => {} }) {
   const S = await tvScene(root);
   S.ov.insertAdjacentHTML('beforeend', `<div class="p3-logo">PONGHUB · ИТОГ</div><div class="p3-win"><b>🏆 ${safe(W.nick)}</b><span>Победа ${safe(score || '')}</span></div>`);
   const P = await tvPlayer(S, W); S.ring(0, '#ffd75e');
-  P.holder.rotation.y = .2;
+  P.holder.rotation.y = 0;
+  P.lookAt = null;
   const hy = () => { const v = new THREE.Vector3(); (P.bones.Head || P.scene).getWorldPosition(v); return v.y; };
   let t = 0;
   S.frame = dt => {
     t += dt; const k = ease(t / 2.2);
     S.cam.position.copy(lerp3(new THREE.Vector3(0, 1.2, 6.2), new THREE.Vector3(0, 1.15, 3.6), k));
-    S.cam.lookAt(new THREE.Vector3(0, .95 + (hy() - 1.6) * .1, 0));
+    S.cam.lookAt(new THREE.Vector3(0, .95 + (hy() - 1.6) * .1, 0)); P.lookAt = t > 2.5 ? S.cam.position : null;
   };
   requestAnimationFrame(() => S.ov.classList.add('on'));
   await wait(500); P.play('win', true); cue('win');

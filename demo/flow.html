@@ -10,15 +10,20 @@ body { margin: 0; background: #050b17; }
 #cap { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); z-index: 200; max-width: 92vw; padding: 10px 18px; border-radius: 14px; background: rgba(255,255,255,.95); color: #10203d; font: 600 15px/1.35 Inter, sans-serif; box-shadow: 0 8px 30px rgba(0,0,0,.35); text-align: center; transition: opacity .4s; }
 #cap b { color: #e63946; }
 #go { position: fixed; inset: 0; z-index: 300; display: grid; place-items: center; background: rgba(5,11,23,.92); color: #fff; font: 600 16px Inter, sans-serif; text-align: center; }
+#bar { position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 250; display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; padding: 8px; border-radius: 16px; background: rgba(255,255,255,.95); box-shadow: 0 8px 30px rgba(0,0,0,.35); font: 600 13px Inter, sans-serif; }
+#bar button { border: 0; border-radius: 10px; padding: 8px 12px; background: #e8edf5; color: #10203d; font: inherit; cursor: pointer; }
+#bar button.on { background: #10203d; color: #fff; } #bar #pp { background: #e63946; color: #fff; min-width: 44px; }
 #go button { margin-top: 18px; padding: 16px 30px; border: 0; border-radius: 999px; background: #e63946; color: #fff; font: 800 20px Inter, sans-serif; cursor: pointer; }
 </style></head>
-<body><div id="app"></div><div id="cap" style="opacity:0"></div>
+<body><div id="app"></div><div id="cap" style="opacity:0"></div><div id="bar" hidden></div>
 <div id="go"><div><div style="font:800 34px 'Barlow Condensed',sans-serif">ТАБЛО PONGHUB · ДЕМО</div><p>Матч 1 на 1 от кода табло до победы — около 1,5 минуты.<br>Включите звук: будет голос диктора.<br><small style="opacity:.7">Лучше смотреть на компьютере или повернуть телефон.</small></p><button id="start">▶ Смотреть со звуком</button></div></div>
 <script type="module">
 import { startTV } from './js/tv.js';
-import { unlock } from './js/voice.js';
+import { unlock } from './js/sound.js';
 
-const A = 'demo-a', B = 'demo-b', t0 = () => Date.now();
+const A = 'demo-a', B = 'demo-b';
+let vt = 0, vlast = performance.now(); window.P3_PAUSED = false;
+const t0 = () => { const now = performance.now(); if (!window.P3_PAUSED) vt += now - vlast; vlast = now; return vt; };
 const players = [
   { id: A, nickname: 'Рустам', avatar: '🔥', color: '#e63946', photo_url: null, initial_rating: 52, created_at: '2026-01-01', status: 'approved' },
   { id: B, nickname: 'Мухаммет', avatar: '⚡', color: '#2f7de1', photo_url: null, initial_rating: 47, created_at: '2026-01-01', status: 'approved' },
@@ -32,6 +37,7 @@ const set1 = P(8, 6), steps = [
 const after1 = steps[steps.length - 1], set2 = P(9, 8);
 steps.push([...after1, ...set2], [...after1, ...set2, 0], [...after1, ...set2, 0, 0]);
 
+const END = 31 + steps.length * 3;
 const CAPS = [
   [0, '1. Включили табло — оно показывает <b>код</b>. Владелец вводит его в приложении: Профиль → Управление клубом → Табло'],
   [7, '2. Табло привязано к клубу: <b>перерыв</b> — последние игры и рейтинг'],
@@ -39,7 +45,8 @@ const CAPS = [
   [31, '4. На телефоне считают <b>очки</b> — табло и диктор сразу подхватывают'],
   [0, ''],
 ];
-let T = null, stage = 'pair', step = -1, stepAt = 0, endAt = 0;
+let T = 0;
+const SCORE_AT = 31, STEP = 3;
 const live = log => ({ id: 'demo-live', club_id: 'c', player1_id: A, player2_id: B, kind: 'singles', type: 'free', best_of: 3, points_to: 11, first_server: 0, scoring: true, log, tournament_id: null, created_at: new Date(T).toISOString(), updated_at: new Date().toISOString() });
 const store = {
   async rpc(name) {
@@ -52,21 +59,32 @@ const store = {
       tournaments: [] };
     if (el < 13) return { ...base, live: [], recent: null };
     // матч начался: сначала пустой счёт (выход), с 31-й секунды — очки каждые 3 секунды
-    if (el >= 31 && step < steps.length - 1 && t0() - stepAt > 3000) { step++; stepAt = t0(); }
-    if (step < steps.length - 1 || t0() - stepAt < 3000) return { ...base, live: [live(step < 0 ? [] : steps[step])], recent: null };
-    if (!endAt) endAt = t0();
-    const fin = { ...live(steps[steps.length - 1]), updated_at: new Date(endAt).toISOString() };
+    const step = el < SCORE_AT ? -1 : Math.floor((el - SCORE_AT) / STEP);
+    if (step < steps.length) return { ...base, live: [live(step < 0 ? [] : steps[step])], recent: null };
+    const fin = { ...live(steps[steps.length - 1]), updated_at: new Date(Date.now() - (el - END) * 1000).toISOString() };
     return { ...base, live: [], recent: fin, recent_match: { id: 'm1', status: 'pending', sets: [[12, 10], [11, 8]], sets1: 2, sets2: 0 } };
   },
 };
 function caption() {
   const el = (t0() - T) / 1000, cap = document.getElementById('cap');
   let txt = CAPS.filter(c => c[1] && el >= c[0]).pop()?.[1] || '';
-  if (endAt) txt = (t0() - endAt) / 1000 < 9 ? '5. Последнее очко → <b>жест победителя</b> и фанфары' : '6. Итоги матча. Рейтинг обновится после подтверждения. <a href="demo/flow.html" style="color:#e63946">Смотреть снова</a>';
+  if (el >= END) txt = el - END < 9 ? '5. Последнее очко → <b>жест победителя</b>, фанфары и салют' : '6. Итоги матча. Рейтинг обновится после подтверждения';
+  const ch = CH.filter(c => el >= c[1]).length - 1; document.querySelectorAll('#bar [data-ch]').forEach((b, i) => b.classList.toggle('on', i === ch));
   cap.innerHTML = txt; cap.style.opacity = txt ? 1 : 0;
 }
+// этапы: переход перезапускает демо с нужной секунды (звук включается тем же нажатием)
+const CH = [['Код', 0], ['Перерыв', 7], ['Выход', 12], ['Счёт', 31], ['Победа', END - 7]];
+const from = +(new URLSearchParams(location.search).get('t') || 0);
+const bar = document.getElementById('bar');
+bar.innerHTML = '<button id="pp">⏸</button>' + CH.map(([n, s], i) => `<button data-ch="${s}">${i + 1}. ${n}</button>`).join('');
+bar.onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.id === 'pp') { window.P3_PAUSED = !window.P3_PAUSED; b.textContent = window.P3_PAUSED ? '▶' : '⏸'; return; }
+  location.href = 'demo/flow.html?t=' + b.dataset.ch + '&go=1';
+};
+if (new URLSearchParams(location.search).get('go')) document.querySelector('#go p').innerHTML = 'Браузер просит нажать ещё раз, чтобы включить звук.';
 document.getElementById('start').onclick = () => {
-  unlock(); document.getElementById('go').remove(); T = t0();
+  unlock(); document.getElementById('go').remove(); bar.hidden = false; vt = from * 1000; vlast = performance.now(); T = 0;
   // настоящее табло на этом же устройстве не должно потерять привязку: прячем его ключ и возвращаем через 3 секунды
   const K = 'ponghub_tv_token'; let old = null; try { old = localStorage.getItem(K); localStorage.removeItem(K); } catch { /* */ }
   startTV(document.getElementById('app'), store);

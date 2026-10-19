@@ -4,7 +4,7 @@
 import { analyze, ranking, leagueOf, replayLive, DEFAULT_SETTINGS, isDoubles, winsNeeded } from './engine.js';
 import { koBracket, roundName, standings, pairings } from './tourney.js';
 import { parseKey } from './shop-catalog.js';
-import { unlock, say, sfx, soundOn } from './voice.js';
+import { unlock, sfx, soundOn } from './sound.js';
 
 const LS = 'ponghub_tv_token';
 const POLL = 2000;            // как часто спрашиваем текущую игру
@@ -32,7 +32,7 @@ export async function startTV(root, store) {
   let lock = null;
   const keepAwake = async () => { try { if (!lock && navigator.wakeLock) { lock = await navigator.wakeLock.request('screen'); lock.addEventListener('release', () => { lock = null; }); } } catch { /* */ } };
   document.addEventListener('visibilitychange', () => { if (!document.hidden) keepAwake(); });
-  root.addEventListener('click', () => { if (VOICE.allowed && !soundOn()) { unlock(); document.getElementById('tvx-snd')?.remove(); say('Звук включён'); } keepAwake(); if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {}); });
+  root.addEventListener('click', () => { if (VOICE.allowed && !soundOn()) { unlock(); document.getElementById('tvx-snd')?.remove(); sfx('point'); } keepAwake(); if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {}); });
   keepAwake();
 
   async function ensureToken() {
@@ -69,10 +69,9 @@ export async function startTV(root, store) {
     }
   }
 
-  // ── Озвучка: выход, гейм-пойнт, матч-пойнт, «ровно», партия, победа (пока — если игроку открыт 3D-игрок) ──
+  // ── Звуки: выход, очко, гейм-пойнт, матч-пойнт, партия, победа (пока — если игроку открыт 3D-игрок) ──
   const VOICE = { allowed: false, ok: new Map(), st: new Map(), done: new Set() };
-  const nm = (l, s) => sideName(l, s);
-  async function voiceOk(l) {
+    async function voiceOk(l) {
     if (!VOICE.ok.has(l.id)) VOICE.ok.set(l.id, avatars(sideIds(l, 0).concat(sideIds(l, 1))).then(av => !!av?.players?.some(p => p.on)));
     const ok = await VOICE.ok.get(l.id);
     if (ok && !VOICE.allowed) { VOICE.allowed = true; if (!soundOn() && !document.getElementById('tvx-snd')) root.insertAdjacentHTML('beforeend', '<button id="tvx-snd" class="tvx-snd">🔊 Нажмите, чтобы включить звук</button>'); }
@@ -84,17 +83,12 @@ export async function startTV(root, store) {
       const g = replayLive(l.log || [], l.best_of, l.points_to, l.first_server), n = (l.log || []).length;
       const prev = VOICE.st.get(l.id); VOICE.st.set(l.id, { n, g });
       if (!prev || n <= prev.n || !(await voiceOk(l)) || showing) continue;
+      if (g.winner !== null) continue; // победу играет итоговый экран
       const p = prev.g;
-      if (g.winner !== null) continue; // победу объявляет итоговый экран
-      const ws = [0, 1].find(s => g.won[s] > p.won[s]);
-      if (ws !== undefined) { sfx('ding'); sfx('crowd', 2.5); say(`Партия за ${nm(l, ws)}! По партиям ${g.won[ws]} : ${g.won[1 - ws]}.`, { urgent: true }); continue; }
-      const mp = [0, 1].find(s => g.matchPoint[s] && !p.matchPoint[s]);
-      if (mp !== undefined) { sfx('roll'); say(`Матч-пойнт! ${nm(l, mp)}.`, { urgent: true }); continue; }
-      const sp = [0, 1].find(s => g.setPoint[s] && !p.setPoint[s]);
-      if (sp !== undefined) { sfx('ding'); say(g.deuce ? `Больше у ${nm(l, sp)}.` : `Гейм-пойнт, ${nm(l, sp)}.`, { urgent: true }); continue; }
-      if (g.deuce && g.cur[0] === g.cur[1] && (p.cur[0] !== p.cur[1] || !p.deuce)) { say('Ровно!', { urgent: true }); continue; }
-      // счёт после розыгрыша — коротко, чтобы зал слышал
-      say(`${g.cur[0]} : ${g.cur[1]}`, { rate: 1.1 });
+      if ([0, 1].some(k => g.won[k] > p.won[k])) { sfx('setwin'); continue; }
+      if ([0, 1].some(k => g.matchPoint[k] && !p.matchPoint[k])) { sfx('matchpoint'); continue; }
+      if ([0, 1].some(k => g.setPoint[k] && !p.setPoint[k])) { sfx('tension'); continue; }
+      sfx('point');
     }
   }
 
@@ -106,7 +100,7 @@ export async function startTV(root, store) {
   async function avatars(ids) { try { return await store.rpc('screen_avatars', { p_token: T.token, ids }); } catch { return null; } }
   function who(id, av) {
     const p = av?.players?.find(x => x.id === id), r = rating(id);
-    return { gender: p?.avatar3d || 'boy', face: p?.face || null, loadout: p?.loadout || {}, nick: P(id).nickname, rating: fmtR(r), league: leagueOf(r), racket: racketName(p?.loadout) };
+    return { gender: p?.avatar3d || 'boy', face: p?.face || null, photo: P(id).photo_url || null, icon: P(id).avatar || '', loadout: p?.loadout || {}, nick: P(id).nickname, rating: fmtR(r), league: leagueOf(r), racket: racketName(p?.loadout) };
   }
   async function shows(d) {
     if (showing || d.status !== 'ok' || !T.full) return;
@@ -120,13 +114,7 @@ export async function startTV(root, store) {
       if (!av?.players?.some(p => p.on)) return;
       showing = true;
       try { const m = await import('./player3d.js'); const A = who(nl.player1_id, av), B = who(nl.player2_id, av); VOICE.allowed || voiceOk(nl);
-      const cue = c => {
-        if (c === 'names') { sfx('whoosh'); say(`${A.nick} против ${B.nick}!`, { urgent: true }); }
-        if (c === 'walk') sfx('boom');
-        if (c === 'cardA') say(`В красном углу — ${A.nick}. Рейтинг ${A.rating}.`);
-        if (c === 'cardB') say(`В синем углу — ${B.nick}. Рейтинг ${B.rating}.`);
-        if (c === 'go') { sfx('crowd', 2.5); say('Игра!'); }
-      };
+      const cue = c => sfx({ names: 'whoosh', walk: 'entrance', cardA: 'hit', cardB: 'hit', go: 'go' }[c]);
       await m.tvIntro(stage, { A, B, grip: av.grip, cue }); } catch { /* без 3D */ } finally { showing = false; }
       return;
     }
@@ -141,7 +129,7 @@ export async function startTV(root, store) {
       if (!av?.players?.some(p => p.on)) return;
       showing = true;
       try { const m = await import('./player3d.js'); const W = who(wId, av), sc = `${Math.max(w1, w2)} : ${Math.min(w1, w2)}`; VOICE.allowed = true;
-      const cue = c => { if (c === 'win') { sfx('fanfare'); sfx('crowd', 4); say(`Победа! ${W.nick}! Счёт ${sc}.`, { urgent: true }); } };
+      const cue = c => { if (c === 'win') sfx('victory'); };
       await m.tvWinner(stage, { W, score: sc, grip: av.grip, cue }); } catch { /* без 3D */ } finally { showing = false; }
     }
   }
@@ -227,12 +215,11 @@ export async function startTV(root, store) {
         <div class="tvx-rail">${oddsCard(e)}${nextList()}${qrCard()}</div></div>${foot()}</section>`;
     }
     const g = replayLive(l.log || [], l.best_of, l.points_to, l.first_server);
-    const flag = [0, 1].map(s => g.matchPoint[s] ? 'Матчбол · ' + sideName(l, s) : g.setPoint[s] ? 'Сетбол · ' + sideName(l, s) : '').find(Boolean) || '';
     const chips = g.sets.length ? '<span>Партии:</span>' + g.sets.map(([a, b]) => `<span class="tvx-chip"><b class="${a > b ? 'w1' : ''}">${a}</b> : <b class="${b > a ? 'w2' : ''}">${b}</b></span>`).join('') : '<span>Первая партия</span>';
     return `<section class="tvx-scr">${top(crumbFor(l), '<div class="tvx-live"><i></i>LIVE</div>')}
       <div class="tvx-main"><div class="tvx-court"><div class="tvx-duel">${panel(l, 0, g)}
         <div class="tvx-mid"><small>Партии</small><div class="tvx-sets"><b>${g.won[0]}</b><span>:</span><b>${g.won[1]}</b></div>
-          ${flag ? `<div class="tvx-flag">${esc(flag)}</div>` : ''}<small>Партия ${g.sets.length + (g.winner === null ? 1 : 0)}</small></div>
+<small>Партия ${g.sets.length + (g.winner === null ? 1 : 0)}</small></div>
         ${panel(l, 1, g)}</div><div class="tvx-chips">${chips}</div></div>
       <div class="tvx-rail">${oddsCard(e)}${nextList()}${qrCard()}</div></div>${foot()}</section>`;
   }
