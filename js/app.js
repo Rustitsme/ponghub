@@ -197,7 +197,9 @@ function showNews() {
     <div class="nw-where">📍 Всё находится в разделе <b>«Профиль»</b> — внизу экрана справа.</div>
     <div class="row-btns"><button class="btn primary full" id="nw-go">Открыть профиль</button></div></div>`, sh => {
     lsSet(key, [...seen, ...fresh].join(','));
-    const pic = sh.querySelector('#nw-pic'); if (pic) { const { it, color } = parseKey(STARTER); try { pic.appendChild(thumbEl(it, color)); } catch { pic.textContent = '🏓'; } }
+    const pic = sh.querySelector('#nw-pic');
+    // та же 3D-картинка ракетки, что в профиле (основание-подарок с текущими накладками)
+    if (pic) { pic.textContent = '🏓'; const lo = S.shop?.loadout || {}; loadThree().then(() => { const url = racketShot({ blade: STARTER, fh: lo.fh, bh: lo.bh, grip: lo.grip, tape: lo.tape }); if (url) pic.innerHTML = `<img src="${url}" alt="Основание">`; }).catch(() => {}); }
     sh.querySelector('#nw-go').onclick = () => { closeModal(); go('#/me'); };
   });
 }
