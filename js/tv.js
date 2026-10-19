@@ -75,7 +75,7 @@ export async function startTV(root, store) {
   async function avatars(ids) { try { return await store.rpc('screen_avatars', { p_token: T.token, ids }); } catch { return null; } }
   function who(id, av) {
     const p = av?.players?.find(x => x.id === id), r = rating(id);
-    return { gender: p?.avatar3d || 'boy', loadout: p?.loadout || {}, nick: P(id).nickname, rating: fmtR(r), league: leagueOf(r), racket: racketName(p?.loadout) };
+    return { gender: p?.avatar3d || 'boy', face: p?.face || null, loadout: p?.loadout || {}, nick: P(id).nickname, rating: fmtR(r), league: leagueOf(r), racket: racketName(p?.loadout) };
   }
   async function shows(d) {
     if (showing || d.status !== 'ok' || !T.full) return;

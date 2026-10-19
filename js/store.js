@@ -275,6 +275,18 @@ class SupaStore {
     return data || [];
   }
 
+  // ── Лицо 3D-игрока по селфи ──
+  async faceCall(body) {
+    if (!this.sb) throw new Error('В демо-режиме недоступно');
+    const { data, error } = await this.sb.functions.invoke('face', { body });
+    if (error) {
+      let msg = 'Не получилось — попробуйте ещё раз';
+      try { const j = await error.context?.json(); if (j?.error) msg = j.error; } catch { /* */ }
+      throw new Error(msg);
+    }
+    return data;
+  }
+
   // ── Telegram ──
   async tgCall(body) {
     const { data, error } = await this.sb.functions.invoke('tg', { body });

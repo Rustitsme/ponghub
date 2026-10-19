@@ -1903,6 +1903,27 @@ const CLUB_ACT = {
   'av-play': el => AV?.ctl?.play(el.dataset.v),
   'av-tool': el => { const v = el.dataset.v; if (v === 'big') { AV.big = !AV.big; document.getElementById('av-stage')?.classList.toggle('big', AV.big); document.body.classList.toggle('av-big', AV.big); setTimeout(() => AV.ctl?.resize(), 50); return; } AV?.ctl?.[v]?.(); },
   'av-gender': async el => { await busy(el, async () => { await S.store.rpc('set_avatar3d', { p: el.dataset.v }); S.ctx.me.avatar3d = el.dataset.v; }); render(); },
+  'av-selfie': () => {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.setAttribute('capture', 'user');
+    inp.onchange = async () => {
+      const f = inp.files?.[0]; if (!f) return;
+      const btn = document.querySelector('[data-act="av-selfie"]'), stage = document.getElementById('av-stage');
+      stage?.classList.add('av-busy'); toast('Нейросеть рисует лицо… это 10–30 секунд');
+      try {
+        await busy(btn, async () => {
+          const img = await createImageBitmap(f), k = Math.min(1, 1024 / Math.max(img.width, img.height)), c = document.createElement('canvas');
+          c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+          const { faceBase } = await import('./player3d.js');
+          const base = await faceBase(S.ctx.me.avatar3d || 'boy');
+          const r = await S.store.faceCall({ selfie: c.toDataURL('image/jpeg', .88), base });
+          S.ctx.me.face = r.face; AV?.ctl?.setFace(r.face); AV?.ctl?.face();
+          toast(`Готово! Осталось попыток сегодня: ${r.left}`);
+        });
+      } finally { stage?.classList.remove('av-busy'); render(); }
+    };
+    inp.click();
+  },
+  'av-noface': async el => { await busy(el, async () => { await S.store.faceCall({ reset: true }); S.ctx.me.face = null; AV?.ctl?.setFace(null); }); render(); },
   'av-wear': async el => { await busy(el, async () => { await S.store.equipItem(el.dataset.slot, el.dataset.k || null); await ensureShop(true); }); AV?.ctl?.look(S.shop?.loadout); render(); },
   'feature-testers': async el => {
     const k = el.dataset.k, title = { shop: 'Магазин', resale: 'Продажа вещей', avatar: '3D-игрок' }[k] || k;
@@ -2284,7 +2305,8 @@ function viewAvatar(r) {
       <div class="av-tools"><button data-act="av-tool" data-v="flip" aria-label="Повернуть">⟲</button><button data-act="av-tool" data-v="face" aria-label="Лицо крупно">🔍</button><button data-act="av-tool" data-v="full" aria-label="Во весь рост">⤢</button><button data-act="av-tool" data-v="big" aria-label="Во весь экран">⛶</button></div>
       ${grip ? '' : `<div class="av-emotes"><button data-act="av-play" data-v="win">🏆 Победа</button><button data-act="av-play" data-v="swing">🏓 Удар</button><button data-act="av-play" data-v="wave">👋 Привет</button><button data-act="av-play" data-v="clap">👏 Хлопки</button></div>`}</div>
     ${mine ? `<section class="card stack"><b class="small">Персонаж</b><div class="av-who"><button class="${gender === 'boy' ? 'on' : ''}" data-act="av-gender" data-v="boy">Парень</button><button class="${gender === 'girl' ? 'on' : ''}" data-act="av-gender" data-v="girl">Девушка</button></div>
-      <p class="muted small">Лицо по селфи и причёски — в следующих обновлениях.</p></section>
+      <div class="row-btns"><button class="btn primary" data-act="av-selfie">📸 Лицо по селфи</button>${S.ctx.me.face ? '<button class="btn ghost" data-act="av-noface">Убрать лицо</button>' : ''}</div>
+      <p class="muted small">Сделайте селфи анфас при хорошем свете — нейросеть нарисует ваше лицо на игроке. До 10 попыток в день.</p></section>
       <section class="card stack"><div class="card-h"><h3>👕 Форма</h3><a href="#/shop" class="link">Магазин →</a></div>${wearBox}</section>` : ''}
     ${grip ? `<section class="card stack" id="av-grip"></section>` : ''}`;
 }
@@ -2296,7 +2318,7 @@ async function mountAvatarView(r) {
   const lo = (other ? p?.loadout : S.shop?.loadout) || p?.loadout || {};
   try {
     const { mountAvatar, RK } = await import('./player3d.js');
-    const ctl = await mountAvatar(el, { gender: p?.avatar3d || 'boy', loadout: lo, grip: S.ctx.platform?.grip || {}, tune: grip });
+    const ctl = await mountAvatar(el, { gender: p?.avatar3d || 'boy', face: p?.face || null, loadout: lo, grip: S.ctx.platform?.grip || {}, tune: grip });
     AV = { ...(AV || {}), ctl, RK, lo };
     document.getElementById('av-load')?.remove();
     if (grip) mountGripPanel(ctl, RK);

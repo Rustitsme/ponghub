@@ -36,11 +36,13 @@ function wearMaterial(map, z, bbox, axis, sideAxis) {
     uShorts: { value: lin('#1b1c20') }, uShortsOn: { value: 0 }, uShirtOn: { value: 0 },
     uSock: { value: lin('#f4f6fa') }, uHigh: { value: 0 }, uSockOn: { value: 0 },
     uShoe: { value: lin('#ffffff') }, uShoeAcc: { value: lin('#1b1c20') }, uShoeOn: { value: 0 },
+    uFace: { value: new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1) }, uFaceOn: { value: 0 },
+    uFC: { value: new THREE.Vector3() }, uFF: { value: new THREE.Vector3(0, 0, 1) }, uFS: { value: new THREE.Vector3(1, 0, 0) }, uFU: { value: new THREE.Vector3(0, 1, 0) }, uFSize: { value: 1 },
   };
   m.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, U);
-    sh.vertexShader = 'varying vec3 vBind;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vBind = position;');
-    sh.fragmentShader = `varying vec3 vBind; uniform vec3 uAxis, uSide; uniform float uMin, uLen, uSideC; uniform vec3 uShirtR; uniform vec2 uShortR; uniform vec4 uFeet;
+    sh.vertexShader = 'varying vec3 vBind, vBindN;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vBind = position; vBindN = normal;');
+    sh.fragmentShader = `varying vec3 vBind, vBindN; uniform sampler2D uFace; uniform float uFaceOn, uFSize; uniform vec3 uFC, uFF, uFS, uFU; uniform vec3 uAxis, uSide; uniform float uMin, uLen, uSideC; uniform vec3 uShirtR; uniform vec2 uShortR; uniform vec4 uFeet;
       uniform vec3 uShirt, uSleeve, uStripe, uShorts, uSock, uShoe, uShoeAcc, uSole; uniform float uStripeOn, uShortsOn, uShirtOn, uHigh, uSockOn, uShoeOn;\n` +
       sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
       {
@@ -79,6 +81,13 @@ function wearMaterial(map, z, bbox, axis, sideAxis) {
         float sole = step(h, uFeet.w) * uShoeOn;
         diffuseColor.rgb = mix(diffuseColor.rgb, uSole * clamp(l / .55, .7, 1.1), sole);
         diffuseColor.rgb = mix(diffuseColor.rgb, uSole * .55, uShoeOn * (1. - smoothstep(.0015, .004, abs(h - uFeet.w))));
+        // лицо по селфи: картинка проецируется на голову спереди (кадр совпадает со снимком лица модели)
+        if (uFaceOn > .5) {
+          vec3 d = vBind - uFC; vec2 fu = vec2(dot(d, uFS), dot(d, uFU)) / uFSize + .5;
+          float edge = smoothstep(0., .06, fu.x) * smoothstep(1., .94, fu.x) * smoothstep(0., .05, fu.y) * smoothstep(1., .95, fu.y);
+          float m = edge * smoothstep(.12, .45, dot(normalize(vBindN), uFF)) * step(0., dot(d, uFF));
+          diffuseColor.rgb = mix(diffuseColor.rgb, pow(texture2D(uFace, fu).rgb, vec3(2.2)), m);
+        }
       }`);
   };
   return m;
@@ -119,6 +128,40 @@ function hugRing(mesh, boneName, t0, t1, inflate, color) {
   return { mesh: ringMesh, bone: sk.bones[bi] };
 }
 
+
+// рамка лица в позе привязки: центр, «вперёд», «вправо», «вверх» и размер квадрата снимка
+function headFrame(mesh, up) {
+  const sk = mesh.skeleton, ids = sk.bones.map((b, i) => /Head(Top)?/.test(b.name) && !/Neck/.test(b.name) ? i : -1).filter(i => i >= 0);
+  const g = mesh.geometry, pos = g.attributes.position, si = g.attributes.skinIndex, sw = g.attributes.skinWeight, v = new THREE.Vector3(), pts = [];
+  for (let i = 0; i < pos.count; i++) {
+    let w = 0; const ix = [si.getX(i), si.getY(i), si.getZ(i), si.getW(i)], wx = [sw.getX(i), sw.getY(i), sw.getZ(i), sw.getW(i)]; for (let k = 0; k < 4; k++) if (ids.includes(ix[k])) w += wx[k];
+    if (w > .5) pts.push(v.fromBufferAttribute(pos, i).clone());
+  }
+  const side = new THREE.Vector3(1, 0, 0), front = new THREE.Vector3().crossVectors(side, up).normalize(), right = new THREE.Vector3().crossVectors(up, front).normalize();
+  const rng = d => { let a = Infinity, b = -Infinity; for (const p of pts) { const t = p.dot(d); a = Math.min(a, t); b = Math.max(b, t); } return [a, b]; };
+  const [u0, u1] = rng(up), [r0, r1] = rng(right), [f0, f1] = rng(front);
+  const size = Math.max(u1 - u0, r1 - r0) * 1.02;
+  const c = new THREE.Vector3().addScaledVector(up, (u0 + u1) / 2).addScaledVector(right, (r0 + r1) / 2).addScaledVector(front, (f0 + f1) / 2);
+  return { c, front, right, up: up.clone(), size, depth: f1 - f0 };
+}
+// снимок лица модели спереди (без света, только текстура) — образец кадра для нейросети, jpeg dataURL
+export async function faceBase(gender) {
+  await libs();
+  const P = await makePlayer(gender === 'girl' ? 'girl' : 'boy'), F = P.faceBox;
+  const geo = P.mesh.geometry, mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: P.mesh.material.map }));
+  const scene = new THREE.Scene(); scene.background = new THREE.Color('#d9dde4'); scene.add(mesh);
+  const cam = new THREE.OrthographicCamera(-F.size / 2, F.size / 2, F.size / 2, -F.size / 2, .001, 100);
+  cam.up.copy(F.up); cam.position.copy(F.c).addScaledVector(F.front, F.size * 3); cam.lookAt(F.c);
+  const R = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true }); R.outputEncoding = THREE.sRGBEncoding; R.setSize(768, 768, false);
+  R.render(scene, cam); const url = R.domElement.toDataURL('image/jpeg', .9); R.dispose(); return url;
+}
+function applyFace(P, url) {
+  const U = P.mesh.material.userData.u, F = P.faceBox;
+  if (P.faceUrl === url) return; P.faceUrl = url;
+  if (!url) { U.uFaceOn.value = 0; return; }
+  U.uFC.value.copy(F.c); U.uFF.value.copy(F.front); U.uFS.value.copy(F.right); U.uFU.value.copy(F.up); U.uFSize.value = F.size;
+  new THREE.TextureLoader().setCrossOrigin('anonymous').load(url, t => { if (P.faceUrl !== url) return; t.anisotropy = 8; U.uFace.value = t; U.uFaceOn.value = 1; });
+}
 
 // игрок: модель + анимации + форма + ракетка
 async function makePlayer(key) {
@@ -163,6 +206,7 @@ async function makePlayer(key) {
     scene.position.y += bind - idle;
     P.cur = null; P.play('idle');
   }
+  P.faceBox = headFrame(mesh, axis);
   // аксессуары, облегающие модель
   const hb = hugRing(mesh, 'Head', .63, .73, 1.03, '#d62839');
   if (hb) { hb.bone.add(hb.mesh); P.acc.head = hb.mesh; hb.mesh.visible = false; }
@@ -355,7 +399,7 @@ export async function mountAvatar(el, opts = {}) {
   if (!V.P[gender]) V.P[gender] = await makePlayer(gender);
   if (V.cur && V.cur !== V.P[gender]) V.scene.remove(V.cur.holder);
   V.cur = V.P[gender]; V.scene.add(V.cur.holder); V.cur.rkId = null;
-  applyLook(V.cur, opts.loadout || {});
+  applyLook(V.cur, opts.loadout || {}); applyFace(V.cur, opts.face || null);
   V.tz = 1; V.tfy = .84; if (TUNE_ON) { V.idle = Infinity; V.target = V.ry = -0.6; }
   let last = null;
   el.onpointerdown = e => { if (e.target.closest('button,input,a')) return; V.drag = true; last = e.clientX; el.setPointerCapture(e.pointerId); };
@@ -370,6 +414,7 @@ export async function mountAvatar(el, opts = {}) {
     flip: () => { V.target += Math.PI; V.idle = performance.now(); },
     resize: () => { const w2 = el.clientWidth, h2 = el.clientHeight; V.R.setSize(w2, h2, false); V.cam.aspect = w2 / h2; V.cam.updateProjectionMatrix(); },
     look: lo => applyLook(P, lo || {}),
+    setFace: url => applyFace(P, url || null),
     regrip: () => { P.rkId = null; applyLook(P, opts.loadout || {}); },
     tuneFull: on => { V.tune.full = on; },
     tuneDist: d => { V.tune.dist = d; },
@@ -424,7 +469,7 @@ async function tvScene(root) {
 }
 async function tvPlayer(S, info) {
   const P = await makePlayer(info.gender === 'girl' ? 'girl' : 'boy');
-  applyLook(P, info.loadout || {}); S.scene.add(P.holder); S.players.push(P); return P;
+  applyLook(P, info.loadout || {}); applyFace(P, info.face || null); S.scene.add(P.holder); S.players.push(P); return P;
 }
 const cardHtml = (who, side) => `<div class="p3-card ${side}"><b>${who.nick}</b><span class="lg">${who.league ? who.league.name + ' · ' : ''}${who.rating ?? ''}</span>${who.racket ? `<div class="rk">🏓 ${who.racket}</div>` : ''}</div>`;
 const safe = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
