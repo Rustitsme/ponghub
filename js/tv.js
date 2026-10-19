@@ -4,6 +4,7 @@
 import { analyze, ranking, leagueOf, replayLive, DEFAULT_SETTINGS, isDoubles, winsNeeded } from './engine.js';
 import { koBracket, roundName, standings, pairings } from './tourney.js';
 import { parseKey } from './shop-catalog.js';
+import { unlock, say, sfx, soundOn } from './voice.js';
 
 const LS = 'ponghub_tv_token';
 const POLL = 2000;            // как часто спрашиваем текущую игру
@@ -31,7 +32,7 @@ export async function startTV(root, store) {
   let lock = null;
   const keepAwake = async () => { try { if (!lock && navigator.wakeLock) { lock = await navigator.wakeLock.request('screen'); lock.addEventListener('release', () => { lock = null; }); } } catch { /* */ } };
   document.addEventListener('visibilitychange', () => { if (!document.hidden) keepAwake(); });
-  root.addEventListener('click', () => { keepAwake(); if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {}); });
+  root.addEventListener('click', () => { if (VOICE.allowed && !soundOn()) { unlock(); document.getElementById('tvx-snd')?.remove(); say('Звук включён'); } keepAwake(); if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {}); });
   keepAwake();
 
   async function ensureToken() {
@@ -62,8 +63,38 @@ export async function startTV(root, store) {
       T.data = d;
       draw();
       shows(d);
+      voiceEvents(d);
     } catch (e) {
       if (!T.data) box.innerHTML = `<div class="tvx-msg">${LOGO}<b>PongHub</b><span>Нет связи с сервером. Проверяю снова…</span></div>`;
+    }
+  }
+
+  // ── Озвучка: выход, гейм-пойнт, матч-пойнт, «ровно», партия, победа (пока — если игроку открыт 3D-игрок) ──
+  const VOICE = { allowed: false, ok: new Map(), st: new Map(), done: new Set() };
+  const nm = (l, s) => sideName(l, s);
+  async function voiceOk(l) {
+    if (!VOICE.ok.has(l.id)) VOICE.ok.set(l.id, avatars(sideIds(l, 0).concat(sideIds(l, 1))).then(av => !!av?.players?.some(p => p.on)));
+    const ok = await VOICE.ok.get(l.id);
+    if (ok && !VOICE.allowed) { VOICE.allowed = true; if (!soundOn() && !document.getElementById('tvx-snd')) root.insertAdjacentHTML('beforeend', '<button id="tvx-snd" class="tvx-snd">🔊 Нажмите, чтобы включить звук</button>'); }
+    return ok;
+  }
+  async function voiceEvents(d) {
+    if (d.status !== 'ok' || !T.full) return;
+    for (const l of d.live || []) {
+      const g = replayLive(l.log || [], l.best_of, l.points_to, l.first_server), n = (l.log || []).length;
+      const prev = VOICE.st.get(l.id); VOICE.st.set(l.id, { n, g });
+      if (!prev || n <= prev.n || !(await voiceOk(l)) || showing) continue;
+      const p = prev.g;
+      if (g.winner !== null) continue; // победу объявляет итоговый экран
+      const ws = [0, 1].find(s => g.won[s] > p.won[s]);
+      if (ws !== undefined) { sfx('ding'); sfx('crowd', 2.5); say(`Партия за ${nm(l, ws)}! По партиям ${g.won[ws]} : ${g.won[1 - ws]}.`, { urgent: true }); continue; }
+      const mp = [0, 1].find(s => g.matchPoint[s] && !p.matchPoint[s]);
+      if (mp !== undefined) { sfx('roll'); say(`Матч-пойнт! ${nm(l, mp)}.`, { urgent: true }); continue; }
+      const sp = [0, 1].find(s => g.setPoint[s] && !p.setPoint[s]);
+      if (sp !== undefined) { sfx('ding'); say(g.deuce ? `Больше у ${nm(l, sp)}.` : `Гейм-пойнт, ${nm(l, sp)}.`, { urgent: true }); continue; }
+      if (g.deuce && g.cur[0] === g.cur[1] && (p.cur[0] !== p.cur[1] || !p.deuce)) { say('Ровно!', { urgent: true }); continue; }
+      // счёт после розыгрыша — коротко, чтобы зал слышал
+      say(`${g.cur[0]} : ${g.cur[1]}`, { rate: 1.1 });
     }
   }
 
@@ -88,7 +119,15 @@ export async function startTV(root, store) {
       const av = await avatars([nl.player1_id, nl.player2_id]);
       if (!av?.players?.some(p => p.on)) return;
       showing = true;
-      try { const m = await import('./player3d.js'); await m.tvIntro(stage, { A: who(nl.player1_id, av), B: who(nl.player2_id, av), grip: av.grip }); } catch { /* без 3D */ } finally { showing = false; }
+      try { const m = await import('./player3d.js'); const A = who(nl.player1_id, av), B = who(nl.player2_id, av); VOICE.allowed || voiceOk(nl);
+      const cue = c => {
+        if (c === 'names') { sfx('whoosh'); say(`${A.nick} против ${B.nick}!`, { urgent: true }); }
+        if (c === 'walk') sfx('boom');
+        if (c === 'cardA') say(`В красном углу — ${A.nick}. Рейтинг ${A.rating}.`);
+        if (c === 'cardB') say(`В синем углу — ${B.nick}. Рейтинг ${B.rating}.`);
+        if (c === 'go') { sfx('crowd', 2.5); say('Игра!'); }
+      };
+      await m.tvIntro(stage, { A, B, grip: av.grip, cue }); } catch { /* без 3D */ } finally { showing = false; }
       return;
     }
     const rl = d.recent;
@@ -101,7 +140,9 @@ export async function startTV(root, store) {
       const av = await avatars([wId]);
       if (!av?.players?.some(p => p.on)) return;
       showing = true;
-      try { const m = await import('./player3d.js'); await m.tvWinner(stage, { W: who(wId, av), score: `${Math.max(w1, w2)} : ${Math.min(w1, w2)}`, grip: av.grip }); } catch { /* без 3D */ } finally { showing = false; }
+      try { const m = await import('./player3d.js'); const W = who(wId, av), sc = `${Math.max(w1, w2)} : ${Math.min(w1, w2)}`; VOICE.allowed = true;
+      const cue = c => { if (c === 'win') { sfx('fanfare'); sfx('crowd', 4); say(`Победа! ${W.nick}! Счёт ${sc}.`, { urgent: true }); } };
+      await m.tvWinner(stage, { W, score: sc, grip: av.grip, cue }); } catch { /* без 3D */ } finally { showing = false; }
     }
   }
   // вышла новая версия приложения — табло перезагружается само (между показами)

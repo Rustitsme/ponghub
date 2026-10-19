@@ -474,7 +474,7 @@ async function tvPlayer(S, info) {
 const cardHtml = (who, side) => `<div class="p3-card ${side}"><b>${who.nick}</b><span class="lg">${who.league ? who.league.name + ' · ' : ''}${who.rating ?? ''}</span>${who.racket ? `<div class="rk">🏓 ${who.racket}</div>` : ''}</div>`;
 const safe = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 
-export async function tvIntro(root, { A, B, grip }) {
+export async function tvIntro(root, { A, B, grip, cue = () => {} }) {
   if (grip) Object.assign(RK, grip);
   const S = await tvScene(root);
   const a = { ...A, nick: safe(A.nick), racket: safe(A.racket) }, b = { ...B, nick: safe(B.nick), racket: safe(B.racket) };
@@ -508,20 +508,20 @@ export async function tvIntro(root, { A, B, grip }) {
     S.cam.position.copy(lerp3(from.pos, to.pos, k)); S.cam.lookAt(lerp3(from.look, to.look, k));
   };
   requestAnimationFrame(() => S.ov.classList.add('on'));
-  await wait(80); names.classList.add('in');
-  await wait(1400); names.style.opacity = 0;
+  await wait(80); names.classList.add('in'); cue('names');
+  await wait(1400); names.style.opacity = 0; cue('walk');
   await wait(2900); PA.play('wave', true);
   await wait(300); PB.play('wave', true);
-  await wait(1000); cA.classList.add('on');
+  await wait(1000); cA.classList.add('on'); cue('cardA');
   await wait(1600); cA.classList.remove('on');
-  await wait(900); cB.classList.add('on');
+  await wait(900); cB.classList.add('on'); cue('cardB');
   await wait(1600); cB.classList.remove('on');
-  await wait(700); PA.play('clap', true); PB.play('clap', true);
+  await wait(700); PA.play('clap', true); PB.play('clap', true); cue('go');
   await wait(1500);
   await S.end();
 }
 
-export async function tvWinner(root, { W, score, grip }) {
+export async function tvWinner(root, { W, score, grip, cue = () => {} }) {
   if (grip) Object.assign(RK, grip);
   const S = await tvScene(root);
   S.ov.insertAdjacentHTML('beforeend', `<div class="p3-logo">PONGHUB · ИТОГ</div><div class="p3-win"><b>🏆 ${safe(W.nick)}</b><span>Победа ${safe(score || '')}</span></div>`);
@@ -535,7 +535,7 @@ export async function tvWinner(root, { W, score, grip }) {
     S.cam.lookAt(new THREE.Vector3(0, .95 + (hy() - 1.6) * .1, 0));
   };
   requestAnimationFrame(() => S.ov.classList.add('on'));
-  await wait(500); P.play('win', true);
+  await wait(500); P.play('win', true); cue('win');
   await wait(400); S.ov.querySelector('.p3-win').classList.add('on');
   await wait(5200);
   await S.end();
