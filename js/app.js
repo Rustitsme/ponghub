@@ -171,8 +171,36 @@ async function reload() {
   if (S.me?.status === 'approved' && feature('shop')) { try { await ensureShop(true); } catch { S.shop = null; } }
   else S.shop = null;
   if (S.me?.status === 'approved' && predOn() && !S.shop) { try { S.coins = await S.store.rpc('ensure_wallet'); } catch { S.coins = null; } }
+  setTimeout(showNews, 600);
 }
 async function refresh() { await reload(); render(); }
+
+// ───────────── Памятка «Что нового» для тестировщиков нововведений ─────────────
+// показывается один раз на каждое открытое нововведение (запоминается на устройстве)
+const NEWS = {
+  shop: { icon: '🛍️', title: 'Магазин и своя ракетка', text: 'Пинг-коины за игры, ежедневный бонус и награды за лигу. Покупайте основания, накладки, обмотки и ленты — и собирайте свою ракетку, её видно в профиле.' },
+  avatar: { icon: '🧍', title: '3D-игрок', text: 'Ваш персонаж: выберите парня или девушку, наденьте форму из магазина (футболки, шорты, кроссовки, носки, напульсники, повязки) и посмотрите жесты. На табло перед матчем игроки выходят на сцену.' },
+  resale: { icon: '💸', title: 'Продажа вещей', text: 'Ненужную вещь можно продать обратно за 30% от цены покупки — кнопка в карточке вещи.' },
+};
+function showNews() {
+  // создатель может посмотреть памятку, открыв приложение с ?news в адресе
+  const preview = isFounder() && /news/.test(location.search);
+  if (S.newsShown || !S.me || (isFounder() && !preview)) return;
+  const uid = S.me.id, key = 'ponghub_news_' + uid, seen = preview ? [] : (lsGet(key) || '').split(',').filter(Boolean);
+  const fresh = (preview ? Object.keys(NEWS) : (S.ctx?.myFeatures || [])).filter(f => NEWS[f] && !seen.includes(f));
+  if (!fresh.length) return;
+  S.newsShown = true;
+  const gift = fresh.includes('shop') ? (() => { const { it } = parseKey(STARTER); return it ? `<div class="nw-gift"><span class="nw-badge">🏆 Достижение</span><div class="nw-gift-row"><span class="nw-pic" id="nw-pic"></span><div><b>Подарок на старт</b><span>Основание ${esc(it.brand)} ${esc(it.name)} — уже в ваших вещах и на ракетке</span></div></div></div>` : ''; })() : '';
+  openModal(`<div class="nw"><div class="nw-top"><span class="nw-spark">✨</span><h3>Вам открыты нововведения!</h3><p class="muted">Вы среди первых, кто их видит — до запуска для всех.</p></div>
+    ${fresh.map(f => `<div class="nw-item"><span class="nw-ic">${NEWS[f].icon}</span><div><b>${NEWS[f].title}</b><p>${NEWS[f].text}</p></div></div>`).join('')}
+    ${gift}
+    <div class="nw-where">📍 Всё находится в разделе <b>«Профиль»</b> — внизу экрана справа.</div>
+    <div class="row-btns"><button class="btn primary full" id="nw-go">Открыть профиль</button></div></div>`, sh => {
+    lsSet(key, [...seen, ...fresh].join(','));
+    const pic = sh.querySelector('#nw-pic'); if (pic) { const { it, color } = parseKey(STARTER); try { pic.appendChild(thumbEl(it, color)); } catch { pic.textContent = '🏓'; } }
+    sh.querySelector('#nw-go').onclick = () => { closeModal(); go('#/me'); };
+  });
+}
 
 // ───────────── Роутер ─────────────
 function route() {
