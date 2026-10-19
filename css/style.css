@@ -1087,17 +1087,17 @@ body.av-big { overflow: hidden; }
 .nw-where { padding: 12px; border-radius: 14px; border: 2px dashed var(--red, #e63946); font-size: 15px; text-align: center; }
 
 /* главная: ракетка в белой рамке в шапке, «Мой игрок» и плитки коинов/бонуса */
-.hm-top { display: grid; grid-template-columns: minmax(0, 1fr) 132px; gap: 12px; align-items: center; }
+.hm-top { display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: 12px; align-items: center; }
 .hm-top .hero-nick { font-size: 24px; } .hm-top .hero-top { gap: 10px; }
 .hm-place { display: inline-flex; gap: 6px; align-items: baseline; margin-top: 8px; padding: 4px 10px; border-radius: 999px; background: linear-gradient(135deg, var(--wood-l), var(--wood)); color: #3b2410; font: 800 15px var(--display); }
 .hm-place small { font: 600 11px var(--font, Inter), sans-serif; opacity: .8; }
 .hm-frame { position: relative; display: block; overflow: hidden; background: #fff; border-radius: 18px; touch-action: none; cursor: grab; }
 .hm-frame canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; display: block; }
-.hm-rk { height: 196px; border: 3px solid #fff; box-shadow: 0 0 0 3px #0e3b8c, 0 0 0 5px rgba(255, 210, 63, .9), 0 10px 22px rgba(5, 20, 60, .4); }
+.hm-rk { height: 150px; border: 3px solid #fff; box-shadow: 0 0 0 3px #0e3b8c, 0 0 0 5px rgba(255, 210, 63, .9), 0 10px 22px rgba(5, 20, 60, .4); }
 .hm-row { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 12px; margin-top: 12px; }
 .hm-row.solo { grid-template-columns: 1fr; } .hm-row.solo .hm-col { grid-template-rows: none; grid-template-columns: 1fr 1fr; }
 .hm-card { position: relative; display: flex; padding: 6px; border-radius: 22px; text-decoration: none; background: linear-gradient(160deg, #2f74d6, #1f5fc4 45%, #154a9e); box-shadow: 0 8px 22px rgba(14, 59, 140, .3); }
-.hm-card .hm-frame { flex: 1; min-height: 236px; border-radius: 17px; }
+.hm-card .hm-frame { flex: 1; min-height: 210px; border-radius: 17px; }
 .hm-tag { position: absolute; z-index: 2; left: 50%; bottom: 14px; transform: translateX(-50%); white-space: nowrap; padding: 6px 14px; border-radius: 999px; background: #1f5fc4; color: #fff; font: 800 15px/1 var(--display); letter-spacing: .03em; text-transform: uppercase; box-shadow: 0 4px 12px rgba(14, 59, 140, .35); }
 .hm-col { display: grid; grid-template-rows: 1fr 1fr; gap: 12px; }
 .hm-side { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 4px; padding: 10px; border-radius: 20px; text-decoration: none; color: var(--text); background: #fff; border: 5px solid #1f5fc4; box-shadow: 0 6px 18px rgba(14, 59, 140, .12); }
@@ -1108,3 +1108,12 @@ body.av-big { overflow: hidden; }
 .hm-side.bonus { background: linear-gradient(135deg, #ff8a3d, #e63946); color: #fff; border-color: #fff; box-shadow: 0 0 0 2px rgba(230, 57, 70, .25), 0 6px 18px rgba(230, 57, 70, .3); }
 .hm-side.bonus small, .hm-side.bonus b, .hm-side.bonus b i { color: #fff; } .hm-side.bonus span { background: #fff; color: #e63946; }
 .hm-side.bonus.done { background: linear-gradient(135deg, #9aa7bb, #7b879b); } .hm-side.bonus.done span { color: #59657a; box-shadow: none; }
+
+/* компактная шапка на главной с ракеткой: плитки ниже видны на экране телефона */
+.hero.hm { padding-top: 14px; padding-bottom: 14px; }
+.hero.hm .hm-place { margin-top: 6px; }
+.hero.hm .badges .badge { font-size: 11px; padding: 2px 8px; }
+.hero.hm .hero-mid { margin: 10px 0 6px; } .hero.hm .big-num { font-size: 46px; }
+.hero.hm .hero-stats { padding: 6px; } .hero.hm .hero-stats b { font-size: 18px; }
+.hero.hm .next-league { margin: 8px 0; }
+.hero.hm .hero-links { margin-top: 6px; } .hero.hm .hero-links .btn { padding: 7px 12px; font-size: 14px; }

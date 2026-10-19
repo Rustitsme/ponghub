@@ -469,7 +469,7 @@ function viewHome() {
   const homeRow = showRk ? `<div class="hm-row ${showPl ? '' : 'solo'}">${showPl ? `<a href="#/avatar" class="hm-card"><div class="hm-frame" id="hm-pl"></div><span class="hm-tag">Мой игрок</span></a>` : ''}${tiles}</div>` : '';
 
   return `
-  <section class="hero table-card">
+  <section class="hero table-card${showRk ? ' hm' : ''}">
     ${heroTop}
     <div class="hero-mid">
       <div><div class="big-num">${fmtR(r)}</div><div class="muted small">рейтинг · ${delta(d30)} за 30 дней</div></div>
