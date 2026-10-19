@@ -44,7 +44,6 @@ Deno.serve(async req => {
     const { data: p } = await sb.from('profiles').select('face_day, face_n').eq('id', me).single();
     const today = new Date().toISOString().slice(0, 10), n = p?.face_day === today ? (p.face_n || 0) : 0;
     if (n >= DAILY) return json({ error: `На сегодня попытки закончились (${DAILY} в день). Завтра можно снова.` }, 429);
-    await sb.from('profiles').update({ face_day: today, face_n: n + 1 }).eq('id', me);
 
     const img = (b64: string) => ({ inline_data: { mime_type: 'image/jpeg', data: b64.replace(/^data:[^,]+,/, '') } });
     const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
@@ -52,14 +51,14 @@ Deno.serve(async req => {
       body: JSON.stringify({ contents: [{ parts: [{ text: PROMPT }, img(base), img(selfie)] }], generationConfig: { responseModalities: ['IMAGE'] } }),
     });
     const out = await r.json();
-    if (!r.ok) { console.error('gemini', r.status, JSON.stringify(out).slice(0, 500)); return json({ error: r.status === 429 ? 'Нейросеть сейчас занята — попробуйте через минуту' : 'Нейросеть не ответила — попробуйте ещё раз' }, 502); }
+    if (!r.ok) { const why = String(out?.error?.message || '').slice(0, 300); console.error('gemini', r.status, why); return json({ error: (r.status === 429 ? 'Нейросеть сейчас занята — попробуйте через минуту' : 'Нейросеть не ответила — попробуйте ещё раз'), why }, 502); }
     const part = out?.candidates?.[0]?.content?.parts?.find((x: { inlineData?: unknown }) => x.inlineData);
     if (!part) return json({ error: 'Не получилось распознать лицо — сделайте селфи анфас при хорошем свете' }, 422);
     const bytes = Uint8Array.from(atob(part.inlineData.data), c => c.charCodeAt(0));
     const { error: up } = await sb.storage.from('faces').upload(`${me}.jpg`, bytes, { contentType: part.inlineData.mimeType || 'image/png', upsert: true });
     if (up) throw up;
     const face = `${SB_URL}/storage/v1/object/public/faces/${me}.jpg?v=${Date.now()}`;
-    await sb.from('profiles').update({ face }).eq('id', me);
+    await sb.from('profiles').update({ face, face_day: today, face_n: n + 1 }).eq('id', me);
     return json({ face, left: DAILY - n - 1 });
   } catch (e) {
     console.error(e); return json({ error: 'Ошибка — попробуйте ещё раз' }, 500);
