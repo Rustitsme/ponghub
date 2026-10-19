@@ -561,7 +561,7 @@ export function mountViewer(el, cfg, opts = {}) {
       v.cur.x += (v.target.x - v.cur.x) * .1; v.cur.y += (v.target.y - v.cur.y) * .1;
       v.group.rotation.set(v.cur.x, v.cur.y, 0);
       v.onSide?.(Math.cos(v.cur.y) >= 0 ? 1 : 2);
-      v.camera.position.set(0, 0, 52 / v.zoom); v.camera.lookAt(0, 0, 0);
+      v.camera.position.set(0, 0, v.fitD || 52 / v.zoom); v.camera.lookAt(0, 0, 0);
       if (v.anim) {
         v.anim.t = Math.min(1, v.anim.t + 0.025);
         const e = 1 - Math.pow(1 - v.anim.t, 3);
@@ -579,13 +579,20 @@ export function mountViewer(el, cfg, opts = {}) {
   if (v.group) { v.scene.remove(v.group); v.group.traverse(o => { o.geometry?.dispose?.(); [].concat(o.material || []).forEach(m => { m.map?.dispose?.(); m.dispose?.(); }); }); }
   v.group = new THREE.Group(); v.inner = buildRacket(cfg); v.group.add(v.inner); v.scene.add(v.group);
   v.onSide = opts.onSide || null;
+  // opts.fit: ракетка целиком в рамке при любом повороте (камера по описанной сфере), без приближения
+  v.tilt = opts.fit ? .4 : 1.3; v.fitD = 0;
+  if (opts.fit) {
+    const sph = new THREE.Box3().setFromObject(v.inner).getBoundingSphere(new THREE.Sphere()), half = THREE.MathUtils.degToRad(v.camera.fov / 2);
+    const hh = Math.atan(Math.tan(half) * Math.min(1, v.camera.aspect));
+    v.fitD = sph.radius / Math.sin(hh) * 1.04; v.inner.position.sub(sph.center);
+  }
   if (opts.zoom) v.zoom = opts.zoom;
   if (opts.apply) { v.anim = { slot: opts.apply, t: 0 }; v.target.y = opts.apply === 'bh' ? Math.PI + .35 : opts.apply === 'grip' ? .6 : .35; v.target.x = opts.apply === 'grip' ? .35 : -.18; }
   let last = null;
   el.onpointerdown = e => { if (e.target.closest('button')) return; v.dragging = true; last = [e.clientX, e.clientY]; el.setPointerCapture(e.pointerId); };
-  el.onpointermove = e => { if (!v.dragging) return; v.target.y += (e.clientX - last[0]) * .012; v.target.x = Math.max(-1.3, Math.min(1.3, v.target.x + (e.clientY - last[1]) * .008)); last = [e.clientX, e.clientY]; v.idleAt = Date.now(); };
+  el.onpointermove = e => { if (!v.dragging) return; v.target.y += (e.clientX - last[0]) * .012; v.target.x = Math.max(-v.tilt, Math.min(v.tilt, v.target.x + (e.clientY - last[1]) * .008)); last = [e.clientX, e.clientY]; v.idleAt = Date.now(); };
   el.onpointerup = el.onpointercancel = () => { v.dragging = false; v.idleAt = Date.now(); };
-  el.onwheel = e => { e.preventDefault(); v.zoom = Math.max(.7, Math.min(2.2, v.zoom * (e.deltaY < 0 ? 1.08 : .92))); };
+  el.onwheel = opts.fit ? null : e => { e.preventDefault(); v.zoom = Math.max(.7, Math.min(2.2, v.zoom * (e.deltaY < 0 ? 1.08 : .92))); };
   return {
     flip() { v.target.y += Math.PI; v.idleAt = Date.now(); },
     zoomIn() { v.zoom = Math.min(2.2, v.zoom * 1.15); },

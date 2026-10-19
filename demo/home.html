@@ -21,6 +21,15 @@ body { background: var(--bg); margin: 0; }
 .v1-place { display: inline-flex; gap: 6px; align-items: baseline; margin-top: 8px; padding: 4px 10px; border-radius: 999px; background: linear-gradient(135deg, var(--wood-l), var(--wood)); color: #3b2410; font: 800 15px var(--display); }
 .v1-place small { font: 600 11px Inter, sans-serif; opacity: .8; }
 .v-cap { position: absolute; left: 0; right: 0; bottom: 4px; text-align: center; font: 600 11px Inter, sans-serif; color: rgba(255,255,255,.8); pointer-events: none; }
+/* ваш вариант: ракетка в белой рамке в шапке + «Мой игрок» на полширины */
+.my-top { display: grid; grid-template-columns: 1fr 128px; gap: 12px; align-items: center; }
+.my-frame { position: relative; height: 168px; border-radius: 18px; border: 3px solid rgba(255,255,255,.95); background: radial-gradient(90% 70% at 50% 40%, rgba(255,255,255,.22), rgba(255,255,255,.04)); box-shadow: 0 6px 18px rgba(5,20,60,.35), inset 0 0 0 1px rgba(255,255,255,.25); overflow: hidden; cursor: grab; touch-action: none; }
+.my-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.my-card { display: flex; flex-direction: column; border-radius: 22px; padding: 10px; color: #fff; text-decoration: none; background: linear-gradient(160deg, #2f74d6, #1f5fc4 45%, #154a9e); box-shadow: 0 8px 22px rgba(14,59,140,.3); }
+.my-card h4 { margin: 2px 4px 8px; font: 800 18px/1 var(--display); text-transform: uppercase; letter-spacing: .02em; }
+.my-card .my-frame { height: 170px; border-radius: 16px; background: radial-gradient(90% 80% at 50% 30%, #4a8cf0 0%, #1f5fc4 60%, #0e3b8c 100%); }
+.my-side { justify-content: space-between; background: linear-gradient(160deg, #ffffff, #eef3fb); color: var(--text); }
+.my-side b { font: 800 30px var(--display); color: #e63946; } .my-side small { color: var(--muted); font: 600 12px Inter, sans-serif; }
 /* витрины 2–4 */
 .v-show { position: relative; margin-top: 12px; border-radius: 22px; overflow: hidden; color: #fff; background: radial-gradient(90% 80% at 50% 25%, #3a7be0 0%, #1f5fc4 45%, #0e3b8c 100%); box-shadow: 0 10px 30px rgba(14, 59, 140, .35); }
 .v-show::before { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; border-left: 2px solid rgba(255,255,255,.18); }
@@ -69,6 +78,11 @@ const heroRest = `<div class="hero-mid"><div><div class="big-num">51.0</div><div
 const showHead = (title, sub, btn) => `<div class="v-head"><div><b>${title}</b><small>${sub}</small></div>${btn ? `<a class="v-btn" href="#">${btn}</a>` : ''}</div>`;
 
 const V = [
+  { name: '★ Ваш вариант', note: '<b>Ваш вариант</b>Шапка как сейчас, справа — ракетка в белой рамке: сама медленно крутится, пальцем можно покрутить, из рамки не вылезает. Нажатие — переход в «Мою ракетку». «Место» — плашкой под ником. Ниже «Мой игрок» на половину ширины: синий фон, белая рамка, игрок по грудь смотрит в камеру, сам не крутится. Нажатие — карточка игрока. <br><br>Ваше сообщение оборвалось на «по грудь,» — что поставить во вторую половину? Пока для примера — пинг-коины и магазин.',
+    html: `<section class="hero table-card"><div class="my-top"><div>${nickBlock(false)}<div class="v1-place">3 <small>место из 14</small></div></div><div class="my-frame" id="rk"></div></div>${heroRest}</section>
+      <div class="my-row"><a class="my-card" href="#" onclick="return false"><h4>Мой игрок</h4><div class="my-frame" id="pl"></div></a>
+        <a class="my-card my-side" href="#" onclick="return false"><span style="font-size:30px">🛍️</span><div><b>1 240</b><small>пинг-коинов</small></div><span class="btn sm primary" style="text-align:center">Магазин →</span></a></div>`,
+    mount: async () => { mountViewer(document.getElementById('rk'), RK, { fit: true }); await mountAvatar(document.getElementById('pl'), { gender: 'boy', loadout: LO, bust: true }); } },
   { name: '1. Ракетка в шапке', note: '<b>Вариант 1 — ракетка прямо в синей шапке</b>Вместо блока «место 3 из 14» справа крутится ваша ракетка. Место — маленькой плашкой под ником. Главная почти не меняется, ракетку видно сразу.',
     html: `<section class="hero table-card"><div class="v1-top"><div>${nickBlock(false)}<div class="v1-place">3 <small>место из 14</small></div></div><div class="v1-rk" id="rk"><div class="v-cap">покрутите ↻</div></div></div>${heroRest}</section>`,
     mount: () => mountViewer(document.getElementById('rk'), RK, { zoom: .78 }) },
