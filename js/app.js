@@ -2058,7 +2058,17 @@ const owns = key => !!S.shop?.items?.includes(key);
 const ownsAny = it => it.colors ? it.colors.some(c => owns(`${it.id}:${c.key}`)) : owns(it.id);
 const shopBars = it => it.s == null ? '' : `<div class="sh-bars">${[['Скорость', it.s, '#e63946'], ['Вращение', it.w, '#2563b8'], ['Контроль', it.c, '#12a061']].map(([l, v, c]) => `<div class="sh-bar">${l}<i><b style="width:${v * 10}%;background:${c}"></b></i><span>${String(v).replace('.', ',')}</span></div>`).join('')}</div>`;
 const shopTags = it => `<div class="sh-tags"><span class="sh-tag ${STYLE[it.style][1]}">${STYLE[it.style][0]}</span>${it.type === 'blade' ? `<span class="sh-tag">${esc(it.layers)}</span>` : it.type === 'rubber' ? `<span class="sh-tag">${esc(it.rubber)}</span><span class="sh-tag">${esc(it.sponge)}</span>` : ''}</div>`;
-const thumbEl = (it, color, big) => { const el = thumb(it, color, big); el.classList.add(big ? 'sh-pic-img' : 'sh-thumb-img'); return el; };
+const WEAR_3D = ['shirt', 'shorts', 'shoes', 'socks', 'wrist', 'head'];
+const thumbEl = (it, color, big) => {
+  const el = thumb(it, color, big); el.classList.add(big ? 'sh-pic-img' : 'sh-thumb-img');
+  // форма: сначала рисунок, затем — снимок вещи на 3D-игроке (только у кого открыт 3D-игрок)
+  if (WEAR_3D.includes(it.type) && feature('avatar')) {
+    import('./player3d.js').then(m => m.wearShot(keyOf(it, color), big ? 512 : 256)).then(url => {
+      if (!url) return; const im = new Image(); im.onload = () => { const x = el.getContext('2d'); x.setTransform(1, 0, 0, 1, 0, 0); x.clearRect(0, 0, el.width, el.height); x.drawImage(im, 0, 0, el.width, el.height); }; im.src = url;
+    }).catch(() => {});
+  }
+  return el;
+};
 
 function shopHeader(tab) {
   return `<div class="page-h"><h1>🛍️ Магазин</h1><a href="#/racket" class="btn sm">🏓 Моя ракетка</a></div>

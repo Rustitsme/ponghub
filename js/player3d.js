@@ -540,3 +540,46 @@ export async function tvWinner(root, { W, score, grip }) {
   await wait(5200);
   await S.end();
 }
+
+// ───────────── Иконки формы: вещь крупно на 3D-игроке ─────────────
+// один скрытый рендер на всё приложение, снимки по очереди и в кэше (ключ вещи → jpeg dataURL)
+const SHOT = { R: null, P: null, cache: new Map(), q: Promise.resolve() };
+const SLOT_OF = { shirt: 'shirt', shorts: 'shorts', shoes: 'shoes', socks: 'socks', wrist: 'wrist', head: 'head' };
+function shotFrame(P, type) {
+  const b = P.bones, at = n => b[n].getWorldPosition(new THREE.Vector3());
+  const mid = (...ns) => ns.map(at).reduce((s, v) => s.add(v), new THREE.Vector3()).multiplyScalar(1 / ns.length);
+  // [центр кадра, высота кадра в метрах, поворот игрока]
+  if (type === 'shirt') return [mid('Spine1', 'Spine2'), .78, .35];
+  if (type === 'shorts') return [mid('LeftUpLeg', 'RightUpLeg').add(new THREE.Vector3(0, -.12, 0)), .62, .35];
+  if (type === 'shoes') return [mid('LeftFoot', 'RightFoot').add(new THREE.Vector3(0, -.06, 0)), .46, .7];
+  if (type === 'socks') return [mid('LeftFoot', 'RightFoot').add(new THREE.Vector3(0, .14, 0)), .58, .5];
+  if (type === 'wrist') return [at('LeftHand').lerp(at('LeftForeArm'), .35), .32, -.4];
+  return [at('Head').add(new THREE.Vector3(0, .08, 0)), .34, .35];
+}
+export function wearShot(key, size = 256) {
+  const { it } = parseKey(key); if (!it || !SLOT_OF[it.type]) return Promise.resolve(null);
+  const ck = key + '@' + size; if (SHOT.cache.has(ck)) return SHOT.cache.get(ck);
+  const job = SHOT.q = SHOT.q.then(async () => {
+    await libs();
+    if (!SHOT.P) {
+      SHOT.R = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+      SHOT.R.outputEncoding = THREE.sRGBEncoding; SHOT.R.toneMapping = THREE.ACESFilmicToneMapping; SHOT.R.toneMappingExposure = 1.05;
+      SHOT.scene = new THREE.Scene();
+      SHOT.scene.add(new THREE.HemisphereLight('#ffffff', '#9aa8c4', .75));
+      const k = new THREE.DirectionalLight('#ffffff', 1.25); k.position.set(2.5, 4, 4); SHOT.scene.add(k);
+      const f = new THREE.DirectionalLight('#ffe8d6', .4); f.position.set(-3, 1.5, 3); SHOT.scene.add(f);
+      SHOT.cam = new THREE.PerspectiveCamera(20, 1, .05, 50);
+      SHOT.P = await makePlayer('boy'); SHOT.scene.add(SHOT.P.holder);
+      SHOT.P.mixer.update(.5);
+    }
+    const P = SHOT.P, lo = { [SLOT_OF[it.type]]: key, blade: 'cn-b1:FL' };
+    applyLook(P, lo); if (P.rk) P.rk.visible = false;
+    const ry = shotFrame(P, it.type)[2];
+    P.holder.rotation.y = ry; P.holder.updateMatrixWorld(true);
+    const [c2, h2] = shotFrame(P, it.type), dist = h2 / 2 / Math.tan(THREE.MathUtils.degToRad(10));
+    SHOT.cam.position.set(c2.x, c2.y + h2 * .15, c2.z + dist); SHOT.cam.lookAt(c2);
+    SHOT.R.setSize(size, size, false); SHOT.R.render(SHOT.scene, SHOT.cam);
+    return SHOT.R.domElement.toDataURL('image/png');
+  }).catch(() => null);
+  SHOT.cache.set(ck, job); return job;
+}
