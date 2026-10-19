@@ -421,7 +421,7 @@ export async function mountAvatar(el, opts = {}) {
   applyLook(V.cur, opts.loadout || {}); applyFace(V.cur, opts.face || null);
   // opts.bust: игрок по грудь, лицом в камеру, сам не крутится (покрутить можно пальцем — потом вернётся)
   V.bust = !!opts.bust; V.cur.lookAt = V.bust ? V.cam.position : null;
-  if (V.bust) { V.target = V.ry = 0; V.tz = V.zoom = 3.4; V.tfy = V.fy = headY(V.cur) - .2; if (V.cur.rk) V.cur.rk.visible = false; }
+  if (V.bust) { V.target = V.ry = 0; V.tz = V.zoom = 3; V.tfy = V.fy = headY(V.cur) - .17; if (V.cur.rk) V.cur.rk.visible = false; }
   if (!V.bust) { V.tz = 1; V.tfy = .84; } if (TUNE_ON) { V.idle = Infinity; V.target = V.ry = -0.6; }
   let last = null;
   el.onpointerdown = e => { if (e.target.closest('button,input,a')) return; V.drag = true; last = e.clientX; el.setPointerCapture(e.pointerId); };

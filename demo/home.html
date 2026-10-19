@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="robots" content="noindex">
+<html lang="ru"><head><script>if (/shim/.test(location.search)) window.requestAnimationFrame = cb => setTimeout(() => cb(performance.now()), 16);</script><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="robots" content="noindex">
 <base href="../">
 <title>Главная PongHub — варианты</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap">
@@ -22,12 +22,13 @@ body { background: var(--bg); margin: 0; }
 .v1-place small { font: 600 11px Inter, sans-serif; opacity: .8; }
 .v-cap { position: absolute; left: 0; right: 0; bottom: 4px; text-align: center; font: 600 11px Inter, sans-serif; color: rgba(255,255,255,.8); pointer-events: none; }
 /* ваш вариант: ракетка в белой рамке в шапке + «Мой игрок» на полширины */
-.my-top { display: grid; grid-template-columns: 1fr 128px; gap: 12px; align-items: center; }
-.my-frame { position: relative; height: 168px; border-radius: 18px; border: 3px solid rgba(255,255,255,.95); background: radial-gradient(90% 70% at 50% 40%, rgba(255,255,255,.22), rgba(255,255,255,.04)); box-shadow: 0 6px 18px rgba(5,20,60,.35), inset 0 0 0 1px rgba(255,255,255,.25); overflow: hidden; cursor: grab; touch-action: none; }
-.my-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.my-top { display: grid; grid-template-columns: minmax(0, 1fr) 118px; gap: 12px; align-items: center; }
+.my-frame { position: relative; height: 168px; border-radius: 18px; border: 3px solid rgba(255,255,255,.95); background: #fff; box-shadow: 0 6px 18px rgba(5,20,60,.35), inset 0 0 0 1px rgba(255,255,255,.25); overflow: hidden; cursor: grab; touch-action: none; }
+.my-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; margin-top: 12px; }
 .my-card { display: flex; flex-direction: column; border-radius: 22px; padding: 10px; color: #fff; text-decoration: none; background: linear-gradient(160deg, #2f74d6, #1f5fc4 45%, #154a9e); box-shadow: 0 8px 22px rgba(14,59,140,.3); }
 .my-card h4 { margin: 2px 4px 8px; font: 800 18px/1 var(--display); text-transform: uppercase; letter-spacing: .02em; }
-.my-card .my-frame { height: 170px; border-radius: 16px; background: radial-gradient(90% 80% at 50% 30%, #4a8cf0 0%, #1f5fc4 60%, #0e3b8c 100%); }
+.my-card .my-frame { height: 170px; border-radius: 16px; background: #fff; }
+.my-frame canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; display: block; }
 .my-side { justify-content: space-between; background: linear-gradient(160deg, #ffffff, #eef3fb); color: var(--text); }
 .my-side b { font: 800 30px var(--display); color: #e63946; } .my-side small { color: var(--muted); font: 600 12px Inter, sans-serif; }
 /* витрины 2–4 */
@@ -78,7 +79,7 @@ const heroRest = `<div class="hero-mid"><div><div class="big-num">51.0</div><div
 const showHead = (title, sub, btn) => `<div class="v-head"><div><b>${title}</b><small>${sub}</small></div>${btn ? `<a class="v-btn" href="#">${btn}</a>` : ''}</div>`;
 
 const V = [
-  { name: '★ Ваш вариант', note: '<b>Ваш вариант</b>Шапка как сейчас, справа — ракетка в белой рамке: сама медленно крутится, пальцем можно покрутить, из рамки не вылезает. Нажатие — переход в «Мою ракетку». «Место» — плашкой под ником. Ниже «Мой игрок» на половину ширины: синий фон, белая рамка, игрок по грудь смотрит в камеру, сам не крутится. Нажатие — карточка игрока. <br><br>Ваше сообщение оборвалось на «по грудь,» — что поставить во вторую половину? Пока для примера — пинг-коины и магазин.',
+  { name: '★ Ваш вариант', note: '<b>Ваш вариант</b>Шапка как сейчас, справа — ракетка в белой рамке: сама медленно крутится, пальцем можно покрутить, из рамки не вылезает. Нажатие — переход в «Мою ракетку». «Место» — плашкой под ником. Ниже «Мой игрок» на половину ширины: синий фон, белая рамка, игрок по грудь смотрит в камеру, сам не крутится. Нажатие — карточка игрока.  Рядом — пинг-коины и переход в магазин. В рамках — белый фон.',
     html: `<section class="hero table-card"><div class="my-top"><div>${nickBlock(false)}<div class="v1-place">3 <small>место из 14</small></div></div><div class="my-frame" id="rk"></div></div>${heroRest}</section>
       <div class="my-row"><a class="my-card" href="#" onclick="return false"><h4>Мой игрок</h4><div class="my-frame" id="pl"></div></a>
         <a class="my-card my-side" href="#" onclick="return false"><span style="font-size:30px">🛍️</span><div><b>1 240</b><small>пинг-коинов</small></div><span class="btn sm primary" style="text-align:center">Магазин →</span></a></div>`,
