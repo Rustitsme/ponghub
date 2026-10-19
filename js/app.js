@@ -3355,7 +3355,16 @@ async function boot() {
     if (ae && $app.contains(ae) && /INPUT|SELECT|TEXTAREA/.test(ae.tagName)) return;
     if (!$modal.classList.contains('open')) render();
   });
-  document.addEventListener('visibilitychange', async () => { if (!document.hidden && S.user) { await reload(); if (!$modal.classList.contains('open')) render(); } });
+  // открыли из фона: если вышла новая версия — перезагружаемся, иначе просто обновляем данные
+  let appVer = null;
+  const verOf = async () => { try { return ((await (await fetch('sw.js', { cache: 'no-store' })).text()).match(/CACHE = '([^']+)'/) || [])[1] || null; } catch { return null; } };
+  verOf().then(v => { appVer = v; });
+  document.addEventListener('visibilitychange', async () => {
+    if (document.hidden) return;
+    const v = await verOf();
+    if (appVer && v && v !== appVer && !$modal.classList.contains('open')) { location.reload(); return; }
+    if (S.user) { await reload(); if (!$modal.classList.contains('open')) render(); }
+  });
   addEventListener('hashchange', () => { closeModal(); render(); });
   render();
   document.getElementById('splash')?.remove();

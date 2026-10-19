@@ -370,3 +370,123 @@ export async function mountAvatar(el, opts = {}) {
     tuneDist: d => { V.tune.dist = d; },
   };
 }
+
+// ───────────── Табло: выход игроков перед матчем и жест победителя ─────────────
+// opts.A / opts.B / opts.W: { gender, loadout, nick, rating, league:{name, cls}, racket }
+const tvCss = `.p3-ov{position:absolute;inset:0;z-index:50;overflow:hidden;background:radial-gradient(90% 80% at 50% 10%,#1b3d73 0%,#0b1a33 55%,#050b17 100%);color:#fff;opacity:0;transition:opacity .6s}
+.p3-ov.on{opacity:1}.p3-ov canvas{position:absolute;inset:0;width:100%;height:100%}
+.p3-names{position:absolute;inset:0;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 5%;font:800 clamp(28px,6.5vw,110px)/1 "Barlow Condensed","Arial Narrow",sans-serif;text-transform:uppercase;transition:opacity .5s}
+.p3-names .a{color:#ff6b75;transform:translateX(-120%);transition:transform .7s cubic-bezier(.2,.9,.2,1);text-shadow:0 6px 30px rgba(230,57,70,.6)}
+.p3-names .b{color:#6fb0ff;text-align:right;transform:translateX(120%);transition:transform .7s cubic-bezier(.2,.9,.2,1);text-shadow:0 6px 30px rgba(47,125,225,.6)}
+.p3-names .vs{font-size:.6em;color:#ffd75e;opacity:0;transform:scale(2.4);transition:all .5s .45s}
+.p3-names.in .a,.p3-names.in .b{transform:none}.p3-names.in .vs{opacity:1;transform:none}
+.p3-card{position:absolute;top:22%;width:30%;padding:1.6% 2%;border-radius:1vw;background:rgba(8,18,38,.8);border:1px solid rgba(255,255,255,.15);opacity:0;transition:opacity .45s,transform .45s;font-size:clamp(12px,1.5vw,26px)}
+.p3-card.l{left:6%;transform:translateX(-20px);border-left:5px solid #e63946}.p3-card.r{right:6%;transform:translateX(20px);border-right:5px solid #2f7de1;text-align:right}
+.p3-card.on{opacity:1;transform:none}.p3-card b{display:block;font:800 2.2em/1 "Barlow Condensed","Arial Narrow",sans-serif;text-transform:uppercase}
+.p3-card .lg{display:inline-block;margin:.5em 0 .3em;padding:.15em .7em;border-radius:999px;background:rgba(255,255,255,.14);font-weight:800}
+.p3-card .rk{opacity:.85;margin-top:.3em}
+.p3-logo{position:absolute;left:3%;top:4%;font:800 clamp(14px,1.8vw,30px) "Barlow Condensed",sans-serif;letter-spacing:.08em;opacity:.85}
+.p3-win{position:absolute;left:0;right:0;bottom:9%;text-align:center;opacity:0;transform:translateY(20px);transition:all .6s}
+.p3-win.on{opacity:1;transform:none}.p3-win b{display:block;font:800 clamp(30px,6vw,100px)/1 "Barlow Condensed",sans-serif;text-transform:uppercase;color:#ffd75e;text-shadow:0 8px 40px rgba(255,200,60,.5)}
+.p3-win span{font:700 clamp(14px,2vw,34px) "Barlow Condensed",sans-serif;opacity:.9}`;
+const lerp3 = (a, b, t) => a.clone().lerp(b, t);
+const ease = t => t < 0 ? 0 : t > 1 ? 1 : t * t * (3 - 2 * t);
+const wait = ms => new Promise(r => setTimeout(r, ms));
+
+async function tvScene(root) {
+  await libs();
+  if (!document.getElementById('p3-css')) { const st = document.createElement('style'); st.id = 'p3-css'; st.textContent = tvCss; document.head.appendChild(st); }
+  const ov = document.createElement('div'); ov.className = 'p3-ov'; root.appendChild(ov);
+  const R = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  R.outputEncoding = THREE.sRGBEncoding; R.toneMapping = THREE.ACESFilmicToneMapping; R.setPixelRatio(Math.min(2, devicePixelRatio));
+  ov.appendChild(R.domElement);
+  const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(30, 16 / 9, .05, 60);
+  scene.add(new THREE.HemisphereLight('#ffffff', '#9aa8c4', .55));
+  const key = new THREE.DirectionalLight('#ffffff', 1.6); key.position.set(2.5, 4, 4); scene.add(key);
+  const rim = new THREE.DirectionalLight('#cfe0ff', 1.4); rim.position.set(-3, 3, -3); scene.add(rim);
+  const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d'); const g = x.createRadialGradient(128, 128, 10, 128, 128, 128); g.addColorStop(0, 'rgba(60,110,200,.55)'); g.addColorStop(.45, 'rgba(25,60,130,.35)'); g.addColorStop(1, 'rgba(10,25,60,0)'); x.fillStyle = g; x.fillRect(0, 0, 256, 256);
+  const ft = new THREE.CanvasTexture(c); ft.encoding = THREE.sRGBEncoding;
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(8, 4.5), new THREE.MeshBasicMaterial({ map: ft, transparent: true, depthWrite: false, toneMapped: false })); floor.rotation.x = -Math.PI / 2; scene.add(floor);
+  const ring = (xx, col) => { const m = new THREE.Mesh(new THREE.RingGeometry(.55, .6, 64), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: .9 })); m.rotation.x = -Math.PI / 2; m.position.set(xx, .003, 0); scene.add(m); return m; };
+  const size = () => { const w = ov.clientWidth || root.clientWidth, h = ov.clientHeight || root.clientHeight; R.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); };
+  size();
+  const S = { R, scene, cam, ov, ring, size, frame: null, run: true, players: [] };
+  const clock = new THREE.Clock();
+  const loop = () => { if (!S.run) return; requestAnimationFrame(loop); const dt = Math.min(.05, clock.getDelta()); S.players.forEach(p => stepPlayer(p, dt)); S.frame && S.frame(dt); R.render(scene, cam); };
+  loop();
+  S.end = async () => { ov.classList.remove('on'); await wait(650); S.run = false; R.dispose(); ov.remove(); };
+  return S;
+}
+async function tvPlayer(S, info) {
+  const P = await makePlayer(info.gender === 'girl' ? 'girl' : 'boy');
+  applyLook(P, info.loadout || {}); S.scene.add(P.holder); S.players.push(P); return P;
+}
+const cardHtml = (who, side) => `<div class="p3-card ${side}"><b>${who.nick}</b><span class="lg">${who.league ? who.league.name + ' · ' : ''}${who.rating ?? ''}</span>${who.racket ? `<div class="rk">🏓 ${who.racket}</div>` : ''}</div>`;
+const safe = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+
+export async function tvIntro(root, { A, B, grip }) {
+  if (grip) Object.assign(RK, grip);
+  const S = await tvScene(root);
+  const a = { ...A, nick: safe(A.nick), racket: safe(A.racket) }, b = { ...B, nick: safe(B.nick), racket: safe(B.racket) };
+  S.ov.insertAdjacentHTML('beforeend', `<div class="p3-logo">PONGHUB · МАТЧ</div><div class="p3-names"><div class="a">${a.nick}</div><div class="vs">VS</div><div class="b">${b.nick}</div></div>${cardHtml(a, 'l')}${cardHtml(b, 'r')}`);
+  const [PA, PB] = await Promise.all([tvPlayer(S, A), tvPlayer(S, B)]);
+  S.ring(-1.05, '#e63946'); S.ring(1.05, '#2f7de1');
+  const XA = -1.05, XB = 1.05, START = 3.6;
+  PA.holder.position.x = -START; PB.holder.position.x = START; PA.holder.rotation.y = Math.PI / 2; PB.holder.rotation.y = -Math.PI / 2;
+  PA.holder.visible = PB.holder.visible = false;
+  const names = S.ov.querySelector('.p3-names'), cA = S.ov.querySelector('.p3-card.l'), cB = S.ov.querySelector('.p3-card.r');
+  const hy = P => { const v = new THREE.Vector3(); (P.bones.Head || P.scene).getWorldPosition(v); return v.y + .08; };
+  let t = 0;
+  const W = { pos: new THREE.Vector3(0, 1.05, 6.6), look: new THREE.Vector3(0, .95, 0) };
+  const walk = (P, x0, x1, t0, dur, face) => {
+    const k = ease((t - t0) / dur); if (t < t0) return; P.holder.visible = true;
+    P.holder.position.x = x0 + (x1 - x0) * Math.min(1, (t - t0) / dur);
+    if (t - t0 >= dur) { const kk = ease((t - t0 - dur) / .5); P.holder.rotation.y = (x0 < 0 ? Math.PI / 2 : -Math.PI / 2) * (1 - kk) + face * kk; if (P.curName === 'walk') P.play('idle'); }
+    else if (P.curName !== 'walk') P.play('walk');
+    void k;
+  };
+  S.frame = dt => {
+    t += dt;
+    walk(PA, -START, XA, 1.5, 2.3, .25); walk(PB, START, XB, 1.8, 2.3, -.25);
+    const fA = { pos: new THREE.Vector3(XA - .25, hy(PA) + .02, 1.95), look: new THREE.Vector3(XA - .57, hy(PA) - .05, 0) };
+    const fB = { pos: new THREE.Vector3(XB + .25, hy(PB) + .02, 1.95), look: new THREE.Vector3(XB + .57, hy(PB) - .05, 0) };
+    let from = W, to = W, k = 0;
+    if (t < 4.6) { from = { pos: new THREE.Vector3(0, 1.3, 8.5), look: W.look }; k = ease((t - .5) / 3.5); }
+    else if (t < 7.2) { from = W; to = fA; k = ease((t - 4.6) / 1.1); if (t > 4.8) PA.holder.rotation.y += (Math.atan2(fA.pos.x - XA, fA.pos.z) - PA.holder.rotation.y) * .08; }
+    else if (t < 9.8) { from = fA; to = fB; k = ease((t - 7.2) / 1.2); if (t > 7.4) PB.holder.rotation.y += (Math.atan2(fB.pos.x - XB, fB.pos.z) - PB.holder.rotation.y) * .08; }
+    else { from = fB; to = W; k = ease((t - 9.8) / 1.2); PA.holder.rotation.y += (.25 - PA.holder.rotation.y) * .06; PB.holder.rotation.y += (-.25 - PB.holder.rotation.y) * .06; }
+    S.cam.position.copy(lerp3(from.pos, to.pos, k)); S.cam.lookAt(lerp3(from.look, to.look, k));
+  };
+  requestAnimationFrame(() => S.ov.classList.add('on'));
+  await wait(80); names.classList.add('in');
+  await wait(1400); names.style.opacity = 0;
+  await wait(2900); PA.play('wave', true);
+  await wait(300); PB.play('wave', true);
+  await wait(1000); cA.classList.add('on');
+  await wait(1600); cA.classList.remove('on');
+  await wait(900); cB.classList.add('on');
+  await wait(1600); cB.classList.remove('on');
+  await wait(700); PA.play('clap', true); PB.play('clap', true);
+  await wait(1500);
+  await S.end();
+}
+
+export async function tvWinner(root, { W, score, grip }) {
+  if (grip) Object.assign(RK, grip);
+  const S = await tvScene(root);
+  S.ov.insertAdjacentHTML('beforeend', `<div class="p3-logo">PONGHUB · ИТОГ</div><div class="p3-win"><b>🏆 ${safe(W.nick)}</b><span>Победа ${safe(score || '')}</span></div>`);
+  const P = await tvPlayer(S, W); S.ring(0, '#ffd75e');
+  P.holder.rotation.y = .2;
+  const hy = () => { const v = new THREE.Vector3(); (P.bones.Head || P.scene).getWorldPosition(v); return v.y; };
+  let t = 0;
+  S.frame = dt => {
+    t += dt; const k = ease(t / 2.2);
+    S.cam.position.copy(lerp3(new THREE.Vector3(0, 1.2, 6.2), new THREE.Vector3(0, 1.15, 3.6), k));
+    S.cam.lookAt(new THREE.Vector3(0, .95 + (hy() - 1.6) * .1, 0));
+  };
+  requestAnimationFrame(() => S.ov.classList.add('on'));
+  await wait(500); P.play('win', true);
+  await wait(400); S.ov.querySelector('.p3-win').classList.add('on');
+  await wait(5200);
+  await S.end();
+}

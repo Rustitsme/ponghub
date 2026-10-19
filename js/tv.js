@@ -3,6 +3,7 @@
 // Дальше табло само опрашивает screen_state(токен) и переключается: игра → итоги → перерыв.
 import { analyze, ranking, leagueOf, replayLive, DEFAULT_SETTINGS, isDoubles, winsNeeded } from './engine.js';
 import { koBracket, roundName, standings, pairings } from './tourney.js';
+import { parseKey } from './shop-catalog.js';
 
 const LS = 'ponghub_tv_token';
 const POLL = 2000;            // как часто спрашиваем текущую игру
@@ -60,10 +61,52 @@ export async function startTV(root, store) {
       }
       T.data = d;
       draw();
+      shows(d);
     } catch (e) {
       if (!T.data) box.innerHTML = `<div class="tvx-msg">${LOGO}<b>PongHub</b><span>Нет связи с сервером. Проверяю снова…</span></div>`;
     }
   }
+
+  // ── 3D-игроки: выход перед матчем и жест победителя (если игрокам открыт 3D-игрок) ──
+  const SEEN = { live: new Set(), res: new Set(), boot: true };
+  let showing = false;
+  const stage = root.querySelector('.tvx-stage');
+  const racketName = lo => { const { it } = parseKey(lo?.blade || ''); return it ? `${it.brand} ${it.name}` : ''; };
+  async function avatars(ids) { try { return await store.rpc('screen_avatars', { p_token: T.token, ids }); } catch { return null; } }
+  function who(id, av) {
+    const p = av?.players?.find(x => x.id === id), r = rating(id);
+    return { gender: p?.avatar3d || 'boy', loadout: p?.loadout || {}, nick: P(id).nickname, rating: fmtR(r), league: leagueOf(r), racket: racketName(p?.loadout) };
+  }
+  async function shows(d) {
+    if (showing || d.status !== 'ok' || !T.full) return;
+    const fresh = d.recent && (Date.parse(d.now) - Date.parse(d.recent.updated_at)) / 1000 < RESULT_SHOW;
+    if (SEEN.boot) { (d.live || []).forEach(l => SEEN.live.add(l.id)); if (d.recent) SEEN.res.add(d.recent.id); SEEN.boot = false; return; }
+    const nl = (d.live || []).find(l => !SEEN.live.has(l.id));
+    if (nl) {
+      SEEN.live.add(nl.id);
+      if (isDoubles(nl) || (nl.log || []).length) return;
+      const av = await avatars([nl.player1_id, nl.player2_id]);
+      if (!av?.players?.some(p => p.on)) return;
+      showing = true;
+      try { const m = await import('./player3d.js'); await m.tvIntro(stage, { A: who(nl.player1_id, av), B: who(nl.player2_id, av), grip: av.grip }); } catch { /* без 3D */ } finally { showing = false; }
+      return;
+    }
+    const rl = d.recent;
+    if (rl && fresh && !SEEN.res.has(rl.id)) {
+      SEEN.res.add(rl.id);
+      if (isDoubles(rl)) return;
+      const mm = d.recent_match, g = replayLive(rl.log || [], rl.best_of, rl.points_to, rl.first_server);
+      const w1 = mm ? (mm.sets1 ?? 0) : g.won[0], w2 = mm ? (mm.sets2 ?? 0) : g.won[1];
+      const wId = sideIds(rl, w1 >= w2 ? 0 : 1)[0];
+      const av = await avatars([wId]);
+      if (!av?.players?.some(p => p.on)) return;
+      showing = true;
+      try { const m = await import('./player3d.js'); await m.tvWinner(stage, { W: who(wId, av), score: `${Math.max(w1, w2)} : ${Math.min(w1, w2)}`, grip: av.grip }); } catch { /* без 3D */ } finally { showing = false; }
+    }
+  }
+  // вышла новая версия приложения — табло перезагружается само (между показами)
+  let ver = null;
+  setInterval(async () => { try { const v = ((await (await fetch('sw.js', { cache: 'no-store' })).text()).match(/CACHE = '([^']+)'/) || [])[1]; if (ver && v && v !== ver && !showing) location.reload(); ver = ver || v; } catch { /* */ } }, 300000);
 
   // ── помощники ──
   const P = id => T.full?.players.find(p => p.id === id) || { id, nickname: 'Игрок', avatar: '🏓' };
