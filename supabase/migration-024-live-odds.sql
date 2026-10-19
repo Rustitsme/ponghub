@@ -44,7 +44,7 @@ end $$;
 create or replace function public.live_prob(c float8, log jsonb, best_of int, pts int) returns float8
 language plpgsql immutable as $$
 declare need int := (best_of + 1) / 2; a int := 0; b int := 0; wa int := 0; wb int := 0; pa int := 0; pb int := 0;
-  s int; lo float8 := .02; hi float8 := .98; q0 float8; q float8; k int; K constant float8 := 40;
+  s int; lo float8 := .02; hi float8 := .98; q0 float8; q float8; k int; prior constant float8 := 40;
 begin
   c := least(.97, greatest(.03, coalesce(c, .5)));
   for s in select (x)::int from jsonb_array_elements_text(coalesce(log, '[]')) x loop
@@ -59,7 +59,7 @@ begin
     if public.match_prob(0, 0, need, public.game_prob(q0, 0, 0, pts), public.game_prob(q0, 0, 0, pts)) < c then lo := q0; else hi := q0; end if;
   end loop;
   -- форма в этом матче: чем больше сыграно очков, тем сильнее они сдвигают шанс
-  q := least(.95, greatest(.05, (q0 * K + pa) / (K + pa + pb)));
+  q := least(.95, greatest(.05, (q0 * prior + pa) / (prior + pa + pb)));
   return public.match_prob(wa, wb, need, public.game_prob(q, a, b, pts), public.game_prob(q, 0, 0, pts));
 end $$;
 
