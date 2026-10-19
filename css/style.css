@@ -918,6 +918,10 @@ body.tv-mode .tabs, body.tv-mode .fab, body.tv-mode .ios-hint { display: none !i
 .tvx-next b { font: 800 3.2cqw/1.05 var(--display); }
 .tvx-next span { font-size: 1.2cqw; color: var(--tv-muted); }
 .tvx-next .tvx-card { border: 0; background: none; }
+.tvx-next .tvx-qr { grid-template-columns: 1fr; justify-items: center; align-self: center; text-align: center; gap: 1.2cqw; padding: 0; width: 100%; }
+.tvx-next .tvx-qr-img { width: min(13cqw, 100%); height: auto; aspect-ratio: 1; }
+.tvx-next .tvx-qr p { font-size: 1.25cqw; }
+.tvx-next .tvx-qr b { font: 700 2.1cqw/1.1 var(--display); margin: .4cqw 0; }
 .tvx-free { display: grid; grid-template-columns: 1fr 1fr; gap: 1.6cqw; align-items: start; }
 .tvx-table ol { list-style: none; margin: 0; padding: 0; }
 .tvx-table li { display: grid; grid-template-columns: 3cqw 1fr auto 4cqw; gap: 1cqw; align-items: center; font: 700 1.7cqw var(--display); padding: .5cqw 0; border-bottom: .1cqw solid var(--tv-line); }
