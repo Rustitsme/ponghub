@@ -2287,6 +2287,8 @@ const SHOP_ACT = {
 // ракетка игрока — картинкой в профиле
 // ───────────── 3D-игрок ─────────────
 let AV = null;
+// лицо по селфи отложено: нужна платная нейросеть (Gemini без оплаты не рисует картинки)
+const FACE_ON = false;
 const WEAR = [['shirt', 'Футболка'], ['shorts', 'Шорты'], ['shoes', 'Кроссовки'], ['socks', 'Носки'], ['wrist', 'Напульсники'], ['head', 'Повязка']];
 function viewAvatar(r) {
   const a = r.args[0], grip = a === 'grip', other = a && !grip && a !== S.me.id;
@@ -2305,8 +2307,8 @@ function viewAvatar(r) {
       <div class="av-tools"><button data-act="av-tool" data-v="flip" aria-label="Повернуть">⟲</button><button data-act="av-tool" data-v="face" aria-label="Лицо крупно">🔍</button><button data-act="av-tool" data-v="full" aria-label="Во весь рост">⤢</button><button data-act="av-tool" data-v="big" aria-label="Во весь экран">⛶</button></div>
       ${grip ? '' : `<div class="av-emotes"><button data-act="av-play" data-v="win">🏆 Победа</button><button data-act="av-play" data-v="swing">🏓 Удар</button><button data-act="av-play" data-v="wave">👋 Привет</button><button data-act="av-play" data-v="clap">👏 Хлопки</button></div>`}</div>
     ${mine ? `<section class="card stack"><b class="small">Персонаж</b><div class="av-who"><button class="${gender === 'boy' ? 'on' : ''}" data-act="av-gender" data-v="boy">Парень</button><button class="${gender === 'girl' ? 'on' : ''}" data-act="av-gender" data-v="girl">Девушка</button></div>
-      <div class="row-btns"><button class="btn primary" data-act="av-selfie">📸 Лицо по селфи</button>${S.ctx.me.face ? '<button class="btn ghost" data-act="av-noface">Убрать лицо</button>' : ''}</div>
-      <p class="muted small">Сделайте селфи анфас при хорошем свете — нейросеть нарисует ваше лицо на игроке. До 10 попыток в день.</p></section>
+      ${FACE_ON ? `<div class="row-btns"><button class="btn primary" data-act="av-selfie">📸 Лицо по селфи</button>${S.ctx.me.face ? '<button class="btn ghost" data-act="av-noface">Убрать лицо</button>' : ''}</div>
+      <p class="muted small">Сделайте селфи анфас при хорошем свете — нейросеть нарисует ваше лицо на игроке. До 10 попыток в день.</p>` : ''}</section>
       <section class="card stack"><div class="card-h"><h3>👕 Форма</h3><a href="#/shop" class="link">Магазин →</a></div>${wearBox}</section>` : ''}
     ${grip ? `<section class="card stack" id="av-grip"></section>` : ''}`;
 }
