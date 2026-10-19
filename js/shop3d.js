@@ -582,9 +582,10 @@ export function mountViewer(el, cfg, opts = {}) {
   // opts.fit: ракетка целиком в рамке при любом повороте (камера по описанной сфере), без приближения
   v.tilt = opts.fit ? .4 : 1.3; v.fitD = 0;
   if (opts.fit) {
-    const sph = new THREE.Box3().setFromObject(v.inner).getBoundingSphere(new THREE.Sphere()), half = THREE.MathUtils.degToRad(v.camera.fov / 2);
-    const hh = Math.atan(Math.tan(half) * Math.min(1, v.camera.aspect));
-    v.fitD = sph.radius / Math.sin(hh) * 1.04; v.inner.position.sub(sph.center);
+    // по высоте — длина ракетки, по ширине — ширина головки при любом повороте вокруг ручки (+ запас на наклон)
+    const box = new THREE.Box3().setFromObject(v.inner), sz = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
+    const tv = Math.tan(THREE.MathUtils.degToRad(v.camera.fov / 2)), th = tv * v.camera.aspect, wide = Math.hypot(sz.x, sz.z);
+    v.fitD = Math.max(sz.y * 1.08 / 2 / tv, wide * 1.08 / 2 / th) + wide / 2; v.inner.position.sub(c);
   }
   if (opts.zoom) v.zoom = opts.zoom;
   if (opts.apply) { v.anim = { slot: opts.apply, t: 0 }; v.target.y = opts.apply === 'bh' ? Math.PI + .35 : opts.apply === 'grip' ? .6 : .35; v.target.x = opts.apply === 'grip' ? .35 : -.18; }
