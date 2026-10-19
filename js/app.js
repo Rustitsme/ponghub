@@ -198,8 +198,8 @@ function showNews() {
     <div class="row-btns"><button class="btn primary full" id="nw-go">Открыть профиль</button></div></div>`, sh => {
     lsSet(key, [...seen, ...fresh].join(','));
     const pic = sh.querySelector('#nw-pic');
-    // та же 3D-картинка ракетки, что в профиле (основание-подарок с текущими накладками)
-    if (pic) { pic.textContent = '🏓'; const lo = S.shop?.loadout || {}; loadThree().then(() => { const url = racketShot({ blade: STARTER, fh: lo.fh, bh: lo.bh, grip: lo.grip, tape: lo.tape }); if (url) pic.innerHTML = `<img src="${url}" alt="Основание">`; }).catch(() => {}); }
+    // та же 3D-картинка, что в профиле, — только само основание-подарок, без накладок
+    if (pic) { pic.textContent = '🏓'; loadThree().then(() => { const url = racketShot({ blade: STARTER }); if (url) pic.innerHTML = `<img src="${url}" alt="Основание">`; }).catch(() => {}); }
     sh.querySelector('#nw-go').onclick = () => { closeModal(); go('#/me'); };
   });
 }
