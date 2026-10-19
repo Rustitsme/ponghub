@@ -35,13 +35,14 @@ body { background: var(--bg); margin: 0; }
 .my-side { display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 14px; border-radius: 20px; text-decoration: none; color: var(--text); background: #fff; box-shadow: 0 6px 18px rgba(14,59,140,.12); }
 .my-side small { font: 700 12px Inter, sans-serif; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .my-side b { font: 800 34px/1 var(--display); color: #1f5fc4; } .my-side b i { font-style: normal; font-size: 16px; margin-left: 4px; color: var(--muted); }
-.my-side span { align-self: flex-start; margin-top: 4px; padding: 6px 12px; border-radius: 999px; font: 800 13px Inter, sans-serif; color: #fff; background: #1f5fc4; box-shadow: 0 3px 8px rgba(31,95,196,.35); }
+.my-side span { align-self: flex-start; margin-top: 4px; padding: 6px 12px; border-radius: 999px; font: 800 13px Inter, sans-serif; color: #fff; background: #e63946; box-shadow: 0 3px 8px rgba(230,57,70,.35); }
 .my-side { border: 5px solid #1f5fc4; }
 .my-side.bonus { border-color: #fff; box-shadow: 0 0 0 2px rgba(230,57,70,.25), 0 6px 18px rgba(230,57,70,.3); }
 .my-side.bonus span { background: #fff; color: #e63946 !important; box-shadow: 0 3px 8px rgba(120,20,20,.25); }
 /* А: игрок шире, плитки уже */
 .my-row.a { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); }
-.my-row.a .my-side { padding: 10px 10px; } .my-row.a .my-side b { font-size: 28px; } .my-row.a .my-side b i { display: block; margin: 2px 0 0; font-size: 12px; }
+.my-row.a .my-side { padding: 10px 10px; align-items: center; text-align: center; } .my-row.a .my-side span { align-self: center; } .my-row.a .my-side b { font-size: 32px; white-space: nowrap; } .my-row.a .my-side b i { margin-left: 3px; font-size: 15px; }
+.my-row.a .my-side:not(.bonus) { box-shadow: 0 0 0 3px #0e3b8c, 0 0 0 5px rgba(255,210,63,.9), 0 8px 18px rgba(14,59,140,.2); }
 /* Б: половина на половину, плитки по центру и крупнее */
 .my-row.b .my-side { align-items: center; text-align: center; } .my-row.b .my-side span { align-self: center; } .my-row.b .my-side b { font-size: 40px; }
 .my-side.bonus { background: linear-gradient(135deg, #ff8a3d, #e63946); color: #fff; } .my-side.bonus small, .my-side.bonus span { color: rgba(255,255,255,.9); } .my-side.bonus b { color: #fff; }

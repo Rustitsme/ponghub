@@ -453,13 +453,24 @@ function viewHome() {
   const active = S.data.tournaments.filter(t => t.status === 'active');
   const mine = S.data.matches.filter(m => m.status === 'pending' && m.submitted_by === me.id);
 
-  return `
-  <section class="hero table-card">
-    <div class="hero-top">
+  // ракетка и 3D-игрок на главной (за флажками shop и avatar)
+  const showRk = feature('shop') && S.shop, showPl = feature('avatar');
+  const heroTop = showRk
+    ? `<div class="hm-top"><div><div class="hero-top">${ava(me, 'lg')}<div class="hero-id"><div class="hello">Привет,</div><div class="hero-nick">${esc(me.nickname)}</div><div class="badges">${leagueBadge(r)}${roleBadge(me)}</div></div></div>
+        <div class="hm-place">${st.matches ? pos : '—'} <small>место из ${total}</small></div></div><a href="#/racket" class="hm-frame hm-rk" id="hm-rk" aria-label="Моя ракетка"></a></div>`
+    : `<div class="hero-top">
       ${ava(me, 'lg')}
       <div class="hero-id"><div class="hello">Привет,</div><div class="hero-nick">${esc(me.nickname)}</div><div class="badges">${leagueBadge(r)}${roleBadge(me)}</div></div>
       <div class="hero-rank"><small>место</small><b>${st.matches ? pos : '—'}</b><small>из ${total}</small></div>
-    </div>
+    </div>`;
+  const bonus = S.shop && !S.shop.streak.claimed;
+  const tiles = showRk ? `<div class="hm-col"><a href="#/shop" class="hm-side"><small>Пинг-коины</small><b>${fmtC(S.coins ?? 0)}<i>PC</i></b><span>Магазин →</span></a>
+      <a href="#/shop?tab=bonus" class="hm-side bonus ${bonus ? '' : 'done'}"><small>🔥 Бонус дня</small><b>${bonus ? '+' + STREAK[S.shop.streak.day - 1] : '✓'}<i>${bonus ? 'PC' : 'получен'}</i></b><span>${bonus ? 'Забрать →' : 'Завтра ещё'}</span></a></div>` : '';
+  const homeRow = showRk ? `<div class="hm-row ${showPl ? '' : 'solo'}">${showPl ? `<a href="#/avatar" class="hm-card"><div class="hm-frame" id="hm-pl"></div><span class="hm-tag">Мой игрок</span></a>` : ''}${tiles}</div>` : '';
+
+  return `
+  <section class="hero table-card">
+    ${heroTop}
     <div class="hero-mid">
       <div><div class="big-num">${fmtR(r)}</div><div class="muted small">рейтинг · ${delta(d30)} за 30 дней</div></div>
       ${sparkline(hist.slice(-20))}
@@ -470,14 +481,15 @@ function viewHome() {
       <div><b>${st.streakType === 'W' ? '🔥' + st.streak : st.streak ? '−' + st.streak : '0'}</b><small>серия</small></div>
     </div>
     ${nl ? `<div class="next-league"><span>До лиги «${nl.name}»: ${fmtR(nl.min - r)}</span><div class="bar thin"><i style="width:${Math.max(4, Math.min(100, 100 - (nl.min - r) * 5))}%"></i></div></div>` : ''}
-    <div class="row-btns hero-links"><a href="#/player/${me.id}" class="btn ghost-light">Статистика и анализ →</a>${predOn() && S.coins != null ? `<a href="${feature('shop') ? '#/shop' : '#/predict'}" class="btn coin-btn">${feature('shop') ? '🛍️' : '🎯'} ${fmtC(S.coins)} PC</a>` : ''}</div>
+    <div class="row-btns hero-links"><a href="#/player/${me.id}" class="btn ghost-light">Статистика и анализ →</a>${predOn() && S.coins != null && !showRk ? `<a href="${feature('shop') ? '#/shop' : '#/predict'}" class="btn coin-btn">${feature('shop') ? '🛍️' : '🎯'} ${fmtC(S.coins)} PC</a>` : ''}</div>
   </section>
 
   ${pc.total ? `<a href="#/admin" class="alert">🔔 Ждут вашего решения: ${pc.users ? `${pc.users} ${plural(pc.users, 'заявка', 'заявки', 'заявок')} на регистрацию` : ''}${pc.users && pc.matches ? ', ' : ''}${pc.matches ? `${pc.matches} ${plural(pc.matches, 'матч', 'матча', 'матчей')}` : ''} →</a>` : ''}
   ${mine.length ? `<div class="alert info">⏳ ${mine.length} ${plural(mine.length, 'ваш результат ждёт', 'ваших результата ждут', 'ваших результатов ждут')} подтверждения администратором</div>` : ''}
 
+  ${homeRow}
   ${liveBlock()}
-  ${feature('shop') && S.shop && !S.shop.streak.claimed ? `<a href="#/shop?tab=bonus" class="card sh-home"><span class="sh-home-ic">🔥</span><span class="rn"><b>Бонус дня: +${STREAK[S.shop.streak.day - 1]} PC</b><small class="muted">День ${S.shop.streak.day} из 7 — заберите, пока не сгорело</small></span><span class="btn sm primary">Забрать</span></a>` : ''}
+  ${!showRk && feature('shop') && S.shop && !S.shop.streak.claimed ? `<a href="#/shop?tab=bonus" class="card sh-home"><span class="sh-home-ic">🔥</span><span class="rn"><b>Бонус дня: +${STREAK[S.shop.streak.day - 1]} PC</b><small class="muted">День ${S.shop.streak.day} из 7 — заберите, пока не сгорело</small></span><span class="btn sm primary">Забрать</span></a>` : ''}
   ${predHomeBlock()}
   ${challengesBlock()}
   ${weekCard()}
@@ -2406,6 +2418,29 @@ function mountPlayerRackets() {
   });
 }
 
+// ракетка и игрок на главной: ракетка крутится в рамке, игрок по грудь смотрит в камеру
+async function mountHome3D() {
+  const rk = document.getElementById('hm-rk'), pl = document.getElementById('hm-pl');
+  if (!rk && !pl) return;
+  // покрутили пальцем — это не нажатие: переход по ссылке только при коротком касании
+  for (const el of [rk, pl?.closest('a')].filter(Boolean)) {
+    if (el.dataset.nd) continue; el.dataset.nd = '1'; let x0 = 0, y0 = 0, moved = false;
+    el.addEventListener('pointerdown', e => { x0 = e.clientX; y0 = e.clientY; moved = false; });
+    el.addEventListener('pointermove', e => { if (Math.hypot(e.clientX - x0, e.clientY - y0) > 6) moved = true; });
+    el.addEventListener('click', e => { if (moved) { e.preventDefault(); moved = false; } });
+  }
+  try {
+    await loadThree();
+    if (rk && rk.isConnected) { const lo = S.shop?.loadout || {}; mountViewer(rk, { blade: lo.blade || STARTER, fh: lo.fh, bh: lo.bh, grip: lo.grip, tape: lo.tape }, { fit: true }); }
+    if (pl && pl.isConnected) {
+      const { mountAvatar } = await import('./player3d.js');
+      if (!pl.isConnected) return;
+      const ctl = await mountAvatar(pl, { gender: S.ctx.me.avatar3d || 'boy', face: S.ctx.me.face || null, loadout: S.shop?.loadout || S.ctx.me.loadout || {}, grip: S.ctx.platform?.grip || {}, bust: true });
+      ctl.resize();
+    }
+  } catch { /* без 3D главная работает как обычно */ }
+}
+
 // ───────────── Админка ─────────────
 function viewAdmin(r) {
   if (!isAdmin()) return '<div class="empty">Управление клубом доступно только владельцу</div>';
@@ -3379,6 +3414,7 @@ function afterRender(r) {
   if (r.name === 'racket') { if (!S.shop && feature('shop')) ensureShop().then(render).catch(e => toast(e.message, 'err')); else mountRacket(); }
   if (r.name === 'player' && feature('shop')) { ensureThree(); mountPlayerRackets(); }
   if (r.name === 'avatar' && feature('avatar')) mountAvatarView(r);
+  if (r.name === 'home') mountHome3D();
   if (document.getElementById('dir-box')) renderDirectory(document.querySelector('[data-input=dir-search]')?.value || '');
   if (document.getElementById('pick-map')) mountPickMap();
   if (r.name === 'invite') renderInvite();

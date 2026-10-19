@@ -576,6 +576,11 @@ export function mountViewer(el, cfg, opts = {}) {
   const w = el.clientWidth, h = el.clientHeight;
   v.renderer.setSize(w, h, false); v.camera.aspect = w / h; v.camera.updateProjectionMatrix();
   el.prepend(v.renderer.domElement);
+  // та же ракетка в том же режиме (главная перерисовывается) — не собираем заново
+  const ck = JSON.stringify(cfg) + (opts.fit ? 'fit' : '');
+  const same = !!(v.group && v.ck === ck && opts.fit);
+  if (!same) {
+  v.ck = ck;
   if (v.group) { v.scene.remove(v.group); v.group.traverse(o => { o.geometry?.dispose?.(); [].concat(o.material || []).forEach(m => { m.map?.dispose?.(); m.dispose?.(); }); }); }
   v.group = new THREE.Group(); v.inner = buildRacket(cfg); v.group.add(v.inner); v.scene.add(v.group);
   v.onSide = opts.onSide || null;
@@ -587,6 +592,8 @@ export function mountViewer(el, cfg, opts = {}) {
     const tv = Math.tan(THREE.MathUtils.degToRad(v.camera.fov / 2)), th = tv * v.camera.aspect, wide = Math.hypot(sz.x, sz.z);
     v.fitD = Math.max(sz.y * 1.08 / 2 / tv, wide * 1.08 / 2 / th) + wide / 2; v.inner.position.sub(c);
   }
+  }
+  v.onSide = opts.onSide || null;
   if (opts.zoom) v.zoom = opts.zoom;
   if (opts.apply) { v.anim = { slot: opts.apply, t: 0 }; v.target.y = opts.apply === 'bh' ? Math.PI + .35 : opts.apply === 'grip' ? .6 : .35; v.target.x = opts.apply === 'grip' ? .35 : -.18; }
   let last = null;
