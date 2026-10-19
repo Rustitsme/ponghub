@@ -35,7 +35,15 @@ body { background: var(--bg); margin: 0; }
 .my-side { display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 14px; border-radius: 20px; text-decoration: none; color: var(--text); background: #fff; box-shadow: 0 6px 18px rgba(14,59,140,.12); }
 .my-side small { font: 700 12px Inter, sans-serif; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .my-side b { font: 800 34px/1 var(--display); color: #1f5fc4; } .my-side b i { font-style: normal; font-size: 16px; margin-left: 4px; color: var(--muted); }
-.my-side span { font: 800 14px Inter, sans-serif; color: #e63946; }
+.my-side span { align-self: flex-start; margin-top: 4px; padding: 6px 12px; border-radius: 999px; font: 800 13px Inter, sans-serif; color: #fff; background: #1f5fc4; box-shadow: 0 3px 8px rgba(31,95,196,.35); }
+.my-side { border: 5px solid #1f5fc4; }
+.my-side.bonus { border-color: #fff; box-shadow: 0 0 0 2px rgba(230,57,70,.25), 0 6px 18px rgba(230,57,70,.3); }
+.my-side.bonus span { background: #fff; color: #e63946 !important; box-shadow: 0 3px 8px rgba(120,20,20,.25); }
+/* А: игрок шире, плитки уже */
+.my-row.a { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); }
+.my-row.a .my-side { padding: 10px 10px; } .my-row.a .my-side b { font-size: 28px; } .my-row.a .my-side b i { display: block; margin: 2px 0 0; font-size: 12px; }
+/* Б: половина на половину, плитки по центру и крупнее */
+.my-row.b .my-side { align-items: center; text-align: center; } .my-row.b .my-side span { align-self: center; } .my-row.b .my-side b { font-size: 40px; }
 .my-side.bonus { background: linear-gradient(135deg, #ff8a3d, #e63946); color: #fff; } .my-side.bonus small, .my-side.bonus span { color: rgba(255,255,255,.9); } .my-side.bonus b { color: #fff; }
 /* витрины 2–4 */
 .v-show { position: relative; margin-top: 12px; border-radius: 22px; overflow: hidden; color: #fff; background: radial-gradient(90% 80% at 50% 25%, #3a7be0 0%, #1f5fc4 45%, #0e3b8c 100%); box-shadow: 0 10px 30px rgba(14, 59, 140, .35); }
@@ -85,9 +93,15 @@ const heroRest = `<div class="hero-mid"><div><div class="big-num">51.0</div><div
 const showHead = (title, sub, btn) => `<div class="v-head"><div><b>${title}</b><small>${sub}</small></div>${btn ? `<a class="v-btn" href="#">${btn}</a>` : ''}</div>`;
 
 const V = [
-  { name: '★ Ваш вариант', note: '<b>Ваш вариант</b>Шапка как сейчас, справа — ракетка в белой рамке: сама медленно крутится, пальцем можно покрутить, из рамки не вылезает. Нажатие — переход в «Мою ракетку». «Место» — плашкой под ником. Ниже «Мой игрок» на половину ширины: синий фон, белая рамка, игрок по грудь смотрит в камеру, сам не крутится. Нажатие — карточка игрока.  Рядом — пинг-коины и переход в магазин. В рамках — белый фон.',
+  { name: '★ Вариант А', note: '<b>Вариант А — игрок шире, плитки уже</b>Шапка как сейчас, справа — ракетка в белой рамке: сама медленно крутится, пальцем можно покрутить, из рамки не вылезает. Нажатие — переход в «Мою ракетку». «Место» — плашкой под ником. Ниже «Мой игрок» на половину ширины: синий фон, белая рамка, игрок по грудь смотрит в камеру, сам не крутится. Нажатие — карточка игрока.  Рядом — пинг-коины и переход в магазин. В рамках — белый фон.',
     html: `<section class="hero table-card"><div class="my-top"><div>${nickBlock(false)}<div class="v1-place">3 <small>место из 14</small></div></div><div class="my-frame" id="rk"></div></div>${heroRest}</section>
-      <div class="my-row"><a class="my-card" href="#" onclick="return false"><div class="my-frame" id="pl"></div><span class="my-tag">Мой игрок</span></a>
+      <div class="my-row a"><a class="my-card" href="#" onclick="return false"><div class="my-frame" id="pl"></div><span class="my-tag">Мой игрок</span></a>
+        <div class="my-col"><a class="my-side" href="#" onclick="return false"><small>Пинг-коины</small><b>1 240<i>PC</i></b><span>Магазин →</span></a>
+          <a class="my-side bonus" href="#" onclick="return false"><small>🔥 Бонус дня</small><b>+40<i>PC</i></b><span>Забрать →</span></a></div></div>`,
+    mount: async () => { await new Promise(r => requestAnimationFrame(() => r())); mountViewer(document.getElementById('rk'), RK, { fit: true }); const c = await mountAvatar(document.getElementById('pl'), { gender: 'boy', loadout: LO, bust: true }); c.resize(); new ResizeObserver(() => c.resize()).observe(document.getElementById('pl')); } },
+{ name: '★ Вариант Б', note: '<b>Вариант Б — половина на половину, плитки без пустоты</b>Шапка как сейчас, справа — ракетка в белой рамке: сама медленно крутится, пальцем можно покрутить, из рамки не вылезает. Нажатие — переход в «Мою ракетку». «Место» — плашкой под ником. Ниже «Мой игрок» на половину ширины: синий фон, белая рамка, игрок по грудь смотрит в камеру, сам не крутится. Нажатие — карточка игрока.  Рядом — пинг-коины и переход в магазин. В рамках — белый фон.',
+    html: `<section class="hero table-card"><div class="my-top"><div>${nickBlock(false)}<div class="v1-place">3 <small>место из 14</small></div></div><div class="my-frame" id="rk"></div></div>${heroRest}</section>
+      <div class="my-row b"><a class="my-card" href="#" onclick="return false"><div class="my-frame" id="pl"></div><span class="my-tag">Мой игрок</span></a>
         <div class="my-col"><a class="my-side" href="#" onclick="return false"><small>Пинг-коины</small><b>1 240<i>PC</i></b><span>Магазин →</span></a>
           <a class="my-side bonus" href="#" onclick="return false"><small>🔥 Бонус дня</small><b>+40<i>PC</i></b><span>Забрать →</span></a></div></div>`,
     mount: async () => { await new Promise(r => requestAnimationFrame(() => r())); mountViewer(document.getElementById('rk'), RK, { fit: true }); const c = await mountAvatar(document.getElementById('pl'), { gender: 'boy', loadout: LO, bust: true }); c.resize(); new ResizeObserver(() => c.resize()).observe(document.getElementById('pl')); } },
