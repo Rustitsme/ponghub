@@ -1097,7 +1097,7 @@ body.av-big { overflow: hidden; }
 .hm-row { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 12px; margin-top: 12px; }
 .hm-row.solo { grid-template-columns: 1fr; } .hm-row.solo .hm-col { grid-template-rows: none; grid-template-columns: 1fr 1fr; }
 .hm-card { position: relative; display: flex; padding: 6px; border-radius: 22px; text-decoration: none; background: linear-gradient(160deg, #2f74d6, #1f5fc4 45%, #154a9e); box-shadow: 0 8px 22px rgba(14, 59, 140, .3); }
-.hm-card .hm-frame { flex: 1; min-height: 210px; border-radius: 17px; }
+.hm-card .hm-frame { flex: 1; min-height: 210px; border-radius: 17px; background: radial-gradient(90% 75% at 50% 35%, #f3f5f9 0%, #e3e8f0 60%, #cfd7e3 100%); }
 .hm-tag { position: absolute; z-index: 2; left: 50%; bottom: 14px; transform: translateX(-50%); white-space: nowrap; padding: 6px 14px; border-radius: 999px; background: #1f5fc4; color: #fff; font: 800 15px/1 var(--display); letter-spacing: .03em; text-transform: uppercase; box-shadow: 0 4px 12px rgba(14, 59, 140, .35); }
 .hm-col { display: grid; grid-template-rows: 1fr 1fr; gap: 12px; }
 .hm-side { display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 4px; padding: 10px; border-radius: 20px; text-decoration: none; color: var(--text); background: #fff; border: 5px solid #1f5fc4; box-shadow: 0 6px 18px rgba(14, 59, 140, .12); }
