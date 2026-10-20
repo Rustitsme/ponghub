@@ -1117,3 +1117,5 @@ body.av-big { overflow: hidden; }
 .hero.hm .hero-stats { padding: 6px; } .hero.hm .hero-stats b { font-size: 18px; }
 .hero.hm .next-league { margin: 8px 0; }
 .hero.hm .hero-links { margin-top: 6px; } .hero.hm .hero-links .btn { padding: 7px 12px; font-size: 14px; }
+.hero.hm .role-badge { white-space: nowrap; font-size: 10px; padding: 3px 8px; letter-spacing: .2px; }
+.hero.hm .role-badge .creator-star { margin: 0 2px; }
