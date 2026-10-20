@@ -275,13 +275,12 @@ function shell(r, body) {
   </header>
   ${S.testMode ? `<div class="test-banner">🧪 <span><b>Тестовый режим.</b> Тестовых игроков и их матчи видите только вы.</span><a href="#/admin/players" class="link">Управлять</a></div>` : ''}
   <main class="page">${body}</main>
-  ${r.name === 'live' ? '' : `<button class="fab" data-act="add-match" aria-label="${isAdmin() ? 'Внести матч' : 'Внести результат'}">${icon('plus')}</button>`}
   <nav class="tabs">
     ${tab('home', 'Главная', 'home')}
     ${tab('rating', 'Рейтинг', 'rating')}
-    ${tab('matches', 'Матчи', 'matches', ['h2h'])}
+    <span class="tab tab-mid"><button class="fab" data-act="add-match" aria-label="${isAdmin() ? 'Внести матч' : 'Внести результат'}">${icon('plus')}</button></span>
     ${tab('tournaments', 'Турниры', 'cup', ['tournament'])}
-    ${tab('me', 'Профиль', 'user', ['admin', 'rules'])}
+    ${tab('me', 'Профиль', 'user', ['admin', 'rules', 'matches', 'h2h'])}
   </nav>${iosInstallHint()}`;
 }
 
@@ -1434,6 +1433,7 @@ function viewMe() {
   return `<div class="page-h"><h1>Профиль</h1></div>
   <a href="#/player/${me.id}" class="card me-card">${ava(me, 'md')}<div><b>${esc(me.nickname)}</b> ${roleBadge(me)}<div class="muted small">${esc(me.full_name || '')}</div></div><span>→</span></a>
   ${isAdmin() ? `<a href="#/admin" class="card menu-item">🛠️ <span>Управление клубом</span>${pendingCounts().total ? `<i class="dot inline">${pendingCounts().total}</i>` : ''}<span>→</span></a>` : ''}
+  <a href="#/matches" class="card menu-item">📋 <span>Матчи<small class="muted" style="display:block;font-weight:500">все игры клуба, ваши результаты, личные встречи</small></span><span>→</span></a>
   <section class="card menu">
     ${isAdmin() ? '<a class="menu-item" href="#/invite">✉️ <span>Пригласить в клуб</span></a><a class="menu-item" href="#/clubedit">🏠 <span>Клуб: название, адрес, карта</span></a>' : ''}
     ${feature('shop') ? '<a class="menu-item" href="#/shop">🛍️ <span>Магазин</span><small class="muted">' + fmtC(S.coins) + ' PC</small></a><a class="menu-item" href="#/racket">🏓 <span>Моя ракетка</span></a>' : ''}
