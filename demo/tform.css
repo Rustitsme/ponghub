@@ -1183,8 +1183,8 @@ body.av-big { overflow: hidden; }
 .tf-lbl { display: block; font: 700 12px var(--font); color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
 .tf-fmt { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .tf-fmt label { display: block; } .tf-fmt input { display: none; }
-.tf-fmt span { display: grid; justify-items: center; gap: 2px; padding: 12px 4px 10px; border-radius: 14px; border: 2px solid var(--line); background: var(--surface); cursor: pointer; text-align: center; transition: .15s; }
-.tf-fmt i { font-style: normal; font-size: 24px; line-height: 1.1; } .tf-fmt b { font: 800 14px var(--display); color: var(--text); max-width: 100%; overflow-wrap: anywhere; letter-spacing: -.01em; } .tf-fmt small { font: 600 11px var(--font); color: var(--muted); }
+.tf-fmt span { display: grid; justify-items: center; gap: 2px; min-width: 0; padding: 12px 3px 10px; border-radius: 14px; border: 2px solid var(--line); background: var(--surface); cursor: pointer; text-align: center; transition: .15s; }
+.tf-fmt i { font-style: normal; font-size: 24px; line-height: 1.1; } .tf-fmt b { font: 800 13px var(--display); color: var(--text); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .tf-fmt small { font: 600 11px var(--font); color: var(--muted); }
 .tf-fmt input:checked + span { border-color: var(--red); background: color-mix(in srgb, var(--red) 9%, var(--surface)); box-shadow: 0 4px 12px color-mix(in srgb, var(--red) 25%, transparent); }
 .tf-fmt input:checked + span b { color: var(--red); }
 .tf-pick { width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; padding: 12px; border-radius: 16px; background: var(--surface); border: 2px solid #1f5fc4; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
@@ -1209,11 +1209,11 @@ body.av-big { overflow: hidden; }
 .tf-back { width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--bg2); color: var(--text); font: 800 18px var(--font); cursor: pointer; }
 .tf-search { width: 100%; }
 .tf-all { display: flex; align-items: center; gap: 14px; font-size: 14px; color: var(--muted); } .tf-all b { color: var(--text); } .tf-all a { color: #1f5fc4; font-weight: 700; cursor: pointer; } .tf-all a:first-of-type { margin-left: auto; }
-.tf-list { flex: 1; overflow-y: auto; display: grid; gap: 6px; align-content: start; }
-.tf-p { display: grid; grid-template-columns: auto minmax(0, 1fr) auto 28px; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 14px; background: var(--surface); border: 2px solid transparent; cursor: pointer; color: var(--text); margin: 0; }
-.tf-p input { display: none; } .tf-p .ava { width: 36px; height: 36px; font-size: 18px; }
-.tf-p b { font: 700 16px var(--display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .tf-p small { font: 700 12px var(--display); color: var(--muted); }
-.tf-p i { width: 26px; height: 26px; border-radius: 8px; border: 2px solid var(--line); display: grid; place-items: center; font-style: normal; font-weight: 800; color: transparent; }
+.tf-list { flex: 1; overflow-y: auto; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; align-content: start; }
+.tf-p { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto; align-items: center; column-gap: 8px; row-gap: 0; padding: 8px 10px; border-radius: 14px; background: var(--surface); border: 2px solid transparent; cursor: pointer; color: var(--text); margin: 0; }
+.tf-p input { display: none; } .tf-p .ava { grid-row: 1 / 3; width: 36px; height: 36px; font-size: 18px; } .tf-p small { grid-column: 2; }
+.tf-p b { font: 700 15px var(--display); padding-right: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .tf-p small { font: 700 12px var(--display); color: var(--muted); }
+.tf-p i { position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; font-size: 11px; border-radius: 6px; border: 2px solid var(--line); display: grid; place-items: center; font-style: normal; font-weight: 800; color: transparent; }
 .tf-p:has(input:checked) { border-color: #1f5fc4; } .tf-p:has(input:checked) i { background: #1f5fc4; border-color: #1f5fc4; color: #fff; }
 .tf-done { flex: none; padding: 14px; font-size: 16px; border-radius: 16px; }
 .lv-lock { text-align: center; margin: 6px 0 0; }

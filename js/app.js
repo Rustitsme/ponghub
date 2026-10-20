@@ -3007,22 +3007,23 @@ function openTournamentForm() {
   openModal(`<form data-form="tournament" class="stack tf">
     <div class="tf-main"><h3>Новый турнир</h3>
     <label>Название<input name="name" required maxlength="60" placeholder="Например: Кубок офиса"></label>
-    <div><small class="muted">Вид турнира</small><div class="seg tf-fmt">${[['ko', '🏆 Олимпийская'], ['groups', '🗂 Группы'], ['rr', '🔄 Круг']].map(([k, v], n) => `<label><input type="radio" name="format" value="${k}" ${n === 0 ? 'checked' : ''}><span>${v}</span></label>`).join('')}</div><p class="hint" id="fmt-hint"></p></div>
-    <div><small class="muted">Участники</small><button type="button" class="tf-pick" id="t-open"><span class="tf-stack" id="t-stack"></span><b id="t-cnt">0 игроков</b><span class="tf-go">Выбрать игроков ›</span></button></div>
+    <div class="tf-sec"><small class="tf-lbl">Вид турнира</small><div class="tf-fmt">${[['ko', '🏆', 'Олимпийская', 'на вылет'], ['groups', '🗂', 'Группы', '+ плей-офф'], ['rr', '🔄', 'Круг', 'все со всеми']].map(([k, ic, v, d], n) => `<label><input type="radio" name="format" value="${k}" ${n === 0 ? 'checked' : ''}><span><i>${ic}</i><b>${v}</b><small>${d}</small></span></label>`).join('')}</div><p class="hint" id="fmt-hint"></p></div>
+    <div class="tf-sec"><small class="tf-lbl">Участники</small><button type="button" class="tf-pick" id="t-open"><span class="tf-stack" id="t-stack"></span><b id="t-cnt">0 игроков</b><span class="tf-go">Выбрать игроков ›</span></button></div>
     <div class="two only-groups"><label>Групп<input type="number" name="groups" value="2" min="1" max="8"></label><label>Выходят из группы<select name="advance"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option></select></label></div>
     <p class="hint only-groups" id="grp-hint"></p>
-    <div class="two"><label>Столов<input type="number" name="tables" value="1" min="1" max="8"></label><label>Счёт<select name="scoring"><option value="points">По очкам (секундант)</option><option value="final">Только итог</option></select></label></div>
+    <div class="tf-sec"><div class="tf-row2"><div><small class="tf-lbl">Столов</small><div class="tf-step"><button type="button" data-step="-1">−</button><input type="number" name="tables" value="1" min="1" max="8" readonly><button type="button" data-step="1">+</button></div></div>
+      <div><small class="tf-lbl">Счёт</small><div class="tf-seg2"><label><input type="radio" name="scoring" value="points" checked><span>По очкам</span></label><label><input type="radio" name="scoring" value="final"><span>Только итог</span></label></div></div></div>
     <div id="tf-scorers"></div>
-    <p class="hint">Пары по столам назначает система: закончилась игра — на свободный стол встаёт следующая пара. Роль секунданта можно передать в перерыве между партиями.</p>
+    <p class="hint">Пары по столам назначает система: закончилась игра — на свободный стол встаёт следующая пара. Роль секунданта можно передать в перерыве между партиями.</p></div>
     <div class="two"><label>До скольких побед<select name="best_of"><option value="3">до 2 побед</option><option value="5" selected>до 3 побед</option><option value="7">до 4 побед</option></select></label>
     <label>Партия до<select name="points_to"><option>11</option><option>21</option></select></label></div>
-    <label class="switch only-ko"><input type="checkbox" name="thirdPlace" checked><i></i><span>Матч за 3-е место</span></label>
+    <label class="switch only-ko tf-switch"><input type="checkbox" name="thirdPlace" checked><i></i><span>Матч за 3-е место</span></label>
     <input type="hidden" name="date" value="${new Date().toISOString().slice(0, 10)}"><input type="hidden" name="place" value="">
-    <button class="btn primary">Создать турнир</button></div>
-    <div class="tf-players" hidden><h3>Выбор игроков</h3><input class="tf-search" placeholder="🔍 Найти игрока">
+    <button class="btn primary full tf-create">🏆 Создать турнир</button></div>
+    <div class="tf-players" hidden><div class="tf-ph"><button type="button" class="tf-back" id="t-back">←</button><h3>Выбор игроков</h3></div><input class="tf-search" placeholder="🔍 Найти игрока">
       <div class="tf-all"><span>Выбрано <b id="t-cnt2">0</b> из ${players.length}</span><a id="t-all">Все</a><a id="t-none">Никого</a></div>
-      <div class="pick-list">${players.map(p => `<label class="pick" data-n="${esc(p.nickname.toLowerCase())}"><input type="checkbox" name="participants" value="${p.id}"><span>${ava(p, 'xs')} ${esc(p.nickname)}</span><small>${fmtR(ratingOf(p.id))}</small></label>`).join('')}</div>
-      <button type="button" class="btn primary tf-done" id="t-done">Готово</button></div></form>`, sh => {
+      <div class="tf-list">${players.map(p => `<label class="tf-p" data-n="${esc(p.nickname.toLowerCase())}"><input type="checkbox" name="participants" value="${p.id}">${ava(p, 'sm')}<b>${esc(p.nickname)}</b><small>${fmtR(ratingOf(p.id))}</small><i>✓</i></label>`).join('')}</div>
+      <button type="button" class="btn primary full tf-done" id="t-done">Готово</button></div></form>`, sh => {
     const f = sh.querySelector('form'), main = sh.querySelector('.tf-main'), pl = sh.querySelector('.tf-players');
     const fmt = () => f.querySelector('[name=format]:checked').value;
     const chosen = () => [...f.querySelectorAll('[name=participants]:checked')].map(x => x.value);
@@ -3041,15 +3042,17 @@ function openTournamentForm() {
       // секундант на каждый стол (при счёте «только итог» не нужен)
       const T = Math.max(1, Math.min(8, +f.tables.value || 1)), box = sh.querySelector('#tf-scorers');
       const prev = [...box.querySelectorAll('select')].map(x => x.value);
-      box.innerHTML = f.scoring.value === 'points' ? `<small class="muted">Секунданты</small>${Array.from({ length: T }, (_, k) => `<label class="tf-sc"><span>Стол ${k + 1}</span><select name="scorer">${opt(prev[k] ?? (k === 0 ? S.me.id : ''))}</select></label>`).join('')}` : '';
+      box.innerHTML = f.querySelector('[name=scoring]:checked').value === 'points' ? `<small class="tf-lbl">Секундант на каждом столе</small>${Array.from({ length: T }, (_, k) => `<label class="tf-sc"><span>Стол ${k + 1}</span><select name="scorer">${opt(prev[k] ?? (k === 0 ? S.me.id : ''))}</select></label>`).join('')}` : '';
     };
     f.addEventListener('change', e => { if (e.target.name !== 'scorer') sync(); }); f.addEventListener('input', e => { if (['groups', 'tables'].includes(e.target.name)) sync(); }); sync();
     const show = on => { main.hidden = on; pl.hidden = !on; sh.scrollTop = 0; };
     sh.querySelector('#t-open').onclick = () => show(true);
+    sh.querySelector('#t-back').onclick = () => { show(false); sync(); };
+    sh.querySelectorAll('[data-step]').forEach(b => b.onclick = () => { f.tables.value = Math.max(1, Math.min(8, (+f.tables.value || 1) + +b.dataset.step)); sync(); });
     sh.querySelector('#t-done').onclick = () => { show(false); sync(); };
     sh.querySelector('#t-all').onclick = () => { f.querySelectorAll('[name=participants]').forEach(x => x.checked = true); sync(); };
     sh.querySelector('#t-none').onclick = () => { f.querySelectorAll('[name=participants]').forEach(x => x.checked = false); sync(); };
-    sh.querySelector('.tf-search').oninput = e => { const q = e.target.value.trim().toLowerCase(); pl.querySelectorAll('.pick').forEach(x => x.style.display = !q || x.dataset.n.includes(q) ? '' : 'none'); };
+    sh.querySelector('.tf-search').oninput = e => { const q = e.target.value.trim().toLowerCase(); pl.querySelectorAll('.tf-p').forEach(x => x.style.display = !q || x.dataset.n.includes(q) ? '' : 'none'); };
   });
 }
 
