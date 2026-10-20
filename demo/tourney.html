@@ -50,8 +50,15 @@ body { margin: 0; font-family: var(--f); background: #e9eef6; color: #10203d; }
 .hello .fmt { display: inline-flex; gap: .8cqw; align-items: center; padding: .6cqw 1.6cqw; border-radius: 99px; background: rgba(255,255,255,.08); font: 700 1.4cqw var(--f); }
 .hello .who { display: flex; flex-wrap: wrap; justify-content: center; gap: 1.4cqw; margin-top: 2.4cqw; max-width: 80cqw; }
 .hello .who div { width: 8.4cqw; text-align: center; opacity: 0; animation: pop .5s forwards; }
-.ava { width: 5.4cqw; height: 5.4cqw; margin: 0 auto .5cqw; border-radius: 50%; display: grid; place-items: center; font-size: 2.6cqw; background: rgba(255,255,255,.1); border: .2cqw solid rgba(255,255,255,.3); }
+.av { --c: #e63946; display: inline-grid; place-items: center; flex: none; width: 2.4cqw; aspect-ratio: 1; border-radius: 50%; background: color-mix(in srgb, var(--c) 30%, #10203d); border: .15cqw solid var(--c); font-size: 1.3cqw; line-height: 1; overflow: hidden; }
+.av.big { width: 6cqw; font-size: 3cqw; border-width: .3cqw; margin: 0 auto .6cqw; display: grid; }
+.av.ph { width: 26px; font-size: 14px; border-width: 2px; background: color-mix(in srgb, var(--c) 25%, #fff); }
+.av.ph.lg { width: 34px; font-size: 18px; }
 .hello .who span { font: 700 1.2cqw var(--d); }
+.hello .how { display: flex; justify-content: center; align-items: center; gap: 1cqw; margin-top: 2cqw; font: 600 1.25cqw var(--f); color: #dfe8f6; }
+.hello .how span { display: inline-flex; align-items: center; gap: .6cqw; padding: .6cqw 1.2cqw; border-radius: 99px; background: rgba(255,255,255,.07); }
+.hello .how b { display: grid; place-items: center; width: 1.8cqw; aspect-ratio: 1; border-radius: 50%; background: var(--gold); color: #2a1d00; font: 800 1.1cqw var(--d); }
+.hello .how i { font-style: normal; color: var(--gold); }
 .hello .go { margin-top: 2.2cqw; font: 600 1.3cqw var(--f); color: #93a7c6; }
 @keyframes pop { from { opacity: 0; transform: translateY(1cqw) scale(.8); } to { opacity: 1; transform: none; } }
 
@@ -106,7 +113,7 @@ body { margin: 0; font-family: var(--f); background: #e9eef6; color: #10203d; }
 .next { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.6cqw; min-height: 0; }
 .nx { display: grid; align-content: center; justify-items: center; text-align: center; gap: .8cqw; padding: 1.4cqw; border-radius: 1.4cqw; border: .15cqw solid var(--red); background: rgba(255,255,255,.05); min-width: 0; }
 .nx small { font: 700 1.1cqw var(--f); letter-spacing: .2cqw; text-transform: uppercase; color: var(--red); }
-.nx .pair { width: 100%; display: grid; gap: .4cqw; } .nx .pair .nk { font: 800 3.2cqw/1.05 var(--d); }
+.nx .pair { width: 100%; display: grid; gap: .4cqw; } .nx .pair .nk { font: 800 4.6cqw/1.05 var(--d); }
 .nx .pair em { font: 700 1.6cqw var(--d); color: #93a7c6; font-style: normal; }
 .nx.bad .pair { width: auto; } .nx.bad .pair .nk { overflow: visible; text-overflow: clip; font-size: 4.6cqw; }
 .nx.bad { overflow: visible; border-color: #6f83a3; } .nx.bad small { color: #93a7c6; }
@@ -137,13 +144,66 @@ body { margin: 0; font-family: var(--f); background: #e9eef6; color: #10203d; }
 .ap-cross { width: 100%; border-collapse: separate; border-spacing: 3px; table-layout: fixed; font: 700 12px var(--d); }
 .ap-cross th, .ap-cross td { height: 30px; text-align: center; border-radius: 6px; } .ap-cross th { color: #9aa6b8; } .ap-cross th.nm { text-align: left; color: #10203d; width: 26%; }
 .ap-cross td { background: #f0f3f8; color: #9aa6b8; } .ap-cross td.w { background: #d9f6e7; color: #157a4b; } .ap-cross td.l { background: #fde2e4; color: #c22a37; } .ap-cross td.x { background: #e4e9f1; } .ap-cross td.now { box-shadow: inset 0 0 0 2px #f2b600; color: #a17800; }
+
+/* понятные группы и круг */
+.stage { display: flex; align-items: center; gap: 1cqw; font: 700 1.2cqw var(--f); color: #93a7c6; margin-bottom: 1cqw; }
+.stage span { padding: .5cqw 1.2cqw; border-radius: 99px; background: rgba(255,255,255,.06); } .stage span.on { background: var(--gold); color: #2a1d00; } .stage i { font-style: normal; color: var(--gold); }
+.body2 { display: flex; flex-direction: column; min-height: 0; }
+.g2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 1.1fr); gap: 1.6cqw; flex: 1; min-height: 0; }
+.gc { padding: 1.2cqw 1.4cqw; display: flex; flex-direction: column; gap: .5cqw; }
+.gc h4 { margin: 0; font: 800 1.9cqw var(--d); text-transform: uppercase; } .gc h4 small { display: block; font: 600 1cqw var(--f); color: #93a7c6; text-transform: none; margin-top: .2cqw; }
+.pl { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: .8cqw; padding: .6cqw .8cqw; border-radius: .8cqw; background: rgba(255,255,255,.04); font: 700 1.5cqw var(--d); }
+.pl .n { font: 800 1.6cqw var(--d); color: #93a7c6; width: 1.6cqw; text-align: center; }
+.pl .wins { font: 700 1.1cqw var(--f); color: #c9d6ea; text-align: right; } .pl .wins b { font: 800 1.7cqw var(--d); color: #fff; margin-right: .3cqw; }
+.pl.go { background: rgba(255,215,94,.12); box-shadow: inset .3cqw 0 0 var(--gold); } .pl.go .n { color: var(--gold); }
+.pl.out { opacity: .55; }
+.tag { justify-self: start; grid-column: 3 / 5; margin-top: -.3cqw; font: 700 .9cqw var(--f); color: var(--gold); }
+.left { margin-top: auto; padding-top: .6cqw; font: 600 1.05cqw var(--f); color: #93a7c6; border-top: .1cqw solid rgba(255,255,255,.08); } .left b { color: #fff; }
+.pof { padding: 1.2cqw 1.4cqw; display: flex; flex-direction: column; gap: .9cqw; }
+.pof h4 { margin: 0; font: 800 1.9cqw var(--d); text-transform: uppercase; } .pof h4 small { display: block; font: 600 1cqw var(--f); color: #93a7c6; text-transform: none; }
+.pm { border-radius: 1cqw; background: rgba(255,255,255,.06); border: .12cqw solid rgba(255,255,255,.12); overflow: hidden; }
+.pm > small { display: block; padding: .4cqw 1cqw; font: 700 .9cqw var(--f); color: #93a7c6; text-transform: uppercase; letter-spacing: .1cqw; background: rgba(255,255,255,.04); }
+.pm > div { display: flex; align-items: center; gap: .7cqw; padding: .6cqw 1cqw; font: 700 1.45cqw var(--d); } .pm > div + div { border-top: .1cqw solid rgba(255,255,255,.08); }
+.pm .from { margin-left: auto; flex: none; font: 700 .95cqw var(--f); color: var(--gold); } .pm .tbd { color: #6f83a3; font: italic 600 1.15cqw var(--f); }
+.r2 { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 1.6cqw; flex: 1; min-height: 0; }
+.mt { padding: 1.2cqw 1.4cqw; display: flex; flex-direction: column; gap: .5cqw; min-height: 0; }
+.mt h4 { margin: .2cqw 0; font: 800 1.5cqw var(--d); text-transform: uppercase; color: #93a7c6; }
+.mr { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: .8cqw; padding: .45cqw .8cqw; border-radius: .7cqw; background: rgba(255,255,255,.04); font: 700 1.3cqw var(--d); }
+.mr .nk:last-child { text-align: right; } .mr b { font: 800 1.4cqw var(--d); color: var(--gold); } .mr .lo { color: #6f83a3; }
+.mr.nx2 { box-shadow: 0 0 0 .15cqw var(--gold); } .mr.wait b { color: #6f83a3; font-size: 1cqw; }
+.ap-ex { font-size: 13px; color: #4a5a72; background: #eef3fb; border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; line-height: 1.4; }
+.apl { display: grid; grid-template-columns: 22px 28px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px 6px; border-radius: 10px; font: 700 15px var(--d); }
+.apl .n { color: #9aa6b8; font-size: 16px; text-align: center; } .apl .w { font: 600 12px var(--f); color: #6b7a90; } .apl .w b { font: 800 17px var(--d); color: #10203d; margin-right: 2px; }
+.apl.go { background: #fff6d6; } .apl.go .n { color: #c08b00; } .apl.out { opacity: .5; }
+.amr { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px; align-items: center; padding: 7px 8px; border-radius: 10px; background: #f3f6fb; margin-top: 6px; font: 700 14px var(--d); }
+.amr .nk:last-child { text-align: right; } .amr b { color: #e63946; } .amr.wait b { color: #9aa6b8; font: 600 11px var(--f); } .amr.nx2 { box-shadow: 0 0 0 2px #f2b600; }
+.fm { display: grid; gap: 12px; }
+.fm label { display: block; font: 700 12px var(--f); color: #6b7a90; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+.fm .inp { padding: 12px; border-radius: 12px; background: #fff; border: 1px solid #dbe2ec; font: 600 15px var(--f); }
+.fmt3 { display: grid; gap: 6px; } .fmt3 div { padding: 10px 12px; border-radius: 12px; background: #fff; border: 2px solid #e3e8f0; } .fmt3 div.on { border-color: #e63946; background: #fff5f6; }
+.fmt3 b { display: block; font: 800 15px var(--d); } .fmt3 small { color: #6b7a90; font-size: 12px; }
+.step { display: flex; align-items: center; gap: 10px; } .step span { width: 40px; height: 40px; border-radius: 12px; background: #fff; border: 1px solid #dbe2ec; display: grid; place-items: center; font: 800 20px var(--f); }
+.step b { font: 800 28px var(--d); min-width: 30px; text-align: center; } .step small { color: #6b7a90; font-size: 12px; }
+.tbl { padding: 10px; border-radius: 14px; background: #fff; border: 1px solid #e3e8f0; }
+.tbl > b { display: block; font: 800 14px var(--d); text-transform: uppercase; margin-bottom: 6px; }
+.chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; } .chips span { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px 5px 5px; border-radius: 99px; background: #f0f3f8; font: 700 13px var(--d); border: 2px solid transparent; }
+.chips span.on { border-color: #1f5fc4; background: #e7f0ff; }
+.hint { font-size: 12px; color: #6b7a90; line-height: 1.4; }
+.scr { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 16px; background: #fff; box-shadow: 0 2px 8px rgba(16,32,61,.06); margin-bottom: 10px; }
+.scr small { display: block; font: 700 11px var(--f); color: #6b7a90; text-transform: uppercase; } .scr b { font: 800 18px var(--d); }
+.scr .btn2 { margin-left: auto; flex: none; padding: 8px 12px; border-radius: 99px; background: #1f5fc4; color: #fff; font: 800 12px var(--f); }
+.scr .btn2.off { background: #e3e8f0; color: #9aa6b8; }
+.lock { font-size: 12px; color: #a15c00; background: #fff4e0; border-radius: 10px; padding: 8px 10px; margin: -4px 0 10px; }
+.sheet2 { border-radius: 18px 18px 0 0; background: #fff; padding: 14px; box-shadow: 0 -8px 24px rgba(16,32,61,.15); margin-top: 14px; }
+.sheet2 h4 { margin: 0 0 4px; font: 800 18px var(--d); } .sheet2 .ok { margin-top: 10px; padding: 12px; border-radius: 12px; background: #e63946; color: #fff; text-align: center; font: 800 14px var(--f); }
 </style></head>
 <body>
 <div class="bar" id="bar"></div>
 <div class="wrap"><div class="note" id="note"></div><div id="view"></div></div>
 <script>
 const LOGO = '<svg viewBox="0 0 120 120"><rect width="120" height="120" rx="26" fill="#2563b8"/><g transform="translate(60 60) rotate(-24)"><ellipse rx="45" ry="16" fill="none" stroke="#e63946" stroke-width="7"/></g><circle cx="60" cy="60" r="22" fill="#fff"/><g transform="translate(60 60) rotate(-24)"><path d="M-45 0 A45 16 0 0 0 45 0" fill="none" stroke="#e63946" stroke-width="7" stroke-linecap="round"/></g></svg>';
-const P = [['Рустам', '🔥', 51.0], ['Мухаммет', '⚡', 47.2], ['Александр_Великолепный', '🦁', 44.8], ['Дамир', '🎯', 43.1], ['Вайнсмоукер', '💨', 41.5], ['type2b', '🐺', 40.2], ['Эльвира', '🌸', 38.9], ['Тимур', '🏓', 37.4]];
+const P = [['Рустам', '🔥', 51.0, '#e63946'], ['Мухаммет', '⚡', 47.2, '#2f7de1'], ['Александр_Великолепный', '🦁', 44.8, '#f2b600'], ['Дамир', '🎯', 43.1, '#2a9d8f'], ['Вайнсмоукер', '💨', 41.5, '#8b5cf6'], ['type2b', '🐺', 40.2, '#64748b'], ['Эльвира', '🌸', 38.9, '#ec4899'], ['Тимур', '🏓', 37.4, '#f97316']];
+const av = (i, cls = '') => `<span class="av ${cls}" style="--c:${P[i][3]}">${P[i][1]}</span>`;
 const nm = i => P[i][0], esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 const tvTop = (crumb, tag) => `<div class="tv-top"><div class="logo">${LOGO}</div><div><div class="tv-club">Коворкинг «IT Park» KZN</div><div class="tv-crumb">${crumb}</div></div><div class="tv-tag">${tag}</div><div class="tv-clock">19:42</div></div>`;
 const foot = () => { const items = P.map(([n, , r], i) => `<span>${i < 3 ? ['🥇', '🥈', '🥉'][i] : (i + 1) + '.'} ${esc(n)}<b>${r.toFixed(1)}</b></span>`).join('');
@@ -170,7 +230,7 @@ function koMatch(r, m, app) {
   const sc = res ? res.sc.split(':') : null;
   const line = s => { const p = pair[s]; const fresh = KO.fresh === `${r}:${m}:${s}`;
     if (p === null) return `<div class="tbd${fresh ? ' new' : ''}">${tbd(r, m, s)}</div>`;
-    const cls = res ? (res.w === p ? 'w' : 'l') : ''; return `<div class="${cls}${fresh ? ' new' : ''}"><span class="nk">${app ? '' : P[p][1] + ' '}${esc(nm(p))}</span><span class="sc">${sc ? sc[res.w === p ? 0 : 1] : ''}</span></div>`; };
+    const cls = res ? (res.w === p ? 'w' : 'l') : ''; return `<div class="${cls}${fresh ? ' new' : ''}"><span class="nk">${app ? av(p, 'ph') + ' ' : av(p) + ' '}${esc(nm(p))}</span><span class="sc">${sc ? sc[res.w === p ? 0 : 1] : ''}</span></div>`; };
   return `<div class="${app ? 'am' : 'm'}${isNow ? ' now' : ''}">${line(0)}${line(1)}</div>`;
 }
 function koTV() {
@@ -180,14 +240,18 @@ function koTV() {
 }
 
 // ── группы ──
-const G = [{ n: 'A', rows: [[0, 3, 0, 9], [3, 2, 1, 6], [5, 1, 2, 3], [7, 0, 3, 0]] }, { n: 'B', rows: [[1, 2, 0, 6], [2, 1, 1, 3], [4, 1, 1, 3], [6, 0, 2, 0]] }];
+const G = [{ n: 'A', done: true, left: '', rows: [[0, 3], [3, 2], [5, 1], [7, 0]] }, { n: 'B', left: '1 матч — Александр против Вайнсмоукера', rows: [[1, 2], [2, 1], [4, 1], [6, 0]] }];
 const grpRow = (r, i, app) => app ? `<div class="ar${i < 2 ? ' q' : ''}"><span>${i + 1}</span><span class="nk">${esc(nm(r[0]))}</span><i>${r[1]}–${r[2]}</i><b>${r[3]}</b></div>`
   : `<div class="row${i < 2 ? ' q' : ''}"><span class="pos">${i + 1}</span><span class="nk">${P[r[0]][1]} ${esc(nm(r[0]))}</span><i>${r[1]}–${r[2]}</i><b>${r[3]}</b></div>`;
 function grpTV() {
-  return tv('Лига коворкинга · группы + плей-офф · 8 участников', 'Групповой этап', `<div class="grp">${G.map(g => `<div class="card gt"><h4>Группа <span>${g.n}</span></h4><div class="row h"><span></span><span>Игрок</span><i>В–П</i><b style="font-size:.9cqw">Очки</b></div>${g.rows.map((r, i) => grpRow(r, i)).join('')}<div class="leg">🟨 первые двое выходят в плей-офф</div></div>`).join('')}
-    <div class="card po"><h4>Плей-офф</h4><div class="m"><div><span class="nk">🔥 Рустам</span><span class="sc">1A</span></div><div class="tbd">2-е место группы B</div></div>
-      <div class="m now"><div><span class="nk">⚡ Мухаммет</span><span class="sc">1B</span></div><div><span class="nk">🎯 Дамир</span><span class="sc">2A</span></div></div>
-      <div class="m"><div class="tbd">Победитель полуфинала 1</div><div class="tbd">Победитель полуфинала 2</div></div><div class="leg">Пары плей-офф заполняются сами, как только группа доиграна</div></div></div>`);
+  const card = g => `<div class="card gc"><h4>Группа ${g.n}<small>4 игрока · внутри группы каждый играет с каждым</small></h4>
+    ${g.rows.map((r, i) => `<div class="pl ${i < 2 ? 'go' : g.done ? 'out' : ''}"><span class="n">${i + 1}</span>${av(r[0])}<span class="nk">${esc(nm(r[0]))}</span><span class="wins"><b>${r[1]}</b>${r[1] === 1 ? 'победа' : r[1] > 1 && r[1] < 5 ? 'победы' : 'побед'}</span>${i < 2 ? '<span class="tag">→ проходит в плей-офф</span>' : ''}</div>`).join('')}
+    <div class="left">${g.left ? `Осталось сыграть: <b>${g.left}</b>` : 'Группа доиграна ✓'}</div></div>`;
+  return tv('Лига коворкинга · группы + плей-офф', 'Групповой этап', `<div class="body2"><div class="stage"><span class="on">Этап 1 · Группы</span><i>→</i><span>Этап 2 · Плей-офф</span><span style="margin-left:auto;background:none">Двое лучших из каждой группы идут в плей-офф</span></div>
+    <div class="g2">${G.map(card).join('')}<div class="card pof"><h4>Плей-офф<small>Пары заполнятся сами, когда группы доиграют</small></h4>
+      <div class="pm"><small>Полуфинал 1</small><div>${av(0)}<span class="nk">Рустам</span><span class="from">1-й в A</span></div><div class="tbd">ждём 2-го из группы B</div></div>
+      <div class="pm now"><small>Полуфинал 2</small><div>${av(1)}<span class="nk">Мухаммет</span><span class="from">1-й в B</span></div><div>${av(3)}<span class="nk">Дамир</span><span class="from">2-й в A</span></div></div>
+      <div class="pm"><small>Финал</small><div class="tbd">победитель полуфинала 1</div><div class="tbd">победитель полуфинала 2</div></div></div></div></div>`);
 }
 
 // ── каждый с каждым ──
@@ -197,19 +261,26 @@ function rrCell(a, b) { if (a === b) return ['x', '']; const k = a < b ? `${a}-$
   let [x, y] = v.split(':').map(Number); if (a > b) [x, y] = [y, x]; return [x > y ? 'w' : 'l', `${x}:${y}`]; }
 function rrStand() { return RR.map(i => { let w = 0, l = 0; RR.forEach(j => { const c = rrCell(i, j); if (c[0] === 'w') w++; if (c[0] === 'l') l++; }); return [i, w, l, w * 3]; }).sort((a, b) => b[3] - a[3]); }
 function rrTV() {
-  const st = rrStand();
-  return tv('Октябрьский круг · каждый с каждым · 6 участников', 'Круговой турнир', `<div class="rr"><div class="card cross"><table><tr><th class="nm"></th>${RR.map(i => `<th>${P[i][1]}</th>`).join('')}</tr>
-    ${RR.map(a => `<tr><th class="nm"><span class="nk">${P[a][1]} ${esc(nm(a))}</span></th>${RR.map(b => { const [c, t] = rrCell(a, b); return `<td class="${c}">${t}</td>`; }).join('')}</tr>`).join('')}</table></div>
-    <div class="card st"><h4>Таблица</h4><div class="row h"><span></span><span>Игрок</span><i>В–П</i><b style="font-size:.9cqw">Очки</b></div>${st.map((r, i) => `<div class="row"><span class="pos">${i + 1}</span><span class="nk">${P[r[0]][1]} ${esc(nm(r[0]))}</span><i>${r[1]}–${r[2]}</i><b>${r[3]}</b></div>`).join('')}
-      <div class="prog">Сыграно 11 из 15 матчей<i></i></div></div></div>`);
+  const st = rrStand(), played = Object.keys(RES), all = [];
+  RR.forEach(a => RR.forEach(b => { if (a < b) all.push(`${a}-${b}`); }));
+  const left = all.filter(k => !RES[k]);
+  const row = (k, wait) => { const [a, b] = k.split('-').map(Number); if (wait) return `<div class="mr wait ${k === NOW ? 'nx2' : ''}"><span class="nk">${av(a)} ${esc(nm(a))}</span><b>${k === NOW ? 'СЛЕДУЮЩИЙ' : 'ждёт'}</b><span class="nk">${esc(nm(b))} ${av(b)}</span></div>`;
+    const [x, y] = RES[k].split(':').map(Number); return `<div class="mr"><span class="nk ${x < y ? 'lo' : ''}">${av(a)} ${esc(nm(a))}</span><b>${x}:${y}</b><span class="nk ${y < x ? 'lo' : ''}">${esc(nm(b))} ${av(b)}</span></div>`; };
+  return tv('Октябрьский круг · каждый с каждым', 'Круговой турнир', `<div class="body2"><div class="stage"><span class="on">Каждый играет со всеми</span><span>Победа = 1 очко в таблице</span><span style="margin-left:auto;background:none">Сыграно ${played.length} из ${all.length} матчей</span></div>
+    <div class="r2"><div class="card gc"><h4>Места<small>У кого больше побед — тот выше</small></h4>${st.map((r, i) => `<div class="pl ${i === 0 ? 'go' : ''}"><span class="n">${i + 1}</span>${av(r[0])}<span class="nk">${esc(nm(r[0]))}</span><span class="wins"><b>${r[1]}</b>из ${r[1] + r[2]}</span></div>`).join('')}</div>
+      <div class="card mt"><h4>Осталось сыграть · ${left.length}</h4>${left.map(k => row(k, true)).join('')}<h4>Последние матчи</h4>${played.slice(-4).reverse().map(k => row(k)).join('')}</div></div></div>`);
 }
 
 // ── приветствие ──
 const HELLO = { ko: ['Кубок октября', '🏆 Олимпийская система', [0, 1, 2, 3, 4, 5, 6, 7]], grp: ['Лига коворкинга', '🗂 Группы + плей-офф', [0, 1, 2, 3, 4, 5, 6, 7]], rr: ['Октябрьский круг', '🔄 Каждый с каждым', [0, 1, 2, 3, 4, 5]] };
 let helloK = 'ko';
+// «как проходит турнир» простыми словами — на заставке каждого вида
+const HOW = { ko: ['Проиграл — выбыл', 'Победитель идёт дальше по сетке', 'Финал решает, кто чемпион'],
+  grp: ['Делимся на группы по 4', 'В группе каждый играет с каждым', 'Двое лучших из группы — в плей-офф'],
+  rr: ['Каждый сыграет со всеми', 'Победа = 3 очка', 'Больше очков — выше место'] };
 function helloTV() { const [t, f, ids] = HELLO[helloK];
   return tv('Турнир начинается', 'Добро пожаловать', `<div class="hello"><div><small>Сегодня в клубе</small><h1>${t}</h1><div class="fmt">${f} · ${ids.length} участников</div>
-    <div class="who">${ids.map((i, k) => `<div style="animation-delay:${.3 + k * .12}s"><div class="ava">${P[i][1]}</div><span class="nk">${esc(nm(i))}</span></div>`).join('')}</div><div class="go">Через несколько секунд — турнирная сетка</div></div></div>`); }
+    <div class="who">${ids.map((i, k) => `<div style="animation-delay:${.3 + k * .12}s">${av(i, 'big')}<span class="nk">${esc(nm(i))}</span></div>`).join('')}</div><div class="how">${HOW[helloK].map((t, k) => `<span><b>${k + 1}</b>${t}</span>`).join('<i>→</i>')}</div><div class="go">Через несколько секунд — турнирная сетка</div></div></div>`); }
 
 // ── «следующие» и длинные ники ──
 function nextTV() {
@@ -218,7 +289,7 @@ function nextTV() {
     <div class="nx"><small>Следом за этим столом · станет так</small><div class="pair"><span class="nk" style="font-size:${fit('Александр_Великолепный')}cqw">Александр_Великолепный</span><em>—</em><span class="nk" style="font-size:${fit('Вайнсмоукер')}cqw">Вайнсмоукер</span></div><span style="font-size:1.2cqw;color:#93a7c6">1/4 финала</span></div>
   </div>${foot()}</div>`;
 }
-const fit = s => Math.max(1.8, Math.min(3.2, 34 / Math.max(10, s.length)));
+const fit = s => Math.max(2.8, Math.min(4.6, 62 / Math.max(10, s.length)));
 
 // ── приложение ──
 function appKO() {
@@ -230,28 +301,51 @@ function appKO() {
 }
 function appGrp() {
   return `<div class="ap-h"><div class="logo" style="width:40px;height:40px">${LOGO}</div><div><b>Лига коворкинга</b><small>Группы + плей-офф</small></div></div>
-    <div class="ap-tabs"><span class="on">Группы</span><span>Плей-офф</span><span>Матчи</span></div>
-    <div class="ap-next"><div><small>Следующий матч</small><b>Мухаммет — Дамир</b></div><span class="btn">Начать ▶</span></div>
-    ${G.map(g => `<div class="ap-card"><h4>Группа ${g.n}</h4><div class="ar h"><span></span><span>Игрок</span><i>В–П</i><b style="font-size:10px">Очки</b></div>${g.rows.map((r, i) => grpRow(r, i, true)).join('')}</div>`).join('')}
-    <p style="font-size:12px;color:#6b7a90">🟨 выходят в плей-офф — пары появятся сами</p>`;
+    <div class="ap-ex">1) Игроки поделены на группы по 4. 2) В группе каждый играет с каждым. 3) Двое лучших из группы — в плей-офф (там уже «проиграл — выбыл»).</div>
+    <div class="ap-next"><div><small>Следующий матч</small><b>Александр — Вайнсмоукер</b></div><span class="btn">Начать ▶</span></div>
+    ${G.map(g => `<div class="ap-card"><h4>Группа ${g.n}</h4>${g.rows.map((r, i) => `<div class="apl ${i < 2 ? 'go' : g.done ? 'out' : ''}"><span class="n">${i + 1}</span>${av(r[0], 'ph')}<span class="nk">${esc(nm(r[0]))}</span><span class="w"><b>${r[1]}</b>поб.</span></div>`).join('')}<p style="margin:6px 0 0;font-size:12px;color:#6b7a90">${g.left ? 'Осталось: ' + g.left : 'Группа доиграна ✓ — двое верхних в плей-офф'}</p></div>`).join('')}`;
 }
 function appRR() {
-  const st = rrStand();
-  return `<div class="ap-h"><div class="logo" style="width:40px;height:40px">${LOGO}</div><div><b>Октябрьский круг</b><small>Каждый с каждым · 11 из 15</small></div></div>
-    <div class="ap-tabs"><span class="on">Таблица</span><span>Шахматка</span><span>Матчи</span></div>
+  const st = rrStand(), all = []; RR.forEach(a => RR.forEach(b => { if (a < b) all.push(`${a}-${b}`); }));
+  const left = all.filter(k => !RES[k]);
+  return `<div class="ap-h"><div class="logo" style="width:40px;height:40px">${LOGO}</div><div><b>Октябрьский круг</b><small>Каждый с каждым · сыграно ${all.length - left.length} из ${all.length}</small></div></div>
+    <div class="ap-ex">Каждый сыграет со всеми по одному разу. У кого больше побед — тот выше в таблице.</div>
     <div class="ap-next"><div><small>Следующий матч</small><b>Рустам — Вайнсмоукер</b></div><span class="btn">Начать ▶</span></div>
-    <div class="ap-card"><h4>Таблица</h4>${st.map((r, i) => `<div class="ar${i === 0 ? ' q' : ''}"><span>${i + 1}</span><span class="nk">${P[r[0]][1]} ${esc(nm(r[0]))}</span><i>${r[1]}–${r[2]}</i><b>${r[3]}</b></div>`).join('')}</div>
-    <div class="ap-card"><h4>Шахматка</h4><table class="ap-cross"><tr><th class="nm"></th>${RR.map(i => `<th>${P[i][1]}</th>`).join('')}</tr>${RR.map(a => `<tr><th class="nm"><span class="nk">${esc(nm(a))}</span></th>${RR.map(b => { const [c, t] = rrCell(a, b); return `<td class="${c}">${t}</td>`; }).join('')}</tr>`).join('')}</table></div>`;
+    <div class="ap-card"><h4>Места</h4>${st.map((r, i) => `<div class="apl ${i === 0 ? 'go' : ''}"><span class="n">${i + 1}</span>${av(r[0], 'ph')}<span class="nk">${esc(nm(r[0]))}</span><span class="w"><b>${r[1]}</b>из ${r[1] + r[2]}</span></div>`).join('')}</div>
+    <div class="ap-card"><h4>Осталось сыграть · ${left.length}</h4>${left.map(k => { const [a, b] = k.split('-').map(Number); return `<div class="amr wait ${k === NOW ? 'nx2' : ''}"><span class="nk">${esc(nm(a))}</span><b>${k === NOW ? 'след.' : 'ждёт'}</b><span class="nk">${esc(nm(b))}</span></div>`; }).join('')}</div>`;
 }
 
+function appCreate() {
+  const chip = (i, on) => `<span class="${on ? 'on' : ''}">${av(i, 'ph')}${esc(nm(i))}</span>`;
+  return `<div class="ap-h"><div><b>Новый турнир</b><small>шаг 1 из 1 · всё на одном экране</small></div></div>
+    <div class="fm"><div><label>Название</label><div class="inp">Кубок октября</div></div>
+    <div><label>Вид турнира</label><div class="fmt3"><div class="on"><b>🏆 Олимпийская</b><small>Проиграл — выбыл. Быстро, ярко</small></div><div><b>🗂 Группы + плей-офф</b><small>Сначала группы, потом лучшие на вылет</small></div><div><b>🔄 Каждый с каждым</b><small>Все играют со всеми, считаем победы</small></div></div></div>
+    <div><label>Игровых столов</label><div class="step"><span>−</span><b>2</b><span>+</span><small>пары сами разойдутся по свободным столам</small></div></div>
+    <div><label>Секундант на каждом столе</label>
+      <div class="tbl"><b>Стол 1</b><div class="chips">${chip(3, true)}${chip(6)}${chip(7)}${chip(5)}</div></div>
+      <div class="tbl" style="margin-top:8px"><b>Стол 2</b><div class="chips">${chip(3)}${chip(6, true)}${chip(7)}${chip(5)}</div></div>
+      <p class="hint">Секундант ведёт счёт на своём телефоне. Передать роль другому можно в перерыве между партиями или после матча — во время розыгрыша нельзя.</p></div>
+    <div><label>Счёт</label><div class="fmt3"><div class="on"><b>По очкам</b><small>секундант ведёт счёт, на табло — выход игроков и звуки</small></div><div><b>Только итог</b><small>после матча вписывается 3:1 — удобно, когда столов много</small></div></div></div></div>`;
+}
+function appScorer() {
+  return `<div class="ap-h"><div><b>Кубок октября</b><small>Олимпийская · 2 стола</small></div></div>
+    <p class="ph-cap" style="text-align:left;margin:4px 0 8px">Перерыв между партиями — передать можно</p>
+    <div class="scr">${av(3, 'ph lg')}<div><small>Стол 1 · секундант</small><b>Дамир</b></div><span class="btn2">Передать роль</span></div>
+    <p class="ph-cap" style="text-align:left;margin:12px 0 8px">Идёт розыгрыш — нельзя</p>
+    <div class="scr">${av(6, 'ph lg')}<div><small>Стол 2 · секундант</small><b>Эльвира</b></div><span class="btn2 off">🔒 Передать</span></div>
+    <div class="lock">Идёт партия 7:5. Передать роль можно в перерыве или после матча.</div>
+    <div class="sheet2"><h4>Кому передать роль секунданта?</h4><p class="hint">Стол 1 · новый секундант сразу продолжит вести счёт с того же места</p>
+      <div class="chips" style="flex-wrap:wrap">${[7, 5, 4, 2].map((i, k) => `<span class="${k === 0 ? 'on' : ''}">${av(i, 'ph')}${esc(nm(i))}</span>`).join('')}</div><div class="ok">Передать Тимуру</div></div>`;
+}
 const TABS = [
   { n: '1. Приветствие', note: '<b>Табло: приветствие турнира</b>Когда подключаете табло во время турнира (любого вида) — сначала заставка: название турнира, вид, все участники по очереди «выскакивают». Через несколько секунд — сетка. Внизу переключатель, как заставка выглядит у каждого вида.', v: () => helloTV(), ctl: () => `<button class="${helloK === 'ko' ? '' : 'ghost'}" data-h="ko">Олимпийка</button><button class="${helloK === 'grp' ? '' : 'ghost'}" data-h="grp">Группы</button><button class="${helloK === 'rr' ? '' : 'ghost'}" data-h="rr">Каждый с каждым</button>` },
   { n: '2. Олимпийка', note: '<b>Табло: олимпийская система — как в футболе</b>Вся сетка видна сразу, до первого матча: где соперник ещё неизвестен — «Победитель QF1». Нажимайте «Следующий матч» — победитель сам переезжает в следующий раунд (вспышка), следующая пара подсвечена жёлтым, в конце — чемпион.', v: () => koTV(), ctl: () => `<button data-ko="step">▶ Следующий матч</button><button class="ghost" data-ko="reset">↺ Сначала</button>` },
-  { n: '3. Группы', note: '<b>Табло: группы + плей-офф</b>Своя таблица у каждой группы (победы–поражения, очки), выходящие в плей-офф подсвечены. Справа — плей-офф: пары с местами «1A / 2B», имена подставляются сами, когда группа доиграна.', v: () => grpTV() },
-  { n: '4. Каждый с каждым', note: '<b>Табло: круговой турнир</b>Слева «шахматка» — кто кого обыграл (зелёный — победа, красный — поражение, жёлтая рамка — следующий матч). Справа — таблица мест и сколько матчей сыграно.', v: () => rrTV() },
+  { n: '3. Группы', note: '<b>Табло: группы + плей-офф — по-простому</b>Сверху — на каком этапе турнир. У каждой группы — места и сколько побед; двое верхних отмечены «→ проходит в плей-офф». Внизу группы — что осталось сыграть. Справа — плей-офф: «1-й в A», «2-й в B», имена подставляются сами.', v: () => grpTV() },
+  { n: '4. Каждый с каждым', note: '<b>Табло: каждый с каждым — по-простому</b>Без «шахматки». Слева — места: сколько побед из сыгранных. Справа — какие матчи остались (следующий подсвечен) и последние результаты. Сверху одной строкой правило: каждый играет со всеми.', v: () => rrTV() },
   { n: '5. Длинные ники + низ', note: '<b>Табло: длинные ники и нижняя строка</b>Слева — как сейчас: длинный ник вылезает за рамку. Справа — как станет: шрифт сам уменьшается, а если всё равно не влезает — «…». Внизу участники едут бегущей строкой по кругу и уходят под логотип PONGHUB, который всегда стоит на месте (видно на всех экранах табло).', v: () => nextTV() },
   { sep: 1 },
-  { n: '6. Приложение', note: '<b>Приложение: экран турнира на телефоне</b>Три вида — три своих экрана. Сверху всегда «Следующий матч» с кнопкой «Начать». Олимпийка — сетка раундами, листается пальцем; группы — карточки групп; круг — таблица и шахматка. Нажимайте «Следующий матч» во вкладке «Олимпийка» — сетка в телефоне обновится так же.', v: () => `<div class="phones"><div><p class="ph-cap">Олимпийка</p><div class="ph"><div class="ph-in">${appKO()}</div></div></div><div><p class="ph-cap">Группы</p><div class="ph"><div class="ph-in">${appGrp()}</div></div></div><div><p class="ph-cap">Каждый с каждым</p><div class="ph"><div class="ph-in">${appRR()}</div></div></div></div>` },
+  { n: '6. Создание турнира', note: '<b>Приложение: создание турнира — столы и секундант</b>Слева — новый турнир: вид (с объяснением в одну строку), число игровых столов (−/+), секундант на каждый стол из игроков клуба, способ счёта. Справа — во время турнира: роль секунданта можно передать в перерыве между партиями или после матча; во время розыгрыша кнопка заблокирована. <br><br>Выбор «кто подаёт первым» перед матчем в приложении есть и остаётся.', v: () => `<div class="phones"><div><p class="ph-cap">Новый турнир</p><div class="ph"><div class="ph-in">${appCreate()}</div></div></div><div><p class="ph-cap">Передача секунданта</p><div class="ph"><div class="ph-in">${appScorer()}</div></div></div></div>` },
+  { n: '7. Экран турнира', note: '<b>Приложение: экран турнира на телефоне</b>Три вида — три своих экрана. Сверху всегда «Следующий матч» с кнопкой «Начать». Олимпийка — сетка раундами, листается пальцем; группы — карточки групп; круг — таблица и шахматка. Нажимайте «Следующий матч» во вкладке «Олимпийка» — сетка в телефоне обновится так же.', v: () => `<div class="phones"><div><p class="ph-cap">Олимпийка</p><div class="ph"><div class="ph-in">${appKO()}</div></div></div><div><p class="ph-cap">Группы</p><div class="ph"><div class="ph-in">${appGrp()}</div></div></div><div><p class="ph-cap">Каждый с каждым</p><div class="ph"><div class="ph-in">${appRR()}</div></div></div></div>` },
 ];
 let cur = 0;
 const bar = document.getElementById('bar');
