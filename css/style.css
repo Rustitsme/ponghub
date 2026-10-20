@@ -1120,3 +1120,45 @@ body.av-big { overflow: hidden; }
 .hero.hm .hero-links { margin-top: 6px; } .hero.hm .hero-links .btn { padding: 7px 12px; font-size: 14px; }
 .hero.hm .role-badge { white-space: nowrap; font-size: 10px; padding: 3px 8px; letter-spacing: .2px; }
 .hero.hm .role-badge .creator-star { margin: 0 2px; }
+
+/* ── табло: бегущая строка, ники, приветствие, сетки турниров ── */
+.tvx-foot { position: relative; }
+.tvx-tick { position: relative; flex: 1; min-width: 0; overflow: hidden; -webkit-mask-image: linear-gradient(90deg, transparent, #000 2%, #000 100%); mask-image: linear-gradient(90deg, transparent, #000 2%, #000 100%); }
+.tvx-tick.static { display: flex; gap: 2cqw; align-items: center; -webkit-mask-image: none; mask-image: none; }
+.tvx-tick-in { display: inline-flex; gap: 2.4cqw; white-space: nowrap; padding-right: 2.4cqw; animation: tvxTick 40s linear infinite; }
+@keyframes tvxTick { to { transform: translateX(-50%); } }
+.tvx-foot .tvx-brand { position: absolute; right: 0; top: 0; bottom: 0; padding-left: 4cqw; padding-top: 1cqw; background: linear-gradient(90deg, transparent, var(--tv-brand-bg, #08142a) 40%); z-index: 2; }
+.tvx[data-bg="light"] { --tv-brand-bg: #e6edf8; } .tvx[data-bg="table"] { --tv-brand-bg: #1e549f; } .tvx[data-bg="red"] { --tv-brand-bg: #2a070c; } .tvx[data-bg="green"] { --tv-brand-bg: #072a1e; } .tvx[data-bg="graphite"] { --tv-brand-bg: #111215; }
+.tvx-nk { display: block; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tvx-next .tvx-nk { font-weight: 800; font-family: var(--display); line-height: 1.05; width: 100%; color: var(--tv-text); } .tvx-next em { font: 700 1.6cqw var(--display); font-style: normal; color: var(--tv-muted); }
+.tvx-av { --c: #e63946; display: inline-grid; place-items: center; flex: none; width: 2.2cqw; aspect-ratio: 1; border-radius: 50%; overflow: hidden; background: color-mix(in srgb, var(--c) 30%, #10203d); border: .14cqw solid var(--c); font-size: 1.2cqw; line-height: 1; }
+.tvx-av img { width: 100%; height: 100%; object-fit: cover; }
+.tvx-bm > div { align-items: center; } .tvx-bm .tvx-nk { flex: 1; } .tvx-bm .sc { margin-left: auto; flex: none; font-variant-numeric: tabular-nums; }
+.tvx-bm .w { color: #fff; } .tvx-bm .w .sc { color: #ffd75e; } .tvx-bm .l { opacity: .55; }
+.tvx-bm .tbd { color: var(--tv-muted); font: italic 600 1.15cqw var(--font); }
+.tvx-champ { display: grid; justify-items: center; gap: .4cqw; padding: 1.4cqw; border-radius: 1.2cqw; border: .15cqw dashed rgba(255, 215, 94, .5); text-align: center; }
+.tvx-champ i { font-style: normal; font-size: 3cqw; } .tvx-champ b { font: 800 1.9cqw var(--display); color: #ffd75e; } .tvx-champ span { font-size: 1cqw; color: var(--tv-muted); }
+.tvx-steps { display: flex; align-items: center; gap: 1cqw; font: 700 1.15cqw var(--font); color: var(--tv-muted); margin-bottom: 1cqw; }
+.tvx-steps > span { padding: .45cqw 1.1cqw; border-radius: 99px; background: rgba(255, 255, 255, .06); } .tvx-steps > span.on { background: #ffd75e; color: #2a1d00; }
+.tvx-steps i { font-style: normal; color: #ffd75e; } .tvx-steps em { margin-left: auto; font-style: normal; }
+.tvx-left { min-width: 0; display: flex; flex-direction: column; min-height: 0; } .tvx-left > .tvx-bracket { flex: 1; }
+.tvx-groups, .tvx-rr { display: grid; gap: 1.4cqw; flex: 1; min-height: 0; } .tvx-rr { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
+.tvx-gc { display: flex; flex-direction: column; gap: .45cqw; padding: 1.1cqw 1.3cqw; min-height: 0; overflow: hidden; }
+.tvx-gc h4 { margin: 0 0 .3cqw; font: 800 1.7cqw var(--display); text-transform: uppercase; } .tvx-gc h4 small { display: block; font: 600 .95cqw var(--font); color: var(--tv-muted); text-transform: none; }
+.tvx-pl { display: grid; grid-template-columns: 1.6cqw auto minmax(0, 1fr) auto; align-items: center; gap: .7cqw; padding: .35cqw .7cqw; border-radius: .7cqw; background: rgba(255, 255, 255, .04); font: 700 1.4cqw var(--display); }
+.tvx-pl .n { font: 800 1.4cqw var(--display); color: var(--tv-muted); text-align: center; } .tvx-pl .wins { font: 600 1cqw var(--font); color: var(--tv-muted); } .tvx-pl .wins b { font: 800 1.6cqw var(--display); color: var(--tv-text); margin-right: .3cqw; }
+.tvx-pl.go { background: rgba(255, 215, 94, .12); box-shadow: inset .3cqw 0 0 #ffd75e; } .tvx-pl.go .n { color: #ffd75e; }
+.tvx-gc .left { margin-top: auto; padding-top: .5cqw; font: 600 1cqw var(--font); color: var(--tv-muted); border-top: .1cqw solid var(--tv-line); }
+.tvx-mr { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: .8cqw; align-items: center; padding: .45cqw .8cqw; border-radius: .7cqw; background: rgba(255, 255, 255, .04); font: 700 1.3cqw var(--display); }
+.tvx-mr .r { text-align: right; } .tvx-mr b { color: var(--tv-muted); } .tvx-mr.now { box-shadow: 0 0 0 .15cqw #ffd75e; }
+.tvx-hello { display: grid; place-items: center; text-align: center; min-height: 0; }
+.tvx-hello small { font: 700 1.3cqw var(--font); letter-spacing: .3cqw; text-transform: uppercase; color: #ffd75e; }
+.tvx-hello h1 { margin: .5cqw 0 .4cqw; font: 800 5.6cqw/1 var(--display); text-transform: uppercase; text-shadow: 0 .6cqw 3cqw rgba(47, 125, 225, .6); }
+.tvx-hello .fmt { display: inline-block; padding: .55cqw 1.6cqw; border-radius: 99px; background: rgba(255, 255, 255, .08); font: 700 1.35cqw var(--font); }
+.tvx-hello .who { display: flex; flex-wrap: wrap; justify-content: center; gap: 1.2cqw; margin: 2.2cqw auto 0; max-width: 84cqw; }
+.tvx-hello .who > div { width: 10cqw; display: grid; justify-items: center; gap: .5cqw; opacity: 0; animation: tvxPop .5s forwards; }
+.tvx-hello .who .tvx-av { width: 5.4cqw; font-size: 2.7cqw; border-width: .3cqw; } .tvx-hello .who .tvx-nk { font: 700 1.25cqw var(--display); }
+.tvx-hello .how { display: flex; justify-content: center; align-items: center; gap: 1cqw; margin-top: 2cqw; font: 600 1.2cqw var(--font); }
+.tvx-hello .how span { display: inline-flex; align-items: center; gap: .6cqw; padding: .55cqw 1.2cqw; border-radius: 99px; background: rgba(255, 255, 255, .07); }
+.tvx-hello .how b { display: grid; place-items: center; width: 1.8cqw; aspect-ratio: 1; border-radius: 50%; background: #ffd75e; color: #2a1d00; font: 800 1.05cqw var(--display); } .tvx-hello .how i { font-style: normal; color: #ffd75e; }
+@keyframes tvxPop { from { opacity: 0; transform: translateY(1cqw) scale(.8); } to { opacity: 1; transform: none; } }
