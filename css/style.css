@@ -1162,3 +1162,17 @@ body.av-big { overflow: hidden; }
 .tvx-hello .how span { display: inline-flex; align-items: center; gap: .6cqw; padding: .55cqw 1.2cqw; border-radius: 99px; background: rgba(255, 255, 255, .07); }
 .tvx-hello .how b { display: grid; place-items: center; width: 1.8cqw; aspect-ratio: 1; border-radius: 50%; background: #ffd75e; color: #2a1d00; font: 800 1.05cqw var(--display); } .tvx-hello .how i { font-style: normal; color: #ffd75e; }
 @keyframes tvxPop { from { opacity: 0; transform: translateY(1cqw) scale(.8); } to { opacity: 1; transform: none; } }
+
+/* экран турнира: следующий матч, объяснение, простые места */
+.t-how { margin: 10px 2px; font-size: 13px; color: var(--muted); line-height: 1.4; }
+.t-next { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; padding: 14px; border-radius: 18px; color: #fff; background: linear-gradient(135deg, #1f5fc4, #0e3b8c); box-shadow: 0 8px 20px rgba(14, 59, 140, .25); }
+.t-next small { display: block; font: 700 11px var(--font); text-transform: uppercase; letter-spacing: .08em; color: #ffd75e; }
+.t-next b { font: 800 19px/1.15 var(--display); }
+.t-next .btn { margin-left: auto; flex: none; background: #fff; color: #0e3b8c; border: 0; font-weight: 800; }
+.tp-list { display: grid; gap: 4px; }
+.tp-row { display: grid; grid-template-columns: 22px auto minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 8px 8px; border-radius: 12px; color: var(--text); text-decoration: none; }
+.tp-row .n { text-align: center; font: 800 16px var(--display); color: var(--muted); }
+.tp-row .nk { font: 700 16px var(--display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tp-row .w { font-size: 12px; color: var(--muted); white-space: nowrap; } .tp-row .w b { font: 800 18px var(--display); color: var(--text); }
+.tp-row.go { background: color-mix(in srgb, #ffd23f 22%, transparent); } .tp-row.go .n { color: #b8860b; }
+.tp-adv { margin: 6px 2px 0; }

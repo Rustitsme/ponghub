@@ -734,9 +734,9 @@ function koBlock(t, slots, ms) {
 function rrBlock(t, ids, ms, stage, grp = null, title = '') {
   const st = standings(ids, ms.filter(m => m.stage === stage && (grp === null || m.grp === grp)));
   const can = isAdmin() && t.status === 'active';
-  const table = `<div class="tbl-wrap"><table class="tbl"><thead><tr><th>#</th><th class="l">Игрок</th><th>И</th><th>В</th><th>П</th><th>Партии</th><th>Очки</th></tr></thead><tbody>
-    ${st.list.map((x, i) => `<tr class="${grp !== null && i < (t.config.advance || 2) ? 'adv' : ''}"><td>${i + 1}</td><td class="l"><a href="#/player/${x.id}">${ava(P(x.id), 'xs')} ${esc(P(x.id).nickname)}</a></td><td>${x.p}</td><td>${x.w}</td><td>${x.l}</td><td>${x.sw}:${x.sl}</td><td><b>${x.pts}</b></td></tr>`).join('')}
-  </tbody></table></div>`;
+  const adv = grp !== null ? (t.config.advance || 2) : 1;
+  const table = `<div class="tp-list">${st.list.map((x, i) => `<a href="#/player/${x.id}" class="tp-row ${i < adv && (grp !== null || st.played) ? 'go' : ''}"><span class="n">${i + 1}</span>${ava(P(x.id), 'sm')}<b class="nk">${esc(P(x.id).nickname)}</b><span class="w"><b>${x.w}</b> из ${x.p}</span></a>`).join('')}</div>
+    ${grp !== null ? `<p class="muted small tp-adv">🟨 в плей-офф выходят ${adv} лучших</p>` : ''}`;
   const fixtures = pairings(ids).map(([a, b]) => {
     const m = findPairMatch(ms, stage, a, b, grp);
     const done = m && m.status === 'approved';
@@ -760,6 +760,22 @@ function tournamentPlacings(t) {
   return { gold: st.list[0]?.id, silver: st.list[1]?.id, bronze: st.list[2] ? [st.list[2].id] : [], incomplete: !st.complete };
 }
 
+// ближайшая несыгранная пара турнира (для карточки «Следующий матч»)
+function tNext(t, ms) {
+  if (t.format === 'ko' || (t.format === 'groups' && t.config.slots && ms.some(m => m.stage === 'ko'))) {
+    if (!t.config.slots) return null;
+    const br = koBracket(t.config.slots, ms.filter(m => m.stage === 'ko' || m.stage === 'ko3'), t.config.thirdPlace);
+    for (const row of br.rounds) for (const c of row) if (c.a && c.b && !c.match && !c.bye) return { a: c.a, b: c.b, act: `data-act="kocell" data-t="${t.id}" data-r="${c.r}" data-i="${c.i}"`, note: roundName(c.r, br.rounds.length) };
+    if (br.third && br.third.a && br.third.b && !br.third.match) return { a: br.third.a, b: br.third.b, act: `data-act="kocell" data-t="${t.id}" data-r="third" data-i="0"`, note: 'за 3-е место' };
+    return null;
+  }
+  const groups = t.format === 'groups' ? (t.config.groups || []).map((g, i) => ({ ids: g, stage: 'grp', grp: i })) : [{ ids: t.participants, stage: 'rr', grp: null }];
+  for (const g of groups) for (const [a, b] of pairings(g.ids)) if (!findPairMatch(ms, g.stage, a, b, g.grp))
+    return { a, b, act: `data-act="fixture" data-t="${t.id}" data-a="${a}" data-b="${b}" data-stage="${g.stage}" data-grp="${g.grp ?? ''}"`, note: g.grp === null ? 'каждый с каждым' : `группа ${String.fromCharCode(1040 + g.grp)}` };
+  return null;
+}
+const T_HOW = { ko: 'Проиграл — выбыл. Победитель идёт дальше по сетке, финал решает, кто чемпион.', rr: 'Каждый сыграет со всеми по разу. У кого больше побед — тот выше.', groups: 'Игроки поделены на группы, в группе каждый играет с каждым. Лучшие из групп — в плей-офф на вылет.' };
+
 function viewTournament(r) {
   const t = tById(r.args[0]);
   if (!t) return '<div class="empty">Турнир не найден</div>';
@@ -778,6 +794,8 @@ function viewTournament(r) {
   }
   const pl = t.status === 'active' ? tournamentPlacings(t) : null;
   const res = t.results;
+  const nx = t.status === 'active' ? tNext(t, ms) : null;
+  const nextCard = nx ? `<section class="t-next"><div><small>Следующий матч · ${esc(nx.note)}</small><b>${esc(P(nx.a).nickname)} — ${esc(P(nx.b).nickname)}</b></div>${can ? `<button class="btn" ${nx.act}>Начать ▶</button>` : ''}</section>` : '';
   return `
   <div class="page-h"><a href="#/tournaments" class="back">← Турниры</a></div>
   <section class="hero table-card t-hero">
@@ -786,6 +804,8 @@ function viewTournament(r) {
     <div class="chips"><span class="chip">${FORMATS[t.format]}</span><span class="chip">до ${winsNeeded(t.best_of)} ${plural(winsNeeded(t.best_of), 'победы', 'побед', 'побед')} в партиях</span><span class="chip">партия до ${t.points_to}</span><span class="chip">${t.participants.length} участников</span></div>
     ${res && res.gold ? `<div class="t-podium"><div>🥇 <b>${esc(P(res.gold).nickname)}</b></div>${res.silver ? `<div>🥈 ${esc(P(res.silver).nickname)}</div>` : ''}${(res.bronze || []).map(x => `<div>🥉 ${esc(P(x).nickname)}</div>`).join('')}</div>` : ''}
   </section>
+  ${t.status === 'active' ? `<p class="t-how">${T_HOW[t.format] || ''}</p>` : ''}
+  ${nextCard}
   ${body}
   ${can ? `<section class="card admin-actions">
     ${t.status === 'active' ? `<button class="btn primary" data-act="finish-t" data-t="${t.id}" ${pl ? '' : 'disabled'}>🏁 Завершить турнир</button>${pl ? '' : '<p class="muted small">Завершить можно, когда определится победитель.</p>'}` : `<button class="btn" data-act="reopen-t" data-t="${t.id}">↩︎ Возобновить</button>`}
