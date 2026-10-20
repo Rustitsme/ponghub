@@ -762,15 +762,17 @@ function tournamentPlacings(t) {
 
 // ближайшая несыгранная пара турнира (для карточки «Следующий матч»)
 function tNext(t, ms) {
+  // пара, которая уже играет на каком-то столе, — не «следующая»
+  const playing = (a, b) => S.data.live.some(l => l.tournament_id === t.id && ((l.player1_id === a && l.player2_id === b) || (l.player1_id === b && l.player2_id === a)));
   if (t.format === 'ko' || (t.format === 'groups' && t.config.slots && ms.some(m => m.stage === 'ko'))) {
     if (!t.config.slots) return null;
     const br = koBracket(t.config.slots, ms.filter(m => m.stage === 'ko' || m.stage === 'ko3'), t.config.thirdPlace);
-    for (const row of br.rounds) for (const c of row) if (c.a && c.b && !c.match && !c.bye) return { a: c.a, b: c.b, act: `data-act="kocell" data-t="${t.id}" data-r="${c.r}" data-i="${c.i}"`, note: roundName(c.r, br.rounds.length) };
-    if (br.third && br.third.a && br.third.b && !br.third.match) return { a: br.third.a, b: br.third.b, act: `data-act="kocell" data-t="${t.id}" data-r="third" data-i="0"`, note: 'за 3-е место' };
+    for (const row of br.rounds) for (const c of row) if (c.a && c.b && !c.match && !c.bye && !playing(c.a, c.b)) return { a: c.a, b: c.b, act: `data-act="kocell" data-t="${t.id}" data-r="${c.r}" data-i="${c.i}"`, note: roundName(c.r, br.rounds.length) };
+    if (br.third && br.third.a && br.third.b && !br.third.match && !playing(br.third.a, br.third.b)) return { a: br.third.a, b: br.third.b, act: `data-act="kocell" data-t="${t.id}" data-r="third" data-i="0"`, note: 'за 3-е место' };
     return null;
   }
   const groups = t.format === 'groups' ? (t.config.groups || []).map((g, i) => ({ ids: g, stage: 'grp', grp: i })) : [{ ids: t.participants, stage: 'rr', grp: null }];
-  for (const g of groups) for (const [a, b] of pairings(g.ids)) if (!findPairMatch(ms, g.stage, a, b, g.grp))
+  for (const g of groups) for (const [a, b] of pairings(g.ids)) if (!findPairMatch(ms, g.stage, a, b, g.grp) && !playing(a, b))
     return { a, b, act: `data-act="fixture" data-t="${t.id}" data-a="${a}" data-b="${b}" data-stage="${g.stage}" data-grp="${g.grp ?? ''}"`, note: g.grp === null ? 'каждый с каждым' : `группа ${String.fromCharCode(1040 + g.grp)}` };
   return null;
 }
@@ -1131,14 +1133,15 @@ function viewLive(r) {
   const predBar = !ev ? '' : `<div class="card lv-pred">🎯 <span>${myP ? `Ваш прогноз: <b>${esc(sideName(l, myP.side - 1))}</b> · ${myP.stake} PC × ${myP.odds}` : ev.status === 'open' ? `Прогнозы открыты · коэффициенты меняются по ходу игры · уже ${ev.bets_count}` : `Прогнозов: ${ev.bets_count} · приём закрыт`}</span>
     ${!myP && !imPlayer && ev.status === 'open' ? `<button class="btn sm primary" data-act="predict" data-id="${ev.id}">×${ev.odds1} / ×${ev.odds2}</button>` : ''}</div>`;
   return `<div class="page-h"><a href="#/home" class="back">← Главная</a><span class="live">● LIVE</span></div>
-    <div class="lv-meta">${l.kind === 'doubles' ? 'Пары 2×2' : t ? '🏆 ' + esc(t.name) : l.type === 'tournament' ? 'Турнирный матч' : 'Свободная игра'} · до ${g.need} ${plural(g.need, 'победы', 'побед', 'побед')} · партия до ${l.points_to}${g.deuce && g.winner === null ? ' · <b>баланс</b>' : ''}</div>
+    <div class="lv-meta">${tableOf(l) ? `Стол ${tableOf(l)} · ` : ''}${l.kind === 'doubles' ? 'Пары 2×2' : t ? '🏆 ' + esc(t.name) : l.type === 'tournament' ? 'Турнирный матч' : 'Свободная игра'} · до ${g.need} ${plural(g.need, 'победы', 'побед', 'побед')} · партия до ${l.points_to}${g.deuce && g.winner === null ? ' · <b>баланс</b>' : ''}</div>
     ${scorer && needServe ? `<div class="card lv-first"><b>🏓 Кто подаёт первым?</b><span class="muted small">Разыграйте подачу и нажмите на того, кто начинает</span><div class="lv-first-btns">${[0, 1].map(sd => `<button class="lv-first-b p${sd}" data-act="live-first" data-id="${l.id}" data-side="${sd}">${sideIds(l, sd).map(id => ava(P(id), 'sm')).join('')}<b>${esc(sideName(l, sd))}</b></button>`).join('')}</div></div>` : ''}
     ${predBar}
     <div class="lv-board">${panel(0)}<div class="lv-sets-score">${g.won[0]}<i>:</i>${g.won[1]}</div>${panel(1)}</div>
     ${sets ? `<div class="lv-sets">${sets}</div>` : ''}
     ${g.winner !== null ? `<div class="card lv-done"><h3>🏁 Матч окончен</h3><p>Победа: <b>${esc(sideName(l, g.winner))}</b> · ${g.won[0]}:${g.won[1]}</p>
       ${scorer ? `<div class="row-btns"><button class="btn ghost" data-act="live-undo" data-id="${l.id}">↶ Вернуть последнее очко</button><button class="btn primary" data-act="live-save" data-id="${l.id}">Сохранить результат</button></div>` : '<p class="muted small">Счётчик сохранит результат.</p>'}</div>` : ''}
-    ${scorer ? `<div class="row-btns lv-tools">${g.winner === null && log.length ? `<button class="btn ghost" data-act="live-undo" data-id="${l.id}">↶ Отменить последнее</button>` : ''}<button class="btn ghost danger" data-act="live-cancel" data-id="${l.id}">Отменить игру</button></div>`
+    ${scorer ? `<div class="row-btns lv-tools">${g.winner === null && log.length ? `<button class="btn ghost" data-act="live-undo" data-id="${l.id}">↶ Отменить последнее</button>` : ''}<button class="btn ghost danger" data-act="live-cancel" data-id="${l.id}">Отменить игру</button></div>
+      ${g.winner === null ? (g.cur[0] + g.cur[1] === 0 ? `<button class="btn ghost full" data-act="live-pass" data-id="${l.id}">🔁 Передать роль секунданта</button>` : '<p class="muted small lv-lock">🔒 Передать роль секунданта можно в перерыве между партиями</p>') : ''}`
       : `<div class="card lv-viewer"><span class="muted small">Счёт ведёт ${esc(P(l.scorer_id).nickname)}. Обновляется сам.</span>${isEditor() || l.started_by === S.me.id ? `<button class="btn sm" data-act="live-take" data-id="${l.id}">Взять счёт на себя</button>` : ''}</div>`}`;
 }
 
@@ -1148,6 +1151,15 @@ function pushLive(l, log) {
   if (navigator.vibrate) navigator.vibrate(15);
   liveQueue = liveQueue.then(() => S.store.update('live_matches', l.id, { log, updated_at: new Date().toISOString() })).catch(e => toast(e.message, 'err'));
 }
+
+// свободный стол турнира: стол занят, если идёт игра этого турнира, которую ведёт его секундант
+function tableScorer(tid) {
+  const t = tid && tById(tid), sc = t?.config?.scorers || [];
+  if (!sc.length) return null;
+  const busy = new Set(S.data.live.filter(l => l.tournament_id === tid).map(l => l.scorer_id));
+  return sc.find(x => x && !busy.has(x)) || sc.find(Boolean) || null;
+}
+const tableOf = l => { const t = l.tournament_id && tById(l.tournament_id); const k = (t?.config?.scorers || []).indexOf(l.scorer_id); return k >= 0 && (t.config.tables || 1) > 1 ? k + 1 : null; };
 
 async function saveLive(l, btn) {
   const log = liveLog(l);
@@ -2700,7 +2712,7 @@ function openMatchForm(opts = {}) {
       <div class="mf-err"></div>
       <div class="row-btns">${m0 && editor ? '<button type="button" class="btn danger ghost" data-mf="delete">Удалить</button>' : ''}<button type="button" class="btn primary" data-mf="save">${editor ? 'Сохранить' : isEditor() ? 'Внести' : 'Отправить'}</button></div>
       ${!m0 && !fx.liveId && (editor || !lockFormat) ? `<div class="live-start"><span class="muted small">Игра только начинается?</span>
-        <button type="button" class="btn full live-btn" data-mf="live">▶ Игра началась — вести счёт</button>
+        ${fx.tournament_id && tById(fx.tournament_id)?.config?.scoring === 'final' ? '' : '<button type="button" class="btn full live-btn" data-mf="live">▶ Игра началась — вести счёт</button>'}
         <button type="button" class="btn full live-btn alt" data-mf="live-noscore">⏱ Игра началась — счёт в конце</button>
         <span class="muted small">Всем придёт уведомление, можно будет сделать прогноз. Без счётчика итог внесёте после игры.</span></div>` : ''}`;
   };
@@ -2761,7 +2773,7 @@ function openMatchForm(opts = {}) {
       player1_id: st.p1, player2_id: st.p2, player3_id: dbl ? st.p3 : null, player4_id: dbl ? st.p4 : null,
       best_of: st.bestOf, points_to: st.pointsTo, rated: dbl ? st.rated : true,
       tournament_id: fx.tournament_id ?? null, stage: fx.stage ?? null, grp: fx.grp ?? null, round: fx.round ?? null, slot: fx.slot ?? null,
-      challenge_id: fx.challengeId ?? null, first_server: 0, log: [], status: 'live', scorer_id: S.me.id, started_by: S.me.id, scoring,
+      challenge_id: fx.challengeId ?? null, first_server: 0, log: [], status: 'live', scorer_id: tableScorer(fx.tournament_id) || S.me.id, started_by: S.me.id, scoring,
       ...testFlag(),
     };
     await busy(btn, async () => {
@@ -2991,30 +3003,53 @@ function cropImage(file, host, size) {
 
 function openTournamentForm() {
   const players = S.rank.map(x => x.p);
-  openModal(`<form data-form="tournament" class="stack">
-    <h3>Новый турнир</h3>
+  const opt = (sel) => `<option value="">— никто —</option>${players.map(p => `<option value="${p.id}" ${sel === p.id ? 'selected' : ''}>${esc(p.nickname)}</option>`).join('')}`;
+  openModal(`<form data-form="tournament" class="stack tf">
+    <div class="tf-main"><h3>Новый турнир</h3>
     <label>Название<input name="name" required maxlength="60" placeholder="Например: Кубок офиса"></label>
-    <div class="two"><label>Дата<input type="date" name="date" value="${new Date().toISOString().slice(0, 10)}"></label><label>Где проходит<input name="place" maxlength="60" placeholder="Необязательно"></label></div>
-    <label>Формат<select name="format">${Object.entries(FORMATS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></label>
-    <p class="hint" id="fmt-hint"></p>
-    <div class="two"><label>До скольких побед<select name="best_of"><option value="3">до 2 побед</option><option value="5" selected>до 3 побед</option><option value="7">до 4 побед</option><option value="1">1 партия</option></select></label>
+    <div><small class="muted">Вид турнира</small><div class="seg tf-fmt">${[['ko', '🏆 Олимпийская'], ['groups', '🗂 Группы'], ['rr', '🔄 Круг']].map(([k, v], n) => `<label><input type="radio" name="format" value="${k}" ${n === 0 ? 'checked' : ''}><span>${v}</span></label>`).join('')}</div><p class="hint" id="fmt-hint"></p></div>
+    <div><small class="muted">Участники</small><button type="button" class="tf-pick" id="t-open"><span class="tf-stack" id="t-stack"></span><b id="t-cnt">0 игроков</b><span class="tf-go">Выбрать игроков ›</span></button></div>
+    <div class="two only-groups"><label>Групп<input type="number" name="groups" value="2" min="1" max="8"></label><label>Выходят из группы<select name="advance"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option></select></label></div>
+    <p class="hint only-groups" id="grp-hint"></p>
+    <div class="two"><label>Столов<input type="number" name="tables" value="1" min="1" max="8"></label><label>Счёт<select name="scoring"><option value="points">По очкам (секундант)</option><option value="final">Только итог</option></select></label></div>
+    <div id="tf-scorers"></div>
+    <p class="hint">Пары по столам назначает система: закончилась игра — на свободный стол встаёт следующая пара. Роль секунданта можно передать в перерыве между партиями.</p>
+    <div class="two"><label>До скольких побед<select name="best_of"><option value="3">до 2 побед</option><option value="5" selected>до 3 побед</option><option value="7">до 4 побед</option></select></label>
     <label>Партия до<select name="points_to"><option>11</option><option>21</option></select></label></div>
-    <div class="two only-groups"><label>Групп<input type="number" name="groups" value="2" min="1" max="8"></label><label>Выходят из группы<select name="advance"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select></label></div>
     <label class="switch only-ko"><input type="checkbox" name="thirdPlace" checked><i></i><span>Матч за 3-е место</span></label>
-    <div class="card-h"><b>Участники <span class="muted" id="t-cnt">0</span></b><button type="button" class="btn xs ghost" id="t-all">Выбрать всех</button></div>
-    <div class="pick-list">${players.map(p => `<label class="pick"><input type="checkbox" name="participants" value="${p.id}"><span>${ava(p, 'xs')} ${esc(p.nickname)}</span><small>${fmtR(ratingOf(p.id))}</small></label>`).join('')}</div>
-    <p class="muted small">Посев — по текущему рейтингу: сильнейшие не встретятся в начале.</p>
-    <button class="btn primary">Создать турнир</button></form>`, sh => {
-    const f = sh.querySelector('form');
+    <input type="hidden" name="date" value="${new Date().toISOString().slice(0, 10)}"><input type="hidden" name="place" value="">
+    <button class="btn primary">Создать турнир</button></div>
+    <div class="tf-players" hidden><h3>Выбор игроков</h3><input class="tf-search" placeholder="🔍 Найти игрока">
+      <div class="tf-all"><span>Выбрано <b id="t-cnt2">0</b> из ${players.length}</span><a id="t-all">Все</a><a id="t-none">Никого</a></div>
+      <div class="pick-list">${players.map(p => `<label class="pick" data-n="${esc(p.nickname.toLowerCase())}"><input type="checkbox" name="participants" value="${p.id}"><span>${ava(p, 'xs')} ${esc(p.nickname)}</span><small>${fmtR(ratingOf(p.id))}</small></label>`).join('')}</div>
+      <button type="button" class="btn primary tf-done" id="t-done">Готово</button></div></form>`, sh => {
+    const f = sh.querySelector('form'), main = sh.querySelector('.tf-main'), pl = sh.querySelector('.tf-players');
+    const fmt = () => f.querySelector('[name=format]:checked').value;
+    const chosen = () => [...f.querySelectorAll('[name=participants]:checked')].map(x => x.value);
     const sync = () => {
-      const fmt = f.format.value;
-      sh.querySelectorAll('.only-groups').forEach(x => x.style.display = fmt === 'groups' ? '' : 'none');
-      sh.querySelectorAll('.only-ko').forEach(x => x.style.display = fmt === 'rr' ? 'none' : '');
-      sh.querySelector('#fmt-hint').innerHTML = `${FORMAT_HELP[fmt]} <a href="#/help" class="link" data-act="close">Подробнее</a>`;
-      sh.querySelector('#t-cnt').textContent = f.querySelectorAll('[name=participants]:checked').length;
+      const F = fmt(), ids = chosen();
+      sh.querySelectorAll('.only-groups').forEach(x => x.style.display = F === 'groups' ? '' : 'none');
+      sh.querySelectorAll('.only-ko').forEach(x => x.style.display = F === 'rr' ? 'none' : '');
+      sh.querySelector('#fmt-hint').innerHTML = FORMAT_HELP[F];
+      sh.querySelector('#t-cnt').textContent = `${ids.length} ${plural(ids.length, 'игрок', 'игрока', 'игроков')}`;
+      sh.querySelector('#t-cnt2').textContent = ids.length;
+      sh.querySelector('#t-stack').innerHTML = ids.slice(0, 6).map(id => ava(P(id), 'xs')).join('');
+      // как поделятся группы (любое число игроков — как можно ровнее)
+      const g = Math.max(1, Math.min(+f.groups.value || 1, Math.floor(ids.length / 2) || 1));
+      const sizes = Array.from({ length: g }, (_, k) => Math.floor(ids.length / g) + (k < ids.length % g ? 1 : 0));
+      sh.querySelector('#grp-hint').textContent = ids.length >= 2 ? `${ids.length} ${plural(ids.length, 'игрок', 'игрока', 'игроков')} → ${sizes.map((n, k) => `группа ${String.fromCharCode(1040 + k)}: ${n}`).join(', ')}. Сильных система разводит по разным группам.` : '';
+      // секундант на каждый стол (при счёте «только итог» не нужен)
+      const T = Math.max(1, Math.min(8, +f.tables.value || 1)), box = sh.querySelector('#tf-scorers');
+      const prev = [...box.querySelectorAll('select')].map(x => x.value);
+      box.innerHTML = f.scoring.value === 'points' ? `<small class="muted">Секунданты</small>${Array.from({ length: T }, (_, k) => `<label class="tf-sc"><span>Стол ${k + 1}</span><select name="scorer">${opt(prev[k] ?? (k === 0 ? S.me.id : ''))}</select></label>`).join('')}` : '';
     };
-    f.addEventListener('change', sync); sync();
-    sh.querySelector('#t-all').onclick = () => { const all = [...f.querySelectorAll('[name=participants]')]; const on = all.some(x => !x.checked); all.forEach(x => x.checked = on); sync(); };
+    f.addEventListener('change', e => { if (e.target.name !== 'scorer') sync(); }); f.addEventListener('input', e => { if (['groups', 'tables'].includes(e.target.name)) sync(); }); sync();
+    const show = on => { main.hidden = on; pl.hidden = !on; sh.scrollTop = 0; };
+    sh.querySelector('#t-open').onclick = () => show(true);
+    sh.querySelector('#t-done').onclick = () => { show(false); sync(); };
+    sh.querySelector('#t-all').onclick = () => { f.querySelectorAll('[name=participants]').forEach(x => x.checked = true); sync(); };
+    sh.querySelector('#t-none').onclick = () => { f.querySelectorAll('[name=participants]').forEach(x => x.checked = false); sync(); };
+    sh.querySelector('.tf-search').oninput = e => { const q = e.target.value.trim().toLowerCase(); pl.querySelectorAll('.pick').forEach(x => x.style.display = !q || x.dataset.n.includes(q) ? '' : 'none'); };
   });
 }
 
@@ -3043,6 +3078,24 @@ const ACT = {
   },
   'live-undo': el => { const l = S.data.live.find(x => x.id === el.dataset.id); const log = liveLog(l); if (log.length) pushLive(l, log.slice(0, -1)); },
   'live-first': el => busy(el, async () => { await S.store.update('live_matches', el.dataset.id, { first_server: +el.dataset.side }); (S.served = S.served || {})[el.dataset.id] = true; await refresh(); }),
+  // передать роль секунданта: только в перерыве (в текущей партии ещё нет очков)
+  'live-pass': el => {
+    const l = S.data.live.find(x => x.id === el.dataset.id); if (!l) return;
+    const busyIds = new Set([l.player1_id, l.player2_id, l.player3_id, l.player4_id, l.scorer_id]);
+    const list = S.rank.map(x => x.p).filter(p => !busyIds.has(p.id));
+    openModal(`<h3>Кому передать роль секунданта?</h3><p class="muted small">Новый секундант продолжит вести счёт с того же места.</p>
+      <div class="pick-list">${list.map(p => `<button class="pick" data-to="${p.id}"><span>${ava(p, 'xs')} ${esc(p.nickname)}</span></button>`).join('')}</div>`, sh => {
+      sh.querySelectorAll('[data-to]').forEach(b => b.onclick = () => busy(b, async () => {
+        const cur = S.data.live.find(x => x.id === l.id), g = replayLive(liveLog(cur), cur.best_of, cur.points_to, cur.first_server);
+        if (g.cur[0] + g.cur[1] > 0) throw new Error('Партия уже идёт — передать можно в перерыве');
+        await S.store.update('live_matches', l.id, { scorer_id: b.dataset.to });
+        // стол турнира теперь закреплён за новым секундантом (может только владелец клуба)
+        const t = l.tournament_id && tById(l.tournament_id);
+        if (t && isAdmin() && (t.config.scorers || []).includes(l.scorer_id)) await S.store.update('tournaments', t.id, { config: { ...t.config, scorers: t.config.scorers.map(x => x === l.scorer_id ? b.dataset.to : x) } });
+        closeModal(); await refresh(); toast(`Секундант теперь ${P(b.dataset.to).nickname}`);
+      }));
+    });
+  },
   'live-take': el => busy(el, async () => { await S.store.update('live_matches', el.dataset.id, { scorer_id: S.me.id }); await refresh(); toast('Теперь счёт ведёте вы'); }),
   'live-cancel': async el => {
     if (!(await confirmDialog('Отменить игру? Счёт не сохранится.', 'Отменить игру', true))) return;
@@ -3230,7 +3283,9 @@ const FORMS = {
     if (ids.length < 2) throw new Error('Выберите хотя бы двух участников');
     const sorted = [...ids].sort((a, b) => ratingOf(b) - ratingOf(a));
     const format = fd.get('format');
-    const config = { thirdPlace: !!fd.get('thirdPlace') };
+    const scoring = fd.get('scoring') === 'final' ? 'final' : 'points';
+    const config = { thirdPlace: !!fd.get('thirdPlace'), tables: Math.max(1, Math.min(8, +fd.get('tables') || 1)), scoring,
+      scorers: scoring === 'points' ? fd.getAll('scorer').map(x => x || null) : [] };
     if (format === 'ko') config.slots = slotsFromSeeds(sorted);
     if (format === 'groups') {
       const g = Math.max(1, Math.min(+fd.get('groups') || 1, Math.floor(ids.length / 2)));
@@ -3238,7 +3293,7 @@ const FORMS = {
       config.advance = Math.min(+fd.get('advance') || 2, Math.min(...config.groups.map(x => x.length)));
     }
     const t = await S.store.insert('tournaments', {
-      name: fd.get('name').trim(), date: fd.get('date') || null, place: fd.get('place').trim(), format,
+      name: fd.get('name').trim(), date: fd.get('date') || null, place: (fd.get('place') || '').trim(), format,
       best_of: +fd.get('best_of'), points_to: +fd.get('points_to'), status: 'active', participants: sorted, config, results: null, created_by: S.me.id, ...testFlag(),
     });
     closeModal(); await refresh(); go(`#/tournament/${t.id}`); toast('Турнир создан!');

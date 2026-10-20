@@ -1176,3 +1176,16 @@ body.av-big { overflow: hidden; }
 .tp-row .w { font-size: 12px; color: var(--muted); white-space: nowrap; } .tp-row .w b { font: 800 18px var(--display); color: var(--text); }
 .tp-row.go { background: color-mix(in srgb, #ffd23f 22%, transparent); } .tp-row.go .n { color: #b8860b; }
 .tp-adv { margin: 6px 2px 0; }
+
+/* создание турнира: вид, «Выбрать игроков», секунданты */
+.tf-fmt { display: flex; } .tf-fmt label { flex: 1; } .tf-fmt input { display: none; }
+.tf-fmt span { display: block; text-align: center; padding: 9px 4px; border-radius: 10px; font: 700 13px var(--font); cursor: pointer; }
+.tf-fmt input:checked + span { background: var(--surface); box-shadow: 0 1px 4px rgba(0, 0, 0, .15); color: var(--text); }
+.tf-pick { width: 100%; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; padding: 10px; border-radius: 14px; background: var(--surface); border: 2px solid #1f5fc4; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.tf-stack { display: flex; } .tf-stack .ava { margin-left: -6px; box-shadow: 0 0 0 2px var(--surface); } .tf-stack .ava:first-child { margin-left: 0; }
+.tf-pick b { font: 800 16px var(--display); } .tf-go { grid-column: 1 / -1; text-align: center; padding: 8px; border-radius: 99px; background: #1f5fc4; color: #fff; font: 800 13px var(--font); }
+.tf-sc { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 8px; margin-top: 6px; } .tf-sc span { font: 800 14px var(--display); text-transform: uppercase; color: var(--muted); }
+.tf-search { width: 100%; }
+.tf-all { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--muted); } .tf-all b { color: var(--text); } .tf-all a { color: #1f5fc4; font-weight: 700; cursor: pointer; } .tf-all a:first-of-type { margin-left: auto; }
+.tf-done { position: sticky; bottom: 0; }
+.lv-lock { text-align: center; margin: 6px 0 0; }
