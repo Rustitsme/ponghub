@@ -1,52 +1,76 @@
 <!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="robots" content="noindex">
-<title>Нижнее меню PongHub — макет</title>
+<title>Нижнее меню PongHub — варианты</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap">
 <style>
-/* Макет: «Матчи» уходят из нижнего меню в профиль, на их место — красный плюс по центру меню. */
-:root { --d: "Barlow Condensed", sans-serif; --f: Inter, system-ui, sans-serif; --red: #e63946; --black: #1b1c20; --muted: #6b7a90; --wood: #c98a4b; }
+/* Варианты, как поставить красный плюс по центру нижнего меню, чтобы он не наезжал на «Мой игрок» и «Бонус дня».
+   Экран — как настоящая главная на телефоне 390×844 (уменьшено), прокрутка та же, что на скриншоте Рустама. */
+:root { --d: "Barlow Condensed", sans-serif; --f: Inter, system-ui, sans-serif; --red: #e63946; --black: #1b1c20; --muted: #6b7a90; --wood: #c98a4b; --wood-l: #e8b07a; }
 * { box-sizing: border-box; }
 body { margin: 0; font-family: var(--f); background: #e9eef6; color: #10203d; }
-.wrap { max-width: 1180px; margin: 0 auto; padding: 16px; }
+.wrap { max-width: 1500px; margin: 0 auto; padding: 16px; }
 .note { padding: 12px 14px; border-radius: 14px; background: #fff7d6; color: #4a3a00; font: 500 14px/1.45 var(--f); margin-bottom: 16px; }
 .note b { display: block; font-size: 16px; margin-bottom: 3px; }
-.row { display: flex; gap: 24px; flex-wrap: wrap; justify-content: center; }
-.cap { text-align: center; font: 800 15px var(--f); margin: 0 0 8px; } .cap.bad { color: #a12a33; } .cap.good { color: #157a4b; }
-.ph { width: 340px; border-radius: 36px; padding: 12px; background: #10203d; box-shadow: 0 20px 40px rgba(16,32,61,.3); }
-.scr { position: relative; height: 680px; border-radius: 26px; overflow: hidden; background: #f3f6fb; }
-.page { padding: 14px 14px 100px; }
-/* верх главной (упрощённо) */
-.hero { border-radius: 22px; padding: 14px; color: #fff; background: linear-gradient(160deg, #3b7fd4, #2563b8 45%, #1c4f9c); display: grid; grid-template-columns: 1fr 96px; gap: 10px; }
-.hero b { font: 800 22px var(--d); } .hero .big { font: 800 40px/1 var(--d); margin-top: 8px; } .hero small { opacity: .8; font-size: 12px; }
-.rk { border-radius: 14px; background: #fff; box-shadow: 0 0 0 3px #0e3b8c, 0 0 0 5px rgba(255,210,63,.9); display: grid; place-items: center; font-size: 42px; }
-.tiles { display: grid; grid-template-columns: 1.55fr 1fr; gap: 10px; margin-top: 12px; }
-.pl { border-radius: 20px; padding: 5px; background: #1f5fc4; } .pl div { height: 186px; border-radius: 16px; background: radial-gradient(90% 75% at 50% 35%, #f3f5f9, #cfd7e3); display: grid; place-items: center; font-size: 64px; }
-.col { display: grid; gap: 10px; } .t { border-radius: 18px; padding: 10px; text-align: center; background: #fff; border: 4px solid #1f5fc4; }
-.t small { display: block; font: 700 10px var(--f); color: var(--muted); text-transform: uppercase; } .t b { font: 800 24px var(--d); color: #1f5fc4; }
-.t span { display: inline-block; margin-top: 4px; padding: 5px 10px; border-radius: 99px; background: var(--red); color: #fff; font: 800 11px var(--f); }
-.t.bonus { background: linear-gradient(135deg, #ff8a3d, #e63946); border-color: #fff; color: #fff; } .t.bonus small, .t.bonus b { color: #fff; } .t.bonus span { background: #fff; color: var(--red); }
-/* нижнее меню */
-.tabs { position: absolute; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(5, 1fr); padding: 6px 6px 14px; background: rgba(233,238,246,.94); backdrop-filter: blur(10px); border-top: 1px solid #d5dde9; }
-.tab { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0; color: var(--muted); font-size: 11px; font-weight: 600; }
-.tab svg { width: 24px; height: 24px; } .tab.on { color: #10203d; } .tab.on svg { color: var(--red); } .tab.on span { box-shadow: 0 2px 0 var(--wood); }
-.fab { position: absolute; right: 16px; bottom: 82px; width: 58px; height: 58px; border-radius: 50%; border: 3px solid var(--black); background: var(--red); color: #fff; display: grid; place-items: center; box-shadow: 0 8px 22px rgba(230,57,70,.45); }
-.fab svg { width: 28px; height: 28px; stroke-width: 2.6; }
-/* стало: плюс — центральная кнопка меню, чуть приподнят */
-.tab.mid { position: relative; } .tab.mid .fab { position: static; margin-top: -26px; width: 60px; height: 60px; box-shadow: 0 6px 18px rgba(230,57,70,.45), 0 0 0 5px rgba(233,238,246,.94); }
-.tab.mid em { font-style: normal; color: var(--red); font-weight: 800; margin-top: 2px; }
-.ring { position: absolute; right: 8px; bottom: 74px; width: 74px; height: 74px; border-radius: 50%; border: 3px dashed #e63946; animation: pulse 1.4s infinite; }
-@keyframes pulse { 50% { opacity: .3; } }
-.warn { position: absolute; right: 86px; bottom: 96px; padding: 5px 9px; border-radius: 10px; background: #a12a33; color: #fff; font: 700 11px var(--f); }
-/* профиль */
-.me { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; } .me .ava { width: 48px; height: 48px; border-radius: 50%; border: 2px solid var(--red); display: grid; place-items: center; font-size: 24px; background: #fde2e4; }
-.me b { font: 800 22px var(--d); } .me small { display: block; color: var(--muted); font-size: 12px; }
-.mi { display: flex; align-items: center; gap: 10px; padding: 13px 14px; border-radius: 14px; background: #fff; margin-bottom: 8px; font: 600 15px var(--f); box-shadow: 0 1px 4px rgba(16,32,61,.05); }
-.mi i { margin-left: auto; font-style: normal; color: #9aa6b8; } .mi.new { box-shadow: 0 0 0 2px #f2b600, 0 4px 12px rgba(242,182,0,.25); }
-.mi .nb { margin-left: auto; padding: 2px 8px; border-radius: 99px; background: #f2b600; color: #3a2a00; font: 800 10px var(--f); } .mi .nb + i { margin-left: 6px; }
-.mi small { display: block; font: 500 12px var(--f); color: var(--muted); }
+.row { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; }
+.v { width: 300px; } .v h3 { margin: 0 0 4px; font: 800 18px var(--d); text-transform: uppercase; } .v h3 .tag { font: 800 11px var(--f); padding: 2px 8px; border-radius: 99px; vertical-align: 2px; margin-left: 4px; }
+.tag.rec { background: #d9f6e7; color: #157a4b; } .tag.bad { background: #fde2e4; color: #a12a33; }
+.v p { margin: 0 0 10px; font-size: 13px; line-height: 1.4; color: #3a4a62; min-height: 72px; }
+.ph { border-radius: 36px; padding: 10px; background: #10203d; box-shadow: 0 20px 40px rgba(16,32,61,.3); }
+.scr { position: relative; height: 610px; border-radius: 27px; overflow: hidden; background: #eef2f8; }
+/* страница 390 px шириной, уменьшенная до экрана макета */
+.pg { width: 390px; zoom: .72; padding: 10px 14px 0; }
+.top { display: flex; align-items: center; gap: 10px; padding: 8px 2px 12px; font: 800 19px var(--d); text-transform: uppercase; }
+.top .lg { width: 34px; height: 34px; border-radius: 9px; background: #2563b8; } .top i { margin-left: auto; font-style: normal; font-size: 20px; }
+.hero { position: relative; border-radius: 24px; padding: 14px; color: #fff; background: linear-gradient(160deg, #3b7fd4, #2563b8 45%, #1c4f9c); border: 4px solid #fff; }
+.hero::before { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; border-left: 2px solid rgba(255,255,255,.2); }
+.ht { display: grid; grid-template-columns: 1fr 112px; gap: 10px; align-items: center; }
+.id { display: flex; gap: 10px; align-items: center; } .ava { width: 56px; height: 56px; border-radius: 50%; border: 3px solid rgba(255,255,255,.6); background: #c9a27a; display: grid; place-items: center; font-size: 26px; flex: none; }
+.id small { font-size: 13px; opacity: .8; } .id b { display: block; font: 800 24px/1.1 var(--d); }
+.bdg { display: inline-block; margin-top: 3px; padding: 2px 8px; border-radius: 6px; font: 700 10px var(--f); text-transform: uppercase; background: linear-gradient(135deg, var(--wood-l), var(--wood)); color: #3b2410; }
+.place { display: inline-block; margin-top: 6px; padding: 3px 10px; border-radius: 99px; background: linear-gradient(135deg, var(--wood-l), var(--wood)); color: #3b2410; font: 800 14px var(--d); }
+.rk { height: 150px; border-radius: 16px; background: #fff; border: 3px solid #fff; box-shadow: 0 0 0 3px #0e3b8c, 0 0 0 5px rgba(255,210,63,.9); display: grid; place-items: center; font-size: 60px; }
+.big { font: 800 46px/1 var(--d); margin-top: 10px; } .sm { font-size: 12px; opacity: .8; }
+.st { display: grid; grid-template-columns: repeat(4, 1fr); margin-top: 8px; padding: 6px; border-radius: 12px; background: rgba(0,0,0,.22); text-align: center; } .st b { display: block; font: 700 18px var(--d); } .st small { font-size: 11px; opacity: .75; }
+.lgb { margin: 8px 0; font-size: 12px; } .lgb i { display: block; height: 5px; margin-top: 4px; border-radius: 9px; background: linear-gradient(90deg, #fff 18%, rgba(255,255,255,.25) 18%); }
+.sb { display: inline-block; padding: 7px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,.4); background: rgba(255,255,255,.12); font: 600 14px var(--f); }
+.tiles { display: grid; grid-template-columns: 1.55fr 1fr; gap: 12px; margin-top: 12px; }
+.pl { border-radius: 22px; padding: 6px; background: #1f5fc4; } .pl div { height: 210px; border-radius: 17px; background: radial-gradient(90% 75% at 50% 35%, #f3f5f9, #cfd7e3); display: grid; place-items: center; font-size: 80px; }
+.col { display: grid; gap: 12px; } .t { border-radius: 20px; padding: 10px; text-align: center; background: #fff; border: 5px solid #1f5fc4; box-shadow: 0 0 0 3px #0e3b8c, 0 0 0 5px rgba(255,210,63,.9); }
+.t small { display: block; font: 700 11px var(--f); color: var(--muted); text-transform: uppercase; } .t b { font: 800 30px var(--d); color: #1f5fc4; }
+.t span { display: inline-block; margin-top: 4px; padding: 6px 12px; border-radius: 99px; background: var(--red); color: #fff; font: 800 12px var(--f); }
+.t.bonus { background: linear-gradient(135deg, #ff8a3d, #e63946); border-color: #fff; box-shadow: none; } .t.bonus small, .t.bonus b { color: #fff; } .t.bonus span { background: #fff; color: var(--red); }
+.more { margin-top: 12px; height: 120px; border-radius: 18px; background: #fff; padding: 14px; font: 700 15px var(--f); color: #9aa6b8; }
+/* меню */
+.tabs { position: absolute; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(5, 1fr); padding: 5px 5px 12px; background: rgba(238,242,248,.94); backdrop-filter: blur(10px); border-top: 1px solid #d5dde9; z-index: 5; }
+.tab { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 5px 0; color: var(--muted); font-size: 10px; font-weight: 600; }
+.tab svg { width: 22px; height: 22px; } .tab.on { color: #10203d; } .tab.on svg { color: var(--red); }
+.fab { width: 56px; height: 56px; border-radius: 50%; border: 3px solid var(--black); background: var(--red); color: #fff; display: grid; place-items: center; box-shadow: 0 6px 18px rgba(230,57,70,.45); }
+.fab svg { width: 26px; height: 26px; stroke-width: 2.6; }
+.tab.mid em { font-style: normal; color: var(--red); font-weight: 800; }
+.hit { position: absolute; z-index: 6; padding: 4px 8px; border-radius: 9px; font: 700 10px var(--f); color: #fff; }
+.hit.bad { background: #a12a33; } .hit.ok { background: #157a4b; }
+/* 0: как сейчас — плюс справа над меню */
+.v0 .fab { position: absolute; right: 14px; bottom: 74px; z-index: 6; }
+/* 1: плюс вровень с меню */
+.v1 .tab.mid .fab { width: 46px; height: 46px; border-width: 2.5px; box-shadow: 0 3px 10px rgba(230,57,70,.4); } .v1 .tab.mid .fab svg { width: 22px; height: 22px; }
+.v1 .tab.mid { padding-top: 0; }
+/* 2: приподнятый плюс в вырезе меню, страница кончается выше выреза */
+.v2 .tabs { background: none; border: 0; backdrop-filter: none; padding-top: 18px; }
+.v2 .tabs::before { content: ""; position: absolute; inset: 18px 0 0; background: rgba(238,242,248,.96); border-top: 1px solid #d5dde9;
+  -webkit-mask: radial-gradient(circle 36px at 50% 0, transparent 35px, #000 36px); mask: radial-gradient(circle 36px at 50% 0, transparent 35px, #000 36px); }
+.v2 .tab { position: relative; } .v2 .tab.mid .fab { margin-top: -30px; }
+.v2 .fade { position: absolute; left: 0; right: 0; bottom: 60px; height: 40px; background: linear-gradient(transparent, rgba(238,242,248,.95)); z-index: 4; }
+/* 3: плюс прячется, пока листаете вниз */
+.v3 .tab.mid .fab { margin-top: -24px; transition: transform .3s; } .v3.scrolling .tab.mid .fab { transform: translateY(70px) scale(.6); opacity: 0; }
+.v3 .mini { position: absolute; z-index: 6; left: 50%; bottom: 14px; transform: translateX(-50%); }
+/* 4: плитки с вырезом под плюс */
+.v4 .tab.mid .fab { margin-top: -24px; }
+.v4 .pl { -webkit-mask: radial-gradient(circle 46px at 100% 100%, transparent 45px, #000 46px); mask: radial-gradient(circle 46px at 100% 100%, transparent 45px, #000 46px); }
+.v4 .col .t.bonus { -webkit-mask: radial-gradient(circle 46px at 0 100%, transparent 45px, #000 46px); mask: radial-gradient(circle 46px at 0 100%, transparent 45px, #000 46px); }
+.v4 .tiles { margin-bottom: 0; }
 </style></head>
 <body><div class="wrap">
-<div class="note"><b>Нижнее меню: плюс по центру, «Матчи» — в профиле</b>Сейчас красный плюс висит над меню справа и закрывает плитку «Бонус дня». Станет: в нижнем меню 4 раздела и плюс ровно по центру, как отдельная большая кнопка — ничего не закрывает. «Матчи» переезжают в «Профиль» первой строкой меню.</div>
+<div class="note"><b>Плюс по центру меню — как не наезжать на «Мой игрок» и «Бонус дня»</b>Экран — как ваша главная сейчас: шапка, а снизу «Мой игрок», пинг-коины и бонус частично уходят под меню. Ниже — 4 способа. Мой совет — <b>№1 «Плюс внутри меню»</b>: ничего не наезжает никогда, при любой прокрутке. №2 тоже аккуратный, если хочется «приподнятую» кнопку.</div>
 <div class="row" id="row"></div></div>
 <script>
 const I = { home: '<path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>', rating: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
@@ -54,15 +78,22 @@ const I = { home: '<path d="M3 11.5 12 4l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1
   cup: '<path d="M7 4h10v5a5 5 0 0 1-10 0zM7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 14v4M8 21h8M9 18h6"/>', user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4.5-6 8-6s7 2 8 6"/>', plus: '<path d="M12 5v14M5 12h14"/>' };
 const ic = n => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${I[n]}</svg>`;
 const tab = (n, t, on) => `<div class="tab ${on ? 'on' : ''}">${ic(n)}<span>${t}</span></div>`;
-const home = `<div class="page"><div class="hero"><div><small>Привет,</small><br><b>Рустам</b><div class="big">38.3</div><small>рейтинг</small></div><div class="rk">🏓</div></div>
-  <div class="tiles"><div class="pl"><div>🧍</div></div><div class="col"><div class="t"><small>Пинг-коины</small><b>335 PC</b><br><span>Магазин →</span></div><div class="t bonus"><small>🔥 Бонус дня</small><b>+40 PC</b><br><span>Забрать →</span></div></div></div></div>`;
-const before = `<div class="scr">${home}<div class="ring"></div><div class="warn">закрывает «Бонус дня»</div><div class="fab">${ic('plus')}</div>
-  <nav class="tabs">${tab('home', 'Главная', 1)}${tab('rating', 'Рейтинг')}${tab('matches', 'Матчи')}${tab('cup', 'Турниры')}${tab('user', 'Профиль')}</nav></div>`;
-const mid = `<div class="tab mid"><div class="fab">${ic('plus')}</div><em>Игра</em></div>`;
-const after = `<div class="scr">${home}<nav class="tabs">${tab('home', 'Главная', 1)}${tab('rating', 'Рейтинг')}${mid}${tab('cup', 'Турниры')}${tab('user', 'Профиль')}</nav></div>`;
-const prof = `<div class="scr"><div class="page"><div class="me"><div class="ava">🔥</div><div><b>Рустам</b><small>Коворкинг «IT Park» KZN · Владелец</small></div></div>
-  <div class="mi new">📋 <div>Матчи<small>все игры клуба, ваши результаты, личные встречи</small></div><span class="nb">НОВОЕ МЕСТО</span><i>›</i></div>
-  <div class="mi">🧍 Мой игрок<i>›</i></div><div class="mi">🏓 Моя ракетка<i>›</i></div><div class="mi">🛍️ Магазин<i>›</i></div><div class="mi">🎯 Прогнозы<i>›</i></div><div class="mi">📅 Календарь<i>›</i></div><div class="mi">🛠️ Управление клубом<i>›</i></div><div class="mi">❓ Помощь<i>›</i></div></div>
-  <nav class="tabs">${tab('home', 'Главная')}${tab('rating', 'Рейтинг')}${mid}${tab('cup', 'Турниры')}${tab('user', 'Профиль', 1)}</nav></div>`;
-document.getElementById('row').innerHTML = [['Было', 'bad', before], ['Станет: главная', 'good', after], ['Станет: профиль', 'good', prof]].map(([c, k, h]) => `<div><p class="cap ${k}">${c}</p><div class="ph">${h}</div></div>`).join('');
+const fab = `<div class="fab">${ic('plus')}</div>`, mid = `<div class="tab mid">${fab}<em>Игра</em></div>`;
+const page = `<div class="pg"><div class="top"><span class="lg"></span>Коворкинг "IT Park" KZN<i>📅 🔔</i></div>
+  <div class="hero"><div class="ht"><div><div class="id"><span class="ava">🧑</span><div><small>Привет,</small><b>Рустам</b><span class="bdg">Бронза</span> <span class="bdg">👑⭐ Владелец</span></div></div><span class="place">7 <small style="font:600 11px Inter">место из 14</small></span></div><div class="rk">🏓</div></div>
+    <div class="big">38.3</div><div class="sm">рейтинг · −1.69 за 30 дней</div><div class="st"><div><b>2</b><small>побед</small></div><div><b>6</b><small>поражений</small></div><div><b>25%</b><small>% побед</small></div><div><b>−1</b><small>серия</small></div></div>
+    <div class="lgb">До лиги «Серебро»: 16.7<i></i></div><span class="sb">Статистика и анализ →</span></div>
+  <div class="tiles"><div class="pl"><div>🧍</div></div><div class="col"><div class="t"><small>Пинг-коины</small><b>335 PC</b><br><span>Магазин →</span></div><div class="t bonus"><small>🔥 Бонус дня</small><b>+40 PC</b><br><span>Забрать →</span></div></div></div>
+  <div class="more">Вызовы, турниры… (остальная главная)</div></div>`;
+const nav = m => `<nav class="tabs">${tab('home', 'Главная', 1)}${tab('rating', 'Рейтинг')}${m}${tab('cup', 'Турниры')}${tab('user', 'Профиль')}</nav>`;
+const V = [
+  ['v0', 'Сейчас', 'bad', 'было', 'Плюс висит над меню справа — закрывает «Бонус дня».', `${page}${fab}<nav class="tabs">${tab('home', 'Главная', 1)}${tab('rating', 'Рейтинг')}${tab('matches', 'Матчи')}${tab('cup', 'Турниры')}${tab('user', 'Профиль')}</nav><span class="hit bad" style="right:78px;bottom:96px">закрывает бонус</span>`],
+  ['v1', '1. Плюс внутри меню', 'rec', 'совет', 'Красный плюс — обычная кнопка меню, чуть крупнее остальных, по центру. Ни на что не наезжает: страница просто уходит под меню, как сейчас.', `${page}${nav(mid)}<span class="hit ok" style="left:10px;bottom:74px">ничего не закрывает</span>`],
+  ['v2', '2. Приподнятый плюс с вырезом', '', '', 'Плюс выступает над меню, а в меню под ним полукруглый вырез. Над меню — мягкое затемнение, чтобы край плиток «уходил» под меню, а не резался плюсом.', `${page}<div class="fade"></div>${nav(mid)}`],
+  ['v3', '3. Прячется при прокрутке', '', '', 'Приподнятый плюс. Пока листаете вниз — он уезжает в меню, и плитки видно целиком; остановились или листаете вверх — плюс возвращается. Справа показано «во время прокрутки».', `${page}${nav(mid)}`],
+  ['v4', '4. Плитки с вырезом', 'bad', 'спорно', 'Ваша идея: у «Моего игрока» и «Бонуса дня» угол срезан полукругом под плюс. Минус: совпадает только в одном положении прокрутки — стоит чуть пролистать, и вырез «уезжает» от кнопки.', `${page}${nav(mid)}`],
+];
+document.getElementById('row').innerHTML = V.map(([k, t, tg, tgt, d, h]) => `<div class="v"><h3>${t}${tgt ? ` <span class="tag ${tg}">${tgt}</span>` : ''}</h3><p>${d}</p><div class="ph"><div class="scr ${k}${k === 'v3' ? ' scrolling' : ''}">${h}</div></div></div>`).join('');
+// вариант 4: прокрутка так, чтобы вырез совпал с кнопкой
+document.querySelectorAll('.scr').forEach(s => { const pg = s.querySelector('.pg'); if (pg) pg.style.marginTop = s.classList.contains('v4') ? '-150px' : '0'; });
 </script></body></html>
