@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="robots" content="noindex">
+<title>Турниры PongHub — макеты</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap">
+<style>
+/* Макеты турниров: табло (приветствие, три вида сетки, бегущая строка) и экран турнира в приложении. Данные — пример. */
+:root { --d: "Barlow Condensed", "Arial Narrow", sans-serif; --f: Inter, system-ui, sans-serif; --red: #e63946; --blue: #2f7de1; --gold: #ffd75e; }
+* { box-sizing: border-box; }
+body { margin: 0; font-family: var(--f); background: #e9eef6; color: #10203d; }
+.bar { position: sticky; top: 0; z-index: 30; display: flex; gap: 6px; overflow-x: auto; padding: 10px 16px; background: #e9eef6; border-bottom: 1px solid #d5dde9; }
+.bar button { flex: none; border: 0; border-radius: 999px; padding: 9px 14px; background: #fff; color: #10203d; font: 700 13px var(--f); cursor: pointer; }
+.bar button.on { background: var(--red); color: #fff; }
+.bar .sep { flex: none; width: 1px; background: #c8d2e0; margin: 4px 2px; }
+.wrap { max-width: 1100px; margin: 0 auto; padding: 14px 16px 60px; }
+.note { margin-bottom: 14px; padding: 12px 14px; border-radius: 14px; background: #fff7d6; color: #4a3a00; font: 500 14px/1.45 var(--f); }
+.note b { display: block; font-size: 16px; margin-bottom: 3px; }
+.ctl { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 0; }
+.ctl button { border: 0; border-radius: 12px; padding: 10px 14px; background: #10203d; color: #fff; font: 700 14px var(--f); cursor: pointer; }
+.ctl button.ghost { background: #fff; color: #10203d; }
+
+/* ── табло 16:9 ── */
+.tv { container-type: inline-size; position: relative; width: 100%; aspect-ratio: 16/9; overflow: hidden; border-radius: 14px; color: #eef3fb; box-shadow: 0 20px 50px rgba(5,15,40,.35);
+  background: radial-gradient(120% 90% at 50% 0%, #163463 0%, #0b1a33 55%, #070f1f 100%); display: grid; grid-template-rows: auto 1fr auto; padding: 2.2cqw 2.6cqw 1.6cqw; gap: 1.4cqw; grid-template-columns: minmax(0, 1fr); }
+.tv-top { display: flex; align-items: center; gap: 1.2cqw; }
+.logo { width: 3.2cqw; height: 3.2cqw; flex: none; } .logo svg { width: 100%; height: 100%; display: block; }
+.tv-club { font: 800 2cqw/1 var(--d); text-transform: uppercase; letter-spacing: .1cqw; }
+.tv-crumb { font-size: 1.1cqw; color: #93a7c6; margin-top: .3cqw; }
+.tv-tag { margin-left: auto; padding: .5cqw 1.2cqw; border-radius: 99px; background: rgba(255,215,94,.15); color: var(--gold); font: 800 1.1cqw var(--d); letter-spacing: .15cqw; text-transform: uppercase; }
+.tv-clock { font: 700 1.8cqw var(--d); color: #93a7c6; margin-left: 1.2cqw; }
+.card { background: rgba(255,255,255,.05); border: .1cqw solid rgba(255,255,255,.1); border-radius: 1.2cqw; }
+/* ники: никогда не выходят за рамки — сжимаются по ширине и обрезаются многоточием */
+.nk { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* низ: логотип стоит на месте, игроки едут бегущей строкой и уходят под него */
+.foot { position: relative; display: flex; align-items: center; height: 3.4cqw; border-top: .1cqw solid rgba(255,255,255,.1); padding-top: .9cqw; }
+.foot-lbl { flex: none; font: 700 1cqw var(--f); letter-spacing: .15cqw; text-transform: uppercase; color: #ffc94d; margin-right: 1.4cqw; }
+.ticker { position: relative; flex: 1; overflow: hidden; height: 100%; display: flex; align-items: center;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 3%, #000 100%); mask-image: linear-gradient(90deg, transparent, #000 3%, #000 100%); }
+.ticker-in { display: flex; gap: 2.6cqw; white-space: nowrap; animation: tick 40s linear infinite; padding-right: 2.6cqw; }
+.ticker-in span { font-size: 1.2cqw; } .ticker-in b { font: 700 1.5cqw var(--d); margin-left: .4cqw; color: #fff; }
+@keyframes tick { to { transform: translateX(-50%); } }
+.brand { position: absolute; right: 0; top: .9cqw; bottom: 0; display: flex; align-items: center; gap: .6cqw; padding-left: 4cqw; font: 800 1.6cqw/1 var(--d); letter-spacing: .15cqw;
+  background: linear-gradient(90deg, rgba(7,15,31,0), #0a1730 35%); z-index: 2; }
+.brand .logo { width: 2.2cqw; height: 2.2cqw; }
+
+/* приветствие турнира */
+.hello { display: grid; place-items: center; text-align: center; }
+.hello small { font: 700 1.3cqw var(--f); letter-spacing: .3cqw; text-transform: uppercase; color: var(--gold); }
+.hello h1 { margin: .6cqw 0 .4cqw; font: 800 6cqw/1 var(--d); text-transform: uppercase; text-shadow: 0 .6cqw 3cqw rgba(47,125,225,.6); }
+.hello .fmt { display: inline-flex; gap: .8cqw; align-items: center; padding: .6cqw 1.6cqw; border-radius: 99px; background: rgba(255,255,255,.08); font: 700 1.4cqw var(--f); }
+.hello .who { display: flex; flex-wrap: wrap; justify-content: center; gap: 1.4cqw; margin-top: 2.4cqw; max-width: 80cqw; }
+.hello .who div { width: 8.4cqw; text-align: center; opacity: 0; animation: pop .5s forwards; }
+.ava { width: 5.4cqw; height: 5.4cqw; margin: 0 auto .5cqw; border-radius: 50%; display: grid; place-items: center; font-size: 2.6cqw; background: rgba(255,255,255,.1); border: .2cqw solid rgba(255,255,255,.3); }
+.hello .who span { font: 700 1.2cqw var(--d); }
+.hello .go { margin-top: 2.2cqw; font: 600 1.3cqw var(--f); color: #93a7c6; }
+@keyframes pop { from { opacity: 0; transform: translateY(1cqw) scale(.8); } to { opacity: 1; transform: none; } }
+
+/* олимпийка: дерево как в футболе */
+.ko { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, .8fr); gap: 2.6cqw; min-height: 0; }
+.ko-col { display: flex; flex-direction: column; justify-content: space-around; gap: 1cqw; position: relative; }
+.ko-col h5 { position: absolute; top: -.2cqw; left: 0; right: 0; margin: 0; text-align: center; font: 700 1cqw var(--f); letter-spacing: .2cqw; text-transform: uppercase; color: #93a7c6; }
+.m { position: relative; border-radius: 1cqw; overflow: visible; background: rgba(255,255,255,.06); border: .12cqw solid rgba(255,255,255,.12); transition: box-shadow .4s, border-color .4s; }
+.m > div { display: flex; align-items: center; gap: .8cqw; padding: .7cqw 1cqw; font: 700 1.5cqw/1.1 var(--d); }
+.m > div + div { border-top: .1cqw solid rgba(255,255,255,.1); }
+.m .sc { margin-left: auto; flex: none; font-variant-numeric: tabular-nums; color: #93a7c6; }
+.m .w { color: #fff; } .m .w .sc { color: var(--gold); } .m .l { color: #6f83a3; }
+.m .tbd { color: #5c7092; font: 600 1.15cqw var(--f); font-style: italic; }
+.m.now { border-color: var(--gold); box-shadow: 0 0 2.2cqw rgba(255,215,94,.5); }
+.m.now::before { content: "СЛЕДУЮЩИЕ"; position: absolute; top: -1.1cqw; left: .8cqw; padding: .1cqw .7cqw; border-radius: 99px; background: var(--gold); color: #2a1d00; font: 800 .85cqw/1.4 var(--d); letter-spacing: .1cqw; }
+.m .new { animation: flash 1.6s; } @keyframes flash { 0%, 40% { background: rgba(255,215,94,.35); } 100% { background: transparent; } }
+.ko-col:not(:last-child) .m::after { content: ""; position: absolute; right: -1.4cqw; top: 50%; width: 1.4cqw; border-top: .12cqw solid rgba(255,255,255,.22); }
+.champ { text-align: center; padding: 1.4cqw; border-radius: 1.2cqw; border: .15cqw dashed rgba(255,215,94,.5); }
+.champ .cup { font-size: 3.4cqw; } .champ b { display: block; font: 800 2cqw var(--d); color: var(--gold); }
+
+/* группы: таблицы групп + плей-офф */
+.grp { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.6cqw; min-height: 0; }
+.gt { padding: 1.2cqw 1.4cqw; }
+.gt h4, .po h4 { margin: 0 0 .8cqw; font: 800 1.6cqw var(--d); text-transform: uppercase; letter-spacing: .1cqw; }
+.gt h4 span { color: var(--gold); }
+.row { display: grid; grid-template-columns: 1.8cqw minmax(0, 1fr) 3.2cqw 3.6cqw; align-items: center; gap: .6cqw; padding: .55cqw .4cqw; font: 600 1.25cqw var(--f); border-radius: .6cqw; }
+.row.h { color: #93a7c6; font-size: .9cqw; text-transform: uppercase; letter-spacing: .1cqw; padding-top: 0; }
+.row b { font: 800 1.5cqw var(--d); text-align: right; } .row i { font-style: normal; text-align: right; color: #93a7c6; font-size: 1.1cqw; }
+.row.q { background: rgba(255,215,94,.1); } .row.q .pos { color: var(--gold); }
+.pos { font: 800 1.4cqw var(--d); color: #93a7c6; }
+.po { padding: 1.2cqw 1.4cqw; display: flex; flex-direction: column; gap: 1cqw; }
+.po .m > div { font-size: 1.35cqw; }
+.leg { font-size: .95cqw; color: #93a7c6; margin-top: .6cqw; }
+
+/* каждый с каждым: шахматка + таблица */
+.rr { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 1.6cqw; min-height: 0; }
+.cross { padding: 1.2cqw; overflow: hidden; }
+.cross table { width: 100%; border-collapse: separate; border-spacing: .3cqw; table-layout: fixed; }
+.cross th, .cross td { height: 3.4cqw; text-align: center; font: 700 1.35cqw var(--d); border-radius: .5cqw; }
+.cross th { color: #93a7c6; font-size: 1.1cqw; } .cross th.nm { text-align: left; color: #eef3fb; font-size: 1.3cqw; width: 22%; padding-left: .4cqw; }
+.cross td { background: rgba(255,255,255,.05); color: #5c7092; }
+.cross td.x { background: repeating-linear-gradient(45deg, rgba(255,255,255,.04) 0 .4cqw, transparent .4cqw .8cqw); }
+.cross td.w { background: rgba(47,170,110,.28); color: #b9f5d6; } .cross td.l { background: rgba(230,57,70,.22); color: #ffb3b8; }
+.cross td.now { outline: .2cqw solid var(--gold); color: var(--gold); font-size: 1cqw; }
+.st { padding: 1.2cqw 1.4cqw; }
+.st h4 { margin: 0 0 .6cqw; font: 800 1.6cqw var(--d); text-transform: uppercase; }
+.st .row { grid-template-columns: 1.8cqw minmax(0, 1fr) 3.6cqw 3.4cqw; }
+.st .row:nth-child(2) .pos { color: var(--gold); }
+.prog { margin-top: 1cqw; font-size: 1cqw; color: #93a7c6; } .prog i { display: block; height: .5cqw; margin-top: .5cqw; border-radius: 99px; background: linear-gradient(90deg, var(--gold) 60%, rgba(255,255,255,.1) 60%); }
+
+/* «кто следующий» с длинными никами */
+.next { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.6cqw; min-height: 0; }
+.nx { display: grid; align-content: center; justify-items: center; text-align: center; gap: .8cqw; padding: 1.4cqw; border-radius: 1.4cqw; border: .15cqw solid var(--red); background: rgba(255,255,255,.05); min-width: 0; }
+.nx small { font: 700 1.1cqw var(--f); letter-spacing: .2cqw; text-transform: uppercase; color: var(--red); }
+.nx .pair { width: 100%; display: grid; gap: .4cqw; } .nx .pair .nk { font: 800 3.2cqw/1.05 var(--d); }
+.nx .pair em { font: 700 1.6cqw var(--d); color: #93a7c6; font-style: normal; }
+.nx.bad .pair { width: auto; } .nx.bad .pair .nk { overflow: visible; text-overflow: clip; font-size: 4.6cqw; }
+.nx.bad { overflow: visible; border-color: #6f83a3; } .nx.bad small { color: #93a7c6; }
+
+/* ── приложение (телефон) ── */
+.phones { display: flex; gap: 22px; flex-wrap: wrap; justify-content: center; }
+.ph { width: 360px; max-width: 100%; border-radius: 34px; padding: 14px; background: #10203d; box-shadow: 0 20px 40px rgba(16,32,61,.3); }
+.ph-in { border-radius: 24px; background: #f3f6fb; height: 700px; overflow: auto; padding: 14px; }
+.ph-cap { text-align: center; font: 700 14px var(--f); margin: 0 0 10px; color: #10203d; }
+.ap-h { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.ap-h b { font: 800 24px/1 var(--d); text-transform: uppercase; } .ap-h small { display: block; color: #6b7a90; font-size: 12px; margin-top: 2px; }
+.ap-tabs { display: flex; gap: 6px; margin-bottom: 12px; } .ap-tabs span { padding: 7px 12px; border-radius: 99px; background: #fff; font: 700 12px var(--f); } .ap-tabs span.on { background: #10203d; color: #fff; }
+.ap-next { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 16px; background: linear-gradient(135deg, #1f5fc4, #0e3b8c); color: #fff; margin-bottom: 12px; }
+.ap-next small { display: block; font: 700 11px var(--f); text-transform: uppercase; letter-spacing: .08em; color: var(--gold); }
+.ap-next b { font: 800 18px/1.1 var(--d); } .ap-next .btn { margin-left: auto; flex: none; padding: 8px 12px; border-radius: 99px; background: #fff; color: #0e3b8c; font: 800 12px var(--f); }
+.ap-ko { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 6px; scroll-snap-type: x mandatory; }
+.ap-col { flex: 0 0 74%; scroll-snap-align: start; display: flex; flex-direction: column; justify-content: space-around; gap: 10px; }
+.ap-col h5 { margin: 0; font: 700 11px var(--f); color: #6b7a90; text-transform: uppercase; letter-spacing: .1em; }
+.am { border-radius: 14px; background: #fff; box-shadow: 0 2px 8px rgba(16,32,61,.08); overflow: hidden; }
+.am div { display: flex; gap: 8px; padding: 9px 12px; font: 700 15px var(--d); } .am div + div { border-top: 1px solid #edf1f6; }
+.am .sc { margin-left: auto; color: #6b7a90; } .am .w { color: #10203d; } .am .w .sc { color: var(--red); } .am .l { color: #9aa6b8; } .am .tbd { color: #9aa6b8; font: italic 600 13px var(--f); }
+.am.now { box-shadow: 0 0 0 2px var(--gold), 0 4px 14px rgba(255,190,0,.3); }
+.ap-card { border-radius: 16px; background: #fff; padding: 12px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(16,32,61,.06); }
+.ap-card h4 { margin: 0 0 8px; font: 800 17px var(--d); text-transform: uppercase; }
+.ar { display: grid; grid-template-columns: 22px minmax(0, 1fr) 40px 40px; gap: 6px; align-items: center; padding: 7px 4px; font: 600 14px var(--f); border-radius: 8px; }
+.ar.h { font: 700 10px var(--f); color: #9aa6b8; text-transform: uppercase; } .ar b { text-align: right; font: 800 16px var(--d); } .ar i { text-align: right; font-style: normal; color: #6b7a90; font-size: 12px; }
+.ar.q { background: #fff6d6; }
+.ap-cross { width: 100%; border-collapse: separate; border-spacing: 3px; table-layout: fixed; font: 700 12px var(--d); }
+.ap-cross th, .ap-cross td { height: 30px; text-align: center; border-radius: 6px; } .ap-cross th { color: #9aa6b8; } .ap-cross th.nm { text-align: left; color: #10203d; width: 26%; }
+.ap-cross td { background: #f0f3f8; color: #9aa6b8; } .ap-cross td.w { background: #d9f6e7; color: #157a4b; } .ap-cross td.l { background: #fde2e4; color: #c22a37; } .ap-cross td.x { background: #e4e9f1; } .ap-cross td.now { box-shadow: inset 0 0 0 2px #f2b600; color: #a17800; }
+</style></head>
+<body>
+<div class="bar" id="bar"></div>
+<div class="wrap"><div class="note" id="note"></div><div id="view"></div></div>
+<script>
+const LOGO = '<svg viewBox="0 0 120 120"><rect width="120" height="120" rx="26" fill="#2563b8"/><g transform="translate(60 60) rotate(-24)"><ellipse rx="45" ry="16" fill="none" stroke="#e63946" stroke-width="7"/></g><circle cx="60" cy="60" r="22" fill="#fff"/><g transform="translate(60 60) rotate(-24)"><path d="M-45 0 A45 16 0 0 0 45 0" fill="none" stroke="#e63946" stroke-width="7" stroke-linecap="round"/></g></svg>';
+const P = [['Рустам', '🔥', 51.0], ['Мухаммет', '⚡', 47.2], ['Александр_Великолепный', '🦁', 44.8], ['Дамир', '🎯', 43.1], ['Вайнсмоукер', '💨', 41.5], ['type2b', '🐺', 40.2], ['Эльвира', '🌸', 38.9], ['Тимур', '🏓', 37.4]];
+const nm = i => P[i][0], esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+const tvTop = (crumb, tag) => `<div class="tv-top"><div class="logo">${LOGO}</div><div><div class="tv-club">Коворкинг «IT Park» KZN</div><div class="tv-crumb">${crumb}</div></div><div class="tv-tag">${tag}</div><div class="tv-clock">19:42</div></div>`;
+const foot = () => { const items = P.map(([n, , r], i) => `<span>${i < 3 ? ['🥇', '🥈', '🥉'][i] : (i + 1) + '.'} ${esc(n)}<b>${r.toFixed(1)}</b></span>`).join('');
+  return `<div class="foot"><div class="foot-lbl">Участники</div><div class="ticker"><div class="ticker-in">${items}${items}</div></div><div class="brand"><div class="logo">${LOGO}</div>PONGHUB</div></div>`; };
+const tv = (crumb, tag, body) => `<div class="tv">${tvTop(crumb, tag)}${body}${foot()}</div>`;
+
+// ── олимпийка: сетка строится сразу, победители переходят дальше сами ──
+let KO;
+function koReset() {
+  KO = { r: [[[0, 7], [3, 4], [2, 5], [1, 6]], [[null, null], [null, null]], [[null, null]]], res: {}, step: 0, fresh: null };
+}
+const KO_PLAY = [[0, 0, 0, '3:1'], [0, 1, 1, '3:2'], [0, 2, 0, '3:0'], [0, 3, 0, '3:1'], [1, 0, 0, '3:2'], [1, 1, 1, '3:1'], [2, 0, 0, '3:2']];
+function koStep() {
+  if (KO.step >= KO_PLAY.length) return;
+  const [r, m, wi, sc] = KO_PLAY[KO.step++], pair = KO.r[r][m], w = pair[wi];
+  KO.res[r + ':' + m] = { w, sc };
+  if (r < 2) { const nr = KO.r[r + 1][m >> 1]; nr[m & 1] = w; KO.fresh = (r + 1) + ':' + (m >> 1) + ':' + (m & 1); }
+  render();
+}
+const RN = ['1/4 финала', '1/2 финала', 'Финал'];
+const tbd = (r, m, s) => r === 0 ? '' : `Победитель ${RN[r - 1] === '1/4 финала' ? 'QF' : 'SF'}${m * 2 + s + 1}`;
+function koMatch(r, m, app) {
+  const pair = KO.r[r][m], res = KO.res[r + ':' + m], nextIdx = KO_PLAY[KO.step], isNow = nextIdx && nextIdx[0] === r && nextIdx[1] === m && pair[0] !== null && pair[1] !== null;
+  const sc = res ? res.sc.split(':') : null;
+  const line = s => { const p = pair[s]; const fresh = KO.fresh === `${r}:${m}:${s}`;
+    if (p === null) return `<div class="tbd${fresh ? ' new' : ''}">${tbd(r, m, s)}</div>`;
+    const cls = res ? (res.w === p ? 'w' : 'l') : ''; return `<div class="${cls}${fresh ? ' new' : ''}"><span class="nk">${app ? '' : P[p][1] + ' '}${esc(nm(p))}</span><span class="sc">${sc ? sc[res.w === p ? 0 : 1] : ''}</span></div>`; };
+  return `<div class="${app ? 'am' : 'm'}${isNow ? ' now' : ''}">${line(0)}${line(1)}</div>`;
+}
+function koTV() {
+  const champ = KO.res['2:0'];
+  return tv('Кубок октября · олимпийская система · 8 участников', 'Плей-офф', `<div class="ko">${[0, 1, 2].map(r => `<div class="ko-col"><h5>${RN[r]}</h5>${KO.r[r].map((_, m) => koMatch(r, m)).join('')}</div>`).join('')}
+    <div class="ko-col"><h5>Чемпион</h5><div class="champ"><div class="cup">🏆</div><b>${champ ? esc(nm(champ.w)) : '?'}</b><span style="font-size:1cqw;color:#93a7c6">${champ ? 'победа ' + champ.sc : 'определится в финале'}</span></div></div></div>`);
+}
+
+// ── группы ──
+const G = [{ n: 'A', rows: [[0, 3, 0, 9], [3, 2, 1, 6], [5, 1, 2, 3], [7, 0, 3, 0]] }, { n: 'B', rows: [[1, 2, 0, 6], [2, 1, 1, 3], [4, 1, 1, 3], [6, 0, 2, 0]] }];
+const grpRow = (r, i, app) => app ? `<div class="ar${i < 2 ? ' q' : ''}"><span>${i + 1}</span><span class="nk">${esc(nm(r[0]))}</span><i>${r[1]}–${r[2]}</i><b>${r[3]}</b></div>`
+  : `<div class="row${i < 2 ? ' q' : ''}"><span class="pos">${i + 1}</span><span class="nk">${P[r[0]][1]} ${esc(nm(r[0]))}</span><i>${r[1]}–${r[2]}</i><b>${r[3]}</b></div>`;
+function grpTV() {
+  return tv('Лига коворкинга · группы + плей-офф · 8 участников', 'Групповой этап', `<div class="grp">${G.map(g => `<div class="card gt"><h4>Группа <span>${g.n}</span></h4><div class="row h"><span></span><span>Игрок</span><i>В–П</i><b style="font-size:.9cqw">Очки</b></div>${g.rows.map((r, i) => grpRow(r, i)).join('')}<div class="leg">🟨 первые двое выходят в плей-офф</div></div>`).join('')}
+    <div class="card po"><h4>Плей-офф</h4><div class="m"><div><span class="nk">🔥 Рустам</span><span class="sc">1A</span></div><div class="tbd">2-е место группы B</div></div>
+      <div class="m now"><div><span class="nk">⚡ Мухаммет</span><span class="sc">1B</span></div><div><span class="nk">🎯 Дамир</span><span class="sc">2A</span></div></div>
+      <div class="m"><div class="tbd">Победитель полуфинала 1</div><div class="tbd">Победитель полуфинала 2</div></div><div class="leg">Пары плей-офф заполняются сами, как только группа доиграна</div></div></div>`);
+}
+
+// ── каждый с каждым ──
+const RR = [0, 1, 2, 3, 4, 5], RES = { '0-1': '3:1', '0-2': '3:0', '0-3': '2:3', '1-2': '3:2', '1-4': '3:0', '2-3': '3:1', '2-5': '3:2', '3-4': '1:3', '0-5': '3:1', '4-5': '3:2', '1-3': '3:1' };
+const NOW = '0-4';
+function rrCell(a, b) { if (a === b) return ['x', '']; const k = a < b ? `${a}-${b}` : `${b}-${a}`; const v = RES[k]; if (k === NOW) return ['now', 'след.']; if (!v) return ['', '—'];
+  let [x, y] = v.split(':').map(Number); if (a > b) [x, y] = [y, x]; return [x > y ? 'w' : 'l', `${x}:${y}`]; }
+function rrStand() { return RR.map(i => { let w = 0, l = 0; RR.forEach(j => { const c = rrCell(i, j); if (c[0] === 'w') w++; if (c[0] === 'l') l++; }); return [i, w, l, w * 3]; }).sort((a, b) => b[3] - a[3]); }
+function rrTV() {
+  const st = rrStand();
+  return tv('Октябрьский круг · каждый с каждым · 6 участников', 'Круговой турнир', `<div class="rr"><div class="card cross"><table><tr><th class="nm"></th>${RR.map(i => `<th>${P[i][1]}</th>`).join('')}</tr>
+    ${RR.map(a => `<tr><th class="nm"><span class="nk">${P[a][1]} ${esc(nm(a))}</span></th>${RR.map(b => { const [c, t] = rrCell(a, b); return `<td class="${c}">${t}</td>`; }).join('')}</tr>`).join('')}</table></div>
+    <div class="card st"><h4>Таблица</h4><div class="row h"><span></span><span>Игрок</span><i>В–П</i><b style="font-size:.9cqw">Очки</b></div>${st.map((r, i) => `<div class="row"><span class="pos">${i + 1}</span><span class="nk">${P[r[0]][1]} ${esc(nm(r[0]))}</span><i>${r[1]}–${r[2]}</i><b>${r[3]}</b></div>`).join('')}
+      <div class="prog">Сыграно 11 из 15 матчей<i></i></div></div></div>`);
+}
+
+// ── приветствие ──
+const HELLO = { ko: ['Кубок октября', '🏆 Олимпийская система', [0, 1, 2, 3, 4, 5, 6, 7]], grp: ['Лига коворкинга', '🗂 Группы + плей-офф', [0, 1, 2, 3, 4, 5, 6, 7]], rr: ['Октябрьский круг', '🔄 Каждый с каждым', [0, 1, 2, 3, 4, 5]] };
+let helloK = 'ko';
+function helloTV() { const [t, f, ids] = HELLO[helloK];
+  return tv('Турнир начинается', 'Добро пожаловать', `<div class="hello"><div><small>Сегодня в клубе</small><h1>${t}</h1><div class="fmt">${f} · ${ids.length} участников</div>
+    <div class="who">${ids.map((i, k) => `<div style="animation-delay:${.3 + k * .12}s"><div class="ava">${P[i][1]}</div><span class="nk">${esc(nm(i))}</span></div>`).join('')}</div><div class="go">Через несколько секунд — турнирная сетка</div></div></div>`); }
+
+// ── «следующие» и длинные ники ──
+function nextTV() {
+  return `<div class="tv">${tvTop("Кубок октября · перерыв", "Перерыв")}<div class="next">
+    <div class="nx bad"><small>Сейчас: ник вылезает</small><div class="pair"><span class="nk">Александр_Великолепный</span><em>—</em><span class="nk">Вайнсмоукер</span></div></div>
+    <div class="nx"><small>Следом за этим столом · станет так</small><div class="pair"><span class="nk" style="font-size:${fit('Александр_Великолепный')}cqw">Александр_Великолепный</span><em>—</em><span class="nk" style="font-size:${fit('Вайнсмоукер')}cqw">Вайнсмоукер</span></div><span style="font-size:1.2cqw;color:#93a7c6">1/4 финала</span></div>
+  </div>${foot()}</div>`;
+}
+const fit = s => Math.max(1.8, Math.min(3.2, 34 / Math.max(10, s.length)));
+
+// ── приложение ──
+function appKO() {
+  return `<div class="ap-h"><div class="logo" style="width:40px;height:40px">${LOGO}</div><div><b>Кубок октября</b><small>Олимпийская система · 8 участников</small></div></div>
+    <div class="ap-tabs"><span class="on">Сетка</span><span>Матчи</span><span>Участники</span></div>
+    <div class="ap-next"><div><small>Следующий матч</small><b>${(() => { const n = KO_PLAY[KO.step]; if (!n) return 'Турнир завершён'; const p = KO.r[n[0]][n[1]]; return p[0] === null || p[1] === null ? 'ждём соперника' : esc(nm(p[0])) + ' — ' + esc(nm(p[1])); })()}</b></div><span class="btn">Начать ▶</span></div>
+    <div class="ap-ko">${[0, 1, 2].map(r => `<div class="ap-col"><h5>${RN[r]}</h5>${KO.r[r].map((_, m) => koMatch(r, m, true)).join('')}</div>`).join('')}</div>
+    <p style="font-size:12px;color:#6b7a90;text-align:center">← листайте по раундам →</p>`;
+}
+function appGrp() {
+  return `<div class="ap-h"><div class="logo" style="width:40px;height:40px">${LOGO}</div><div><b>Лига коворкинга</b><small>Группы + плей-офф</small></div></div>
+    <div class="ap-tabs"><span class="on">Группы</span><span>Плей-офф</span><span>Матчи</span></div>
+    <div class="ap-next"><div><small>Следующий матч</small><b>Мухаммет — Дамир</b></div><span class="btn">Начать ▶</span></div>
+    ${G.map(g => `<div class="ap-card"><h4>Группа ${g.n}</h4><div class="ar h"><span></span><span>Игрок</span><i>В–П</i><b style="font-size:10px">Очки</b></div>${g.rows.map((r, i) => grpRow(r, i, true)).join('')}</div>`).join('')}
+    <p style="font-size:12px;color:#6b7a90">🟨 выходят в плей-офф — пары появятся сами</p>`;
+}
+function appRR() {
+  const st = rrStand();
+  return `<div class="ap-h"><div class="logo" style="width:40px;height:40px">${LOGO}</div><div><b>Октябрьский круг</b><small>Каждый с каждым · 11 из 15</small></div></div>
+    <div class="ap-tabs"><span class="on">Таблица</span><span>Шахматка</span><span>Матчи</span></div>
+    <div class="ap-next"><div><small>Следующий матч</small><b>Рустам — Вайнсмоукер</b></div><span class="btn">Начать ▶</span></div>
+    <div class="ap-card"><h4>Таблица</h4>${st.map((r, i) => `<div class="ar${i === 0 ? ' q' : ''}"><span>${i + 1}</span><span class="nk">${P[r[0]][1]} ${esc(nm(r[0]))}</span><i>${r[1]}–${r[2]}</i><b>${r[3]}</b></div>`).join('')}</div>
+    <div class="ap-card"><h4>Шахматка</h4><table class="ap-cross"><tr><th class="nm"></th>${RR.map(i => `<th>${P[i][1]}</th>`).join('')}</tr>${RR.map(a => `<tr><th class="nm"><span class="nk">${esc(nm(a))}</span></th>${RR.map(b => { const [c, t] = rrCell(a, b); return `<td class="${c}">${t}</td>`; }).join('')}</tr>`).join('')}</table></div>`;
+}
+
+const TABS = [
+  { n: '1. Приветствие', note: '<b>Табло: приветствие турнира</b>Когда подключаете табло во время турнира (любого вида) — сначала заставка: название турнира, вид, все участники по очереди «выскакивают». Через несколько секунд — сетка. Внизу переключатель, как заставка выглядит у каждого вида.', v: () => helloTV(), ctl: () => `<button class="${helloK === 'ko' ? '' : 'ghost'}" data-h="ko">Олимпийка</button><button class="${helloK === 'grp' ? '' : 'ghost'}" data-h="grp">Группы</button><button class="${helloK === 'rr' ? '' : 'ghost'}" data-h="rr">Каждый с каждым</button>` },
+  { n: '2. Олимпийка', note: '<b>Табло: олимпийская система — как в футболе</b>Вся сетка видна сразу, до первого матча: где соперник ещё неизвестен — «Победитель QF1». Нажимайте «Следующий матч» — победитель сам переезжает в следующий раунд (вспышка), следующая пара подсвечена жёлтым, в конце — чемпион.', v: () => koTV(), ctl: () => `<button data-ko="step">▶ Следующий матч</button><button class="ghost" data-ko="reset">↺ Сначала</button>` },
+  { n: '3. Группы', note: '<b>Табло: группы + плей-офф</b>Своя таблица у каждой группы (победы–поражения, очки), выходящие в плей-офф подсвечены. Справа — плей-офф: пары с местами «1A / 2B», имена подставляются сами, когда группа доиграна.', v: () => grpTV() },
+  { n: '4. Каждый с каждым', note: '<b>Табло: круговой турнир</b>Слева «шахматка» — кто кого обыграл (зелёный — победа, красный — поражение, жёлтая рамка — следующий матч). Справа — таблица мест и сколько матчей сыграно.', v: () => rrTV() },
+  { n: '5. Длинные ники + низ', note: '<b>Табло: длинные ники и нижняя строка</b>Слева — как сейчас: длинный ник вылезает за рамку. Справа — как станет: шрифт сам уменьшается, а если всё равно не влезает — «…». Внизу участники едут бегущей строкой по кругу и уходят под логотип PONGHUB, который всегда стоит на месте (видно на всех экранах табло).', v: () => nextTV() },
+  { sep: 1 },
+  { n: '6. Приложение', note: '<b>Приложение: экран турнира на телефоне</b>Три вида — три своих экрана. Сверху всегда «Следующий матч» с кнопкой «Начать». Олимпийка — сетка раундами, листается пальцем; группы — карточки групп; круг — таблица и шахматка. Нажимайте «Следующий матч» во вкладке «Олимпийка» — сетка в телефоне обновится так же.', v: () => `<div class="phones"><div><p class="ph-cap">Олимпийка</p><div class="ph"><div class="ph-in">${appKO()}</div></div></div><div><p class="ph-cap">Группы</p><div class="ph"><div class="ph-in">${appGrp()}</div></div></div><div><p class="ph-cap">Каждый с каждым</p><div class="ph"><div class="ph-in">${appRR()}</div></div></div></div>` },
+];
+let cur = 0;
+const bar = document.getElementById('bar');
+bar.innerHTML = TABS.map((t, i) => t.sep ? '<span class="sep"></span>' : `<button data-i="${i}">${t.n}</button>`).join('');
+function render() {
+  const t = TABS[cur];
+  bar.querySelectorAll('[data-i]').forEach(b => b.classList.toggle('on', +b.dataset.i === cur));
+  document.getElementById('note').innerHTML = t.note;
+  document.getElementById('view').innerHTML = t.v() + (t.ctl ? `<div class="ctl">${t.ctl()}</div>` : '');
+}
+bar.onclick = e => { const b = e.target.closest('[data-i]'); if (b) { cur = +b.dataset.i; render(); } };
+document.getElementById('view').onclick = e => { const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.ko === 'step') koStep(); if (b.dataset.ko === 'reset') { koReset(); render(); } if (b.dataset.h) { helloK = b.dataset.h; render(); } };
+koReset(); render();
+</script></body></html>
