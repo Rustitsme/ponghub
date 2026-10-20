@@ -52,8 +52,8 @@ body { margin: 0; font-family: var(--f); background: #e9eef6; color: #10203d; }
 .hello .who div { width: 8.4cqw; text-align: center; opacity: 0; animation: pop .5s forwards; }
 .av { --c: #e63946; display: inline-grid; place-items: center; flex: none; width: 2.4cqw; aspect-ratio: 1; border-radius: 50%; background: color-mix(in srgb, var(--c) 30%, #10203d); border: .15cqw solid var(--c); font-size: 1.3cqw; line-height: 1; overflow: hidden; }
 .av.big { width: 6cqw; font-size: 3cqw; border-width: .3cqw; margin: 0 auto .6cqw; display: grid; }
-.av.ph { width: 26px; font-size: 14px; border-width: 2px; background: color-mix(in srgb, var(--c) 25%, #fff); }
-.av.ph.lg { width: 34px; font-size: 18px; }
+.av.apv { width: 26px; font-size: 14px; border-width: 2px; background: color-mix(in srgb, var(--c) 25%, #fff); }
+.av.apv.lg { width: 34px; font-size: 18px; }
 .hello .who span { font: 700 1.2cqw var(--d); }
 .hello .how { display: flex; justify-content: center; align-items: center; gap: 1cqw; margin-top: 2cqw; font: 600 1.25cqw var(--f); color: #dfe8f6; }
 .hello .how span { display: inline-flex; align-items: center; gap: .6cqw; padding: .6cqw 1.2cqw; border-radius: 99px; background: rgba(255,255,255,.07); }
@@ -152,7 +152,7 @@ body { margin: 0; font-family: var(--f); background: #e9eef6; color: #10203d; }
 .g2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 1.1fr); gap: 1.6cqw; flex: 1; min-height: 0; }
 .gc { padding: 1.2cqw 1.4cqw; display: flex; flex-direction: column; gap: .5cqw; }
 .gc h4 { margin: 0; font: 800 1.9cqw var(--d); text-transform: uppercase; } .gc h4 small { display: block; font: 600 1cqw var(--f); color: #93a7c6; text-transform: none; margin-top: .2cqw; }
-.pl { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: .8cqw; padding: .6cqw .8cqw; border-radius: .8cqw; background: rgba(255,255,255,.04); font: 700 1.5cqw var(--d); }
+.pl { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: .8cqw; padding: .4cqw .8cqw; border-radius: .8cqw; background: rgba(255,255,255,.04); font: 700 1.5cqw var(--d); }
 .pl .n { font: 800 1.6cqw var(--d); color: #93a7c6; width: 1.6cqw; text-align: center; }
 .pl .wins { font: 700 1.1cqw var(--f); color: #c9d6ea; text-align: right; } .pl .wins b { font: 800 1.7cqw var(--d); color: #fff; margin-right: .3cqw; }
 .pl.go { background: rgba(255,215,94,.12); box-shadow: inset .3cqw 0 0 var(--gold); } .pl.go .n { color: var(--gold); }
@@ -196,13 +196,23 @@ body { margin: 0; font-family: var(--f); background: #e9eef6; color: #10203d; }
 .lock { font-size: 12px; color: #a15c00; background: #fff4e0; border-radius: 10px; padding: 8px 10px; margin: -4px 0 10px; }
 .sheet2 { border-radius: 18px 18px 0 0; background: #fff; padding: 14px; box-shadow: 0 -8px 24px rgba(16,32,61,.15); margin-top: 14px; }
 .sheet2 h4 { margin: 0 0 4px; font: 800 18px var(--d); } .sheet2 .ok { margin-top: 10px; padding: 12px; border-radius: 12px; background: #e63946; color: #fff; text-align: center; font: 800 14px var(--f); }
+.fm.c { gap: 10px; } .fm.c .inp { padding: 10px 12px; }
+.seg3 { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: #e3e8f0; } .seg3 span { flex: 1; text-align: center; padding: 8px 4px; border-radius: 9px; font: 700 12px var(--f); color: #4a5a72; }
+.seg3 span.on { background: #fff; color: #10203d; box-shadow: 0 1px 4px rgba(16,32,61,.15); } .seg3.v span { padding: 8px 2px; }
+.fm.c .hint { margin: 4px 0 0; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; } .two .step span { width: 34px; height: 34px; } .two .step b { font-size: 24px; }
+.fm.c .tbl { padding: 8px; } .fm.c .tbl > b { margin-bottom: 4px; font-size: 13px; }
+.go2 { padding: 13px; border-radius: 14px; background: #e63946; color: #fff; text-align: center; font: 800 15px var(--f); }
+.split { display: grid; gap: 8px; } .split div { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; padding: 10px; border-radius: 12px; background: #fff; } .split b { width: 100%; font: 800 15px var(--d); margin-bottom: 2px; }
+.ex { display: grid; gap: 4px; padding: 10px 12px; border-radius: 12px; background: #fff; font-size: 13px; } .ex b { font: 800 14px var(--d); }
+.phones .ph { width: 330px; } .phones .ph-in { height: 670px; }
 </style></head>
 <body>
 <div class="bar" id="bar"></div>
 <div class="wrap"><div class="note" id="note"></div><div id="view"></div></div>
 <script>
 const LOGO = '<svg viewBox="0 0 120 120"><rect width="120" height="120" rx="26" fill="#2563b8"/><g transform="translate(60 60) rotate(-24)"><ellipse rx="45" ry="16" fill="none" stroke="#e63946" stroke-width="7"/></g><circle cx="60" cy="60" r="22" fill="#fff"/><g transform="translate(60 60) rotate(-24)"><path d="M-45 0 A45 16 0 0 0 45 0" fill="none" stroke="#e63946" stroke-width="7" stroke-linecap="round"/></g></svg>';
-const P = [['Рустам', '🔥', 51.0, '#e63946'], ['Мухаммет', '⚡', 47.2, '#2f7de1'], ['Александр_Великолепный', '🦁', 44.8, '#f2b600'], ['Дамир', '🎯', 43.1, '#2a9d8f'], ['Вайнсмоукер', '💨', 41.5, '#8b5cf6'], ['type2b', '🐺', 40.2, '#64748b'], ['Эльвира', '🌸', 38.9, '#ec4899'], ['Тимур', '🏓', 37.4, '#f97316']];
+const P = [['Рустам', '🔥', 51.0, '#e63946'], ['Мухаммет', '⚡', 47.2, '#2f7de1'], ['Александр_Великолепный', '🦁', 44.8, '#f2b600'], ['Дамир', '🎯', 43.1, '#2a9d8f'], ['Вайнсмоукер', '💨', 41.5, '#8b5cf6'], ['type2b', '🐺', 40.2, '#64748b'], ['Эльвира', '🌸', 38.9, '#ec4899'], ['Тимур', '🏓', 37.4, '#f97316'], ['Камила', '🦋', 36.8, '#06b6d4'], ['Ильдар', '🐻', 35.9, '#a16207'], ['Артур', '🚀', 35.1, '#16a34a']];
 const av = (i, cls = '') => `<span class="av ${cls}" style="--c:${P[i][3]}">${P[i][1]}</span>`;
 const nm = i => P[i][0], esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 const tvTop = (crumb, tag) => `<div class="tv-top"><div class="logo">${LOGO}</div><div><div class="tv-club">Коворкинг «IT Park» KZN</div><div class="tv-crumb">${crumb}</div></div><div class="tv-tag">${tag}</div><div class="tv-clock">19:42</div></div>`;
@@ -230,7 +240,7 @@ function koMatch(r, m, app) {
   const sc = res ? res.sc.split(':') : null;
   const line = s => { const p = pair[s]; const fresh = KO.fresh === `${r}:${m}:${s}`;
     if (p === null) return `<div class="tbd${fresh ? ' new' : ''}">${tbd(r, m, s)}</div>`;
-    const cls = res ? (res.w === p ? 'w' : 'l') : ''; return `<div class="${cls}${fresh ? ' new' : ''}"><span class="nk">${app ? av(p, 'ph') + ' ' : av(p) + ' '}${esc(nm(p))}</span><span class="sc">${sc ? sc[res.w === p ? 0 : 1] : ''}</span></div>`; };
+    const cls = res ? (res.w === p ? 'w' : 'l') : ''; return `<div class="${cls}${fresh ? ' new' : ''}"><span class="nk">${app ? av(p, 'apv') + ' ' : av(p) + ' '}${esc(nm(p))}</span><span class="sc">${sc ? sc[res.w === p ? 0 : 1] : ''}</span></div>`; };
   return `<div class="${app ? 'am' : 'm'}${isNow ? ' now' : ''}">${line(0)}${line(1)}</div>`;
 }
 function koTV() {
@@ -240,14 +250,14 @@ function koTV() {
 }
 
 // ── группы ──
-const G = [{ n: 'A', done: true, left: '', rows: [[0, 3], [3, 2], [5, 1], [7, 0]] }, { n: 'B', left: '1 матч — Александр против Вайнсмоукера', rows: [[1, 2], [2, 1], [4, 1], [6, 0]] }];
+const G = [{ n: 'A', done: true, left: '', rows: [[0, 5], [3, 4], [5, 3], [8, 2], [7, 1], [10, 0]] }, { n: 'B', left: '1 матч — Александр против Вайнсмоукера', rows: [[1, 3], [2, 3], [4, 2], [9, 1], [6, 0]] }];
 const grpRow = (r, i, app) => app ? `<div class="ar${i < 2 ? ' q' : ''}"><span>${i + 1}</span><span class="nk">${esc(nm(r[0]))}</span><i>${r[1]}–${r[2]}</i><b>${r[3]}</b></div>`
   : `<div class="row${i < 2 ? ' q' : ''}"><span class="pos">${i + 1}</span><span class="nk">${P[r[0]][1]} ${esc(nm(r[0]))}</span><i>${r[1]}–${r[2]}</i><b>${r[3]}</b></div>`;
 function grpTV() {
-  const card = g => `<div class="card gc"><h4>Группа ${g.n}<small>4 игрока · внутри группы каждый играет с каждым</small></h4>
+  const card = g => `<div class="card gc"><h4>Группа ${g.n}<small>${g.rows.length} игроков · внутри группы каждый играет с каждым</small></h4>
     ${g.rows.map((r, i) => `<div class="pl ${i < 2 ? 'go' : g.done ? 'out' : ''}"><span class="n">${i + 1}</span>${av(r[0])}<span class="nk">${esc(nm(r[0]))}</span><span class="wins"><b>${r[1]}</b>${r[1] === 1 ? 'победа' : r[1] > 1 && r[1] < 5 ? 'победы' : 'побед'}</span>${i < 2 ? '<span class="tag">→ проходит в плей-офф</span>' : ''}</div>`).join('')}
     <div class="left">${g.left ? `Осталось сыграть: <b>${g.left}</b>` : 'Группа доиграна ✓'}</div></div>`;
-  return tv('Лига коворкинга · группы + плей-офф', 'Групповой этап', `<div class="body2"><div class="stage"><span class="on">Этап 1 · Группы</span><i>→</i><span>Этап 2 · Плей-офф</span><span style="margin-left:auto;background:none">Двое лучших из каждой группы идут в плей-офф</span></div>
+  return tv('Лига коворкинга · группы + плей-офф', 'Групповой этап', `<div class="body2"><div class="stage"><span class="on">Этап 1 · Группы</span><i>→</i><span>Этап 2 · Плей-офф</span><span>11 игроков → группы по 6 и 5</span><span style="margin-left:auto;background:none">Двое лучших из каждой группы идут в плей-офф</span></div>
     <div class="g2">${G.map(card).join('')}<div class="card pof"><h4>Плей-офф<small>Пары заполнятся сами, когда группы доиграют</small></h4>
       <div class="pm"><small>Полуфинал 1</small><div>${av(0)}<span class="nk">Рустам</span><span class="from">1-й в A</span></div><div class="tbd">ждём 2-го из группы B</div></div>
       <div class="pm now"><small>Полуфинал 2</small><div>${av(1)}<span class="nk">Мухаммет</span><span class="from">1-й в B</span></div><div>${av(3)}<span class="nk">Дамир</span><span class="from">2-й в A</span></div></div>
@@ -301,9 +311,9 @@ function appKO() {
 }
 function appGrp() {
   return `<div class="ap-h"><div class="logo" style="width:40px;height:40px">${LOGO}</div><div><b>Лига коворкинга</b><small>Группы + плей-офф</small></div></div>
-    <div class="ap-ex">1) Игроки поделены на группы по 4. 2) В группе каждый играет с каждым. 3) Двое лучших из группы — в плей-офф (там уже «проиграл — выбыл»).</div>
+    <div class="ap-ex">1) Система сама делит игроков на группы (например, 11 → 6 и 5). 2) В группе каждый играет с каждым. 3) Двое лучших из группы — в плей-офф (там уже «проиграл — выбыл»).</div>
     <div class="ap-next"><div><small>Следующий матч</small><b>Александр — Вайнсмоукер</b></div><span class="btn">Начать ▶</span></div>
-    ${G.map(g => `<div class="ap-card"><h4>Группа ${g.n}</h4>${g.rows.map((r, i) => `<div class="apl ${i < 2 ? 'go' : g.done ? 'out' : ''}"><span class="n">${i + 1}</span>${av(r[0], 'ph')}<span class="nk">${esc(nm(r[0]))}</span><span class="w"><b>${r[1]}</b>поб.</span></div>`).join('')}<p style="margin:6px 0 0;font-size:12px;color:#6b7a90">${g.left ? 'Осталось: ' + g.left : 'Группа доиграна ✓ — двое верхних в плей-офф'}</p></div>`).join('')}`;
+    ${G.map(g => `<div class="ap-card"><h4>Группа ${g.n}</h4>${g.rows.map((r, i) => `<div class="apl ${i < 2 ? 'go' : g.done ? 'out' : ''}"><span class="n">${i + 1}</span>${av(r[0], 'apv')}<span class="nk">${esc(nm(r[0]))}</span><span class="w"><b>${r[1]}</b>поб.</span></div>`).join('')}<p style="margin:6px 0 0;font-size:12px;color:#6b7a90">${g.left ? 'Осталось: ' + g.left : 'Группа доиграна ✓ — двое верхних в плей-офф'}</p></div>`).join('')}`;
 }
 function appRR() {
   const st = rrStand(), all = []; RR.forEach(a => RR.forEach(b => { if (a < b) all.push(`${a}-${b}`); }));
@@ -311,31 +321,39 @@ function appRR() {
   return `<div class="ap-h"><div class="logo" style="width:40px;height:40px">${LOGO}</div><div><b>Октябрьский круг</b><small>Каждый с каждым · сыграно ${all.length - left.length} из ${all.length}</small></div></div>
     <div class="ap-ex">Каждый сыграет со всеми по одному разу. У кого больше побед — тот выше в таблице.</div>
     <div class="ap-next"><div><small>Следующий матч</small><b>Рустам — Вайнсмоукер</b></div><span class="btn">Начать ▶</span></div>
-    <div class="ap-card"><h4>Места</h4>${st.map((r, i) => `<div class="apl ${i === 0 ? 'go' : ''}"><span class="n">${i + 1}</span>${av(r[0], 'ph')}<span class="nk">${esc(nm(r[0]))}</span><span class="w"><b>${r[1]}</b>из ${r[1] + r[2]}</span></div>`).join('')}</div>
+    <div class="ap-card"><h4>Места</h4>${st.map((r, i) => `<div class="apl ${i === 0 ? 'go' : ''}"><span class="n">${i + 1}</span>${av(r[0], 'apv')}<span class="nk">${esc(nm(r[0]))}</span><span class="w"><b>${r[1]}</b>из ${r[1] + r[2]}</span></div>`).join('')}</div>
     <div class="ap-card"><h4>Осталось сыграть · ${left.length}</h4>${left.map(k => { const [a, b] = k.split('-').map(Number); return `<div class="amr wait ${k === NOW ? 'nx2' : ''}"><span class="nk">${esc(nm(a))}</span><b>${k === NOW ? 'след.' : 'ждёт'}</b><span class="nk">${esc(nm(b))}</span></div>`; }).join('')}</div>`;
 }
 
 function appCreate() {
-  const chip = (i, on) => `<span class="${on ? 'on' : ''}">${av(i, 'ph')}${esc(nm(i))}</span>`;
-  return `<div class="ap-h"><div><b>Новый турнир</b><small>шаг 1 из 1 · всё на одном экране</small></div></div>
-    <div class="fm"><div><label>Название</label><div class="inp">Кубок октября</div></div>
-    <div><label>Вид турнира</label><div class="fmt3"><div class="on"><b>🏆 Олимпийская</b><small>Проиграл — выбыл. Быстро, ярко</small></div><div><b>🗂 Группы + плей-офф</b><small>Сначала группы, потом лучшие на вылет</small></div><div><b>🔄 Каждый с каждым</b><small>Все играют со всеми, считаем победы</small></div></div></div>
-    <div><label>Игровых столов</label><div class="step"><span>−</span><b>2</b><span>+</span><small>пары сами разойдутся по свободным столам</small></div></div>
+  const chip = (i, on) => `<span class="${on ? 'on' : ''}">${av(i, 'apv')}${esc(nm(i))}</span>`;
+  return `<div class="ap-h"><div><b>Новый турнир</b><small>всё на одном экране</small></div></div>
+    <div class="fm c"><div class="inp">Кубок октября</div>
+    <div><label>Вид турнира</label><div class="seg3"><span class="on">🏆 Олимпийская</span><span>🗂 Группы</span><span>🔄 Каждый с каждым</span></div><p class="hint">Проиграл — выбыл. Быстро и ярко.</p></div>
+    <div class="two"><div><label>Столов</label><div class="step"><span>−</span><b>2</b><span>+</span></div></div><div><label>Счёт</label><div class="seg3 v"><span class="on">По очкам</span><span>Только итог</span></div></div></div>
+    <p class="hint">Пары по столам распределяет система: как только игра закончилась — на освободившийся стол сразу назначается следующая пара.</p>
     <div><label>Секундант на каждом столе</label>
-      <div class="tbl"><b>Стол 1</b><div class="chips">${chip(3, true)}${chip(6)}${chip(7)}${chip(5)}</div></div>
-      <div class="tbl" style="margin-top:8px"><b>Стол 2</b><div class="chips">${chip(3)}${chip(6, true)}${chip(7)}${chip(5)}</div></div>
-      <p class="hint">Секундант ведёт счёт на своём телефоне. Передать роль другому можно в перерыве между партиями или после матча — во время розыгрыша нельзя.</p></div>
-    <div><label>Счёт</label><div class="fmt3"><div class="on"><b>По очкам</b><small>секундант ведёт счёт, на табло — выход игроков и звуки</small></div><div><b>Только итог</b><small>после матча вписывается 3:1 — удобно, когда столов много</small></div></div></div></div>`;
+      <div class="tbl"><b>Стол 1</b><div class="chips">${chip(3, true)}${chip(6)}${chip(7)}</div></div>
+      <div class="tbl" style="margin-top:6px"><b>Стол 2</b><div class="chips">${chip(3)}${chip(6, true)}${chip(7)}</div></div></div>
+    <div class="go2">Создать турнир</div></div>`;
+}
+function appGroupsSetup() {
+  return `<div class="ap-h"><div><b>Группы</b><small>11 участников</small></div></div>
+    <div class="fm c"><div class="two"><div><label>Групп</label><div class="step"><span>−</span><b>2</b><span>+</span></div></div><div><label>Выходят из группы</label><div class="step"><span>−</span><b>2</b><span>+</span></div></div></div>
+    <div class="split"><div><b>Группа A · 6</b>${[0, 3, 5, 8, 7, 10].map(i => av(i, 'apv')).join('')}</div><div><b>Группа B · 5</b>${[1, 2, 4, 9, 6].map(i => av(i, 'apv')).join('')}</div></div>
+    <p class="hint">Нечётное число — не проблема: система делит игроков как можно ровнее (11 → 6 и 5, 13 → 7 и 6, 7 → 4 и 3) и сильных разводит по разным группам. В группе с нечётным числом в каждом круге один игрок отдыхает.</p>
+    <div class="ex"><b>Ещё примеры</b><span>8 игроков · 2 группы → 4 и 4</span><span>9 игроков · 3 группы → 3, 3 и 3</span><span>14 игроков · 2 группы → 7 и 7</span></div>
+    <div class="go2">Готово</div></div>`;
 }
 function appScorer() {
   return `<div class="ap-h"><div><b>Кубок октября</b><small>Олимпийская · 2 стола</small></div></div>
     <p class="ph-cap" style="text-align:left;margin:4px 0 8px">Перерыв между партиями — передать можно</p>
-    <div class="scr">${av(3, 'ph lg')}<div><small>Стол 1 · секундант</small><b>Дамир</b></div><span class="btn2">Передать роль</span></div>
+    <div class="scr">${av(3, 'apv lg')}<div><small>Стол 1 · секундант</small><b>Дамир</b></div><span class="btn2">Передать роль</span></div>
     <p class="ph-cap" style="text-align:left;margin:12px 0 8px">Идёт розыгрыш — нельзя</p>
-    <div class="scr">${av(6, 'ph lg')}<div><small>Стол 2 · секундант</small><b>Эльвира</b></div><span class="btn2 off">🔒 Передать</span></div>
+    <div class="scr">${av(6, 'apv lg')}<div><small>Стол 2 · секундант</small><b>Эльвира</b></div><span class="btn2 off">🔒 Передать</span></div>
     <div class="lock">Идёт партия 7:5. Передать роль можно в перерыве или после матча.</div>
     <div class="sheet2"><h4>Кому передать роль секунданта?</h4><p class="hint">Стол 1 · новый секундант сразу продолжит вести счёт с того же места</p>
-      <div class="chips" style="flex-wrap:wrap">${[7, 5, 4, 2].map((i, k) => `<span class="${k === 0 ? 'on' : ''}">${av(i, 'ph')}${esc(nm(i))}</span>`).join('')}</div><div class="ok">Передать Тимуру</div></div>`;
+      <div class="chips" style="flex-wrap:wrap">${[7, 5, 4, 2].map((i, k) => `<span class="${k === 0 ? 'on' : ''}">${av(i, 'apv')}${esc(nm(i))}</span>`).join('')}</div><div class="ok">Передать Тимуру</div></div>`;
 }
 const TABS = [
   { n: '1. Приветствие', note: '<b>Табло: приветствие турнира</b>Когда подключаете табло во время турнира (любого вида) — сначала заставка: название турнира, вид, все участники по очереди «выскакивают». Через несколько секунд — сетка. Внизу переключатель, как заставка выглядит у каждого вида.', v: () => helloTV(), ctl: () => `<button class="${helloK === 'ko' ? '' : 'ghost'}" data-h="ko">Олимпийка</button><button class="${helloK === 'grp' ? '' : 'ghost'}" data-h="grp">Группы</button><button class="${helloK === 'rr' ? '' : 'ghost'}" data-h="rr">Каждый с каждым</button>` },
@@ -344,7 +362,7 @@ const TABS = [
   { n: '4. Каждый с каждым', note: '<b>Табло: каждый с каждым — по-простому</b>Без «шахматки». Слева — места: сколько побед из сыгранных. Справа — какие матчи остались (следующий подсвечен) и последние результаты. Сверху одной строкой правило: каждый играет со всеми.', v: () => rrTV() },
   { n: '5. Длинные ники + низ', note: '<b>Табло: длинные ники и нижняя строка</b>Слева — как сейчас: длинный ник вылезает за рамку. Справа — как станет: шрифт сам уменьшается, а если всё равно не влезает — «…». Внизу участники едут бегущей строкой по кругу и уходят под логотип PONGHUB, который всегда стоит на месте (видно на всех экранах табло).', v: () => nextTV() },
   { sep: 1 },
-  { n: '6. Создание турнира', note: '<b>Приложение: создание турнира — столы и секундант</b>Слева — новый турнир: вид (с объяснением в одну строку), число игровых столов (−/+), секундант на каждый стол из игроков клуба, способ счёта. Справа — во время турнира: роль секунданта можно передать в перерыве между партиями или после матча; во время розыгрыша кнопка заблокирована. <br><br>Выбор «кто подаёт первым» перед матчем в приложении есть и остаётся.', v: () => `<div class="phones"><div><p class="ph-cap">Новый турнир</p><div class="ph"><div class="ph-in">${appCreate()}</div></div></div><div><p class="ph-cap">Передача секунданта</p><div class="ph"><div class="ph-in">${appScorer()}</div></div></div></div>` },
+  { n: '6. Создание турнира', note: '<b>Приложение: создание турнира — столы и секундант</b>Слева — новый турнир: вид (с объяснением в одну строку), число игровых столов (−/+) — пары по столам назначает система после каждой игры, секундант на каждый стол, способ счёта. Посередине — группы: сколько групп и сколько выходят; нечётное число игроков система делит сама (11 → 6 и 5). Справа — во время турнира: роль секунданта можно передать в перерыве между партиями или после матча; во время розыгрыша кнопка заблокирована. <br><br>Выбор «кто подаёт первым» перед матчем в приложении есть и остаётся.', v: () => `<div class="phones"><div><p class="ph-cap">Новый турнир</p><div class="ph"><div class="ph-in">${appCreate()}</div></div></div><div><p class="ph-cap">Если выбраны группы</p><div class="ph"><div class="ph-in">${appGroupsSetup()}</div></div></div><div><p class="ph-cap">Передача секунданта</p><div class="ph"><div class="ph-in">${appScorer()}</div></div></div></div>` },
   { n: '7. Экран турнира', note: '<b>Приложение: экран турнира на телефоне</b>Три вида — три своих экрана. Сверху всегда «Следующий матч» с кнопкой «Начать». Олимпийка — сетка раундами, листается пальцем; группы — карточки групп; круг — таблица и шахматка. Нажимайте «Следующий матч» во вкладке «Олимпийка» — сетка в телефоне обновится так же.', v: () => `<div class="phones"><div><p class="ph-cap">Олимпийка</p><div class="ph"><div class="ph-in">${appKO()}</div></div></div><div><p class="ph-cap">Группы</p><div class="ph"><div class="ph-in">${appGrp()}</div></div></div><div><p class="ph-cap">Каждый с каждым</p><div class="ph"><div class="ph-in">${appRR()}</div></div></div></div>` },
 ];
 let cur = 0;
