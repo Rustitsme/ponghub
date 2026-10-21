@@ -761,6 +761,28 @@ class LocalStore {
       if (a.on_) t.push({ feature: a.fname, user_id: a.uid }); this.save(); return t.filter(x => x.feature === a.fname).length;
     }
     if (name === 'founder_set_grip') { this.needFounder(); this.db.platform.grip = a.p; this.save(); return a.p; }
+    // демо: задания недели и стоп-кадр
+    if (name === 'weekly_tasks') {
+      const me = this.db.session, d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+      const ms = this.db.matches.filter(m => m.club_id === this.cid && m.status === 'approved' && !m.is_test && (m.kind || 'singles') === 'singles' && [m.player1_id, m.player2_id].includes(me) && Date.parse(m.played_at) >= +d).sort((x, y) => Date.parse(x.played_at) - Date.parse(y.played_at));
+      let best = 0, run = 0; const opp = new Set(); let clean = 0;
+      for (const m of ms) { opp.add(m.player1_id === me ? m.player2_id : m.player1_id); const w = m.winner_id === me; if (w && (m.player1_id === me ? m.sets2 : m.sets1) === 0) clean++; run = w ? run + 1 : 0; best = Math.max(best, run); }
+      const wk = d.toISOString().slice(0, 10), claimed = (this.db.task_claims || []).filter(c => c.user_id === me && c.club_id === this.cid && c.week === wk).map(c => c.task);
+      return { week: wk, claimed, tasks: [
+        { key: 'opp3', icon: '🤝', title: 'Сыграй с 3 разными игроками', goal: 3, have: Math.min(opp.size, 3), reward: 100 },
+        { key: 'streak3', icon: '🔥', title: 'Выиграй 3 матча подряд', goal: 3, have: Math.min(best, 3), reward: 150 },
+        { key: 'clean', icon: '💪', title: 'Выиграй матч всухую — не отдав ни одной партии', goal: 1, have: Math.min(clean, 1), reward: 200 },
+        { key: 'play10', icon: '🏓', title: 'Сыграй 10 матчей за неделю', goal: 10, have: Math.min(ms.length, 10), reward: 150 }] };
+    }
+    if (name === 'claim_weekly_task') {
+      const st = await this.rpc('weekly_tasks', { cid: a.cid }), t = st.tasks.find(x => x.key === a.p_task), me = this.db.session;
+      if (!t || t.have < t.goal) throw new Error('Задание ещё не выполнено');
+      if (st.claimed.includes(t.key)) throw new Error('Награда за это задание уже получена');
+      (this.db.task_claims = this.db.task_claims || []).push({ user_id: me, club_id: this.cid, week: st.week, task: t.key });
+      this.tx(me, t.reward, 'task'); this.save(); return this.coinBal(me);
+    }
+    if (name === 'screen_freeze') { const until = a.minutes > 0 ? new Date(Date.now() + a.minutes * 60e3).toISOString() : null; (this.db.screens || []).filter(x => x.club_id === a.cid).forEach(x => { x.frozen_until = until; }); this.save(); return until; }
+    if (name === 'screen_flags') { const sc = (this.db.screens || []).find(x => x.token === a.p_token); return { frozen_until: sc?.frozen_until || null, now: new Date().toISOString() }; }
     if (name === 'set_avatar3d') { const me = this.db.profiles.find(p => p.id === this.db.session); me.avatar3d = a.p; this.save(); return a.p; }
     if (name === 'founder_set_feature') { this.needFounder(); this.db.platform.features = { ...(this.db.platform.features || {}), [a.fname]: a.mode }; this.save(); return this.db.platform.features; }
     const me = this.db.session;

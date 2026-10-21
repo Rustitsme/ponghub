@@ -170,6 +170,8 @@ async function reload() {
   if (isAdmin() && !S.emails.size) S.emails = await S.store.adminEmails();
   if (S.me?.status === 'approved' && feature('shop')) { try { await ensureShop(true); } catch { S.shop = null; } }
   else S.shop = null;
+  // задания недели (за флажком магазина)
+  if (S.me?.status === 'approved' && feature('shop') && S.club) { try { S.tasks = await S.store.rpc('weekly_tasks', { cid: S.club.id }); } catch { S.tasks = null; } } else S.tasks = null;
   if (S.me?.status === 'approved' && predOn() && !S.shop) { try { S.coins = await S.store.rpc('ensure_wallet'); } catch { S.coins = null; } }
   setTimeout(showNews, 600);
 }
@@ -232,7 +234,7 @@ function render() {
   else if (CLUB_FREE[r.name]) html = CLUB_FREE[r.name](r);
   else if (!S.club) html = S.ctx.me.legacy && !S.ctx.platform?.migration_done && !isFounder() ? waitView() : viewClubs(r);
   else {
-    const views = { shop: r => feature('shop') ? viewShop(r) : viewHome(r), racket: () => feature('shop') ? viewRacket() : viewHome(), avatar: r => feature('avatar') ? viewAvatar(r) : viewHome(r), invite: viewInvite, clubedit: viewClubEdit, home: viewHome, rating: viewRating, matches: viewMatches, player: viewPlayer, h2h: viewH2H, tournaments: viewTournaments, tournament: viewTournament, calendar: viewCalendar, admin: viewAdmin, rules: viewRules, me: viewMe, help: viewHelp, seasons: viewSeasons, live: viewLive, inbox: viewInbox, predict: viewPredict };
+    const views = { shop: r => feature('shop') ? viewShop(r) : viewHome(r), racket: () => feature('shop') ? viewRacket() : viewHome(), avatar: r => feature('avatar') ? viewAvatar(r) : viewHome(r), invite: viewInvite, clubedit: viewClubEdit, home: viewHome, rating: viewRating, matches: viewMatches, player: viewPlayer, h2h: viewH2H, tournaments: viewTournaments, tournament: viewTournament, calendar: viewCalendar, admin: viewAdmin, rules: viewRules, me: viewMe, help: viewHelp, seasons: viewSeasons, live: viewLive, inbox: viewInbox, predict: viewPredict, play: viewPlay, tables: viewTables };
     const v = views[r.name] || viewHome;
     html = shell(r, v(r));
   }
@@ -487,6 +489,7 @@ function viewHome() {
   ${mine.length ? `<div class="alert info">⏳ ${mine.length} ${plural(mine.length, 'ваш результат ждёт', 'ваших результата ждут', 'ваших результатов ждут')} подтверждения администратором</div>` : ''}
 
   ${homeRow}
+  ${feature('shop') ? tasksTile() : ''}
   ${liveBlock()}
   ${!showRk && feature('shop') && S.shop && !S.shop.streak.claimed ? `<a href="#/shop?tab=bonus" class="card sh-home"><span class="sh-home-ic">🔥</span><span class="rn"><b>Бонус дня: +${STREAK[S.shop.streak.day - 1]} PC</b><small class="muted">День ${S.shop.streak.day} из 7 — заберите, пока не сгорело</small></span><span class="btn sm primary">Забрать</span></a>` : ''}
   ${predHomeBlock()}
@@ -1125,6 +1128,8 @@ function viewLive(r) {
   const scorer = l.scorer_id === S.me.id;
   // до первого очка счёт не начинается, пока не выбрали, кто подаёт
   const needServe = !log.length && !(S.served || {})[l.id];
+  // пауза в игре: очки не добавляются, на табло — таймер и сетка турнира
+  const paused = livePaused(l);
   const t = l.tournament_id ? tById(l.tournament_id) : null;
   const panel = side => {
     const ids = sideIds(l, side);
@@ -1133,7 +1138,7 @@ function viewLive(r) {
       <div class="lv-who">${ids.map(id => ava(P(id), 'sm')).join('')}<b>${esc(sideName(l, side))}</b>${g.winner === null && g.server === side && !needServe ? '<span class="lv-serve" title="Подаёт">🏓</span>' : ''}</div>
       <div class="lv-pts">${g.cur[side]}</div>
       <div class="lv-sub"><span>партии: <b>${g.won[side]}</b></span>${flag ? `<span class="lv-flag">${flag}</span>` : ''}</div>
-      ${scorer && g.winner === null && !needServe ? `<div class="lv-btns"><button class="btn lv-minus" data-act="live-minus" data-id="${l.id}" data-side="${side}" aria-label="Минус очко">−</button><button class="btn lv-plus" data-act="live-pt" data-id="${l.id}" data-side="${side}">+1</button></div>` : ''}
+      ${scorer && g.winner === null && !needServe && !paused ? `<div class="lv-btns"><button class="btn lv-minus" data-act="live-minus" data-id="${l.id}" data-side="${side}" aria-label="Минус очко">−</button><button class="btn lv-plus" data-act="live-pt" data-id="${l.id}" data-side="${side}">+1</button></div>` : ''}
     </div>`;
   };
   const sets = g.sets.map((x, i) => `<span>П${i + 1} <b>${x[0]}:${x[1]}</b></span>`).join('');
@@ -1143,14 +1148,18 @@ function viewLive(r) {
   const predBar = !ev ? '' : `<div class="card lv-pred">🎯 <span>${myP ? myPredsLine(ev, sd => sideName(l, sd - 1)) : ev.status === 'open' ? `Прогнозы открыты · коэффициенты меняются по ходу игры · уже ${ev.bets_count}` : `Прогнозов: ${ev.bets_count} · приём закрыт`}</span>
     ${!imPlayer && ev.status === 'open' ? `<button class="btn sm primary" data-act="predict" data-id="${ev.id}">${myP ? '+ ещё ' : ''}×${ev.odds1} / ×${ev.odds2}</button>` : ''}</div>`;
   return `<div class="page-h"><a href="#/home" class="back">← Главная</a><span class="live">● LIVE</span></div>
-    <div class="lv-meta">${tableOf(l) ? `Стол ${tableOf(l)} · ` : ''}${l.kind === 'doubles' ? 'Пары 2×2' : t ? '🏆 ' + esc(t.name) : l.type === 'tournament' ? 'Турнирный матч' : 'Свободная игра'} · до ${g.need} ${plural(g.need, 'победы', 'побед', 'побед')} · партия до ${l.points_to}${g.deuce && g.winner === null ? ' · <b>баланс</b>' : ''}</div>
+    <div class="lv-meta">${tableOf(l) || l.table_no ? `Стол ${tableOf(l) || l.table_no} · ` : ''}${l.kind === 'doubles' ? 'Пары 2×2' : t ? '🏆 ' + esc(t.name) : l.type === 'tournament' ? 'Турнирный матч' : 'Свободная игра'} · до ${g.need} ${plural(g.need, 'победы', 'побед', 'побед')} · партия до ${l.points_to}${g.deuce && g.winner === null ? ' · <b>баланс</b>' : ''}</div>
     ${scorer && needServe ? `<div class="card lv-first"><b>🏓 Кто подаёт первым?</b><span class="muted small">Разыграйте подачу и нажмите на того, кто начинает</span><div class="lv-first-btns">${[0, 1].map(sd => `<button class="lv-first-b p${sd}" data-act="live-first" data-id="${l.id}" data-side="${sd}">${sideIds(l, sd).map(id => ava(P(id), 'sm')).join('')}<b>${esc(sideName(l, sd))}</b></button>`).join('')}</div></div>` : ''}
     ${predBar}
+    ${paused ? `<div class="lv-pause"><span class="muted small">⏸ Пауза в игре — на табло показана сетка</span><b data-until="${esc(l.paused_until)}">${pauseLeft(l)}</b>
+      ${scorer ? `<div class="row-btns"><button class="btn ghost" data-act="live-pause" data-id="${l.id}" data-m="1">+1 минута</button><button class="btn primary" data-act="live-resume" data-id="${l.id}">▶ Продолжить</button></div>` : ''}</div>` : ''}
     <div class="lv-board">${panel(0)}<div class="lv-sets-score">${g.won[0]}<i>:</i>${g.won[1]}</div>${panel(1)}</div>
     ${sets ? `<div class="lv-sets">${sets}</div>` : ''}
     ${g.winner !== null ? `<div class="card lv-done"><h3>🏁 Матч окончен</h3><p>Победа: <b>${esc(sideName(l, g.winner))}</b> · ${g.won[0]}:${g.won[1]}</p>
       ${scorer ? `<div class="row-btns"><button class="btn ghost" data-act="live-undo" data-id="${l.id}">↶ Вернуть последнее очко</button><button class="btn primary" data-act="live-save" data-id="${l.id}">Сохранить результат</button></div>` : '<p class="muted small">Счётчик сохранит результат.</p>'}</div>` : ''}
     ${scorer ? `<div class="row-btns lv-tools">${g.winner === null && log.length ? `<button class="btn ghost" data-act="live-undo" data-id="${l.id}">↶ Отменить последнее</button>` : ''}<button class="btn ghost danger" data-act="live-cancel" data-id="${l.id}">Отменить игру</button></div>
+      ${g.winner === null && log.length && !paused ? `<button class="btn full lv-pausebtn" data-act="live-pause" data-id="${l.id}">⏸ Пауза — показать сетку на табло</button>` : ''}
+      ${isAdmin() ? `<button class="btn ghost full" data-act="screen-freeze" data-m="10">📺 Стоп-кадр табло на 10 минут</button>` : ''}
       ${g.winner === null ? (g.cur[0] + g.cur[1] === 0 ? `<button class="btn ghost full" data-act="live-pass" data-id="${l.id}">🔁 Передать роль секунданта</button>` : '<p class="muted small lv-lock">🔒 Передать роль секунданта можно в перерыве между партиями</p>') : ''}`
       : `<div class="card lv-viewer"><span class="muted small">Счёт ведёт ${esc(P(l.scorer_id).nickname)}. Обновляется сам.</span>${isEditor() || l.started_by === S.me.id ? `<button class="btn sm" data-act="live-take" data-id="${l.id}">Взять счёт на себя</button>` : ''}</div>`}`;
 }
@@ -1170,6 +1179,17 @@ function tableScorer(tid) {
   return sc.find(x => x && !busy.has(x)) || sc.find(Boolean) || null;
 }
 const tableOf = l => { const t = l.tournament_id && tById(l.tournament_id); const k = (t?.config?.scorers || []).indexOf(l.scorer_id); return k >= 0 && (t.config.tables || 1) > 1 ? k + 1 : null; };
+
+const livePaused = l => !!(l.paused_until && Date.parse(l.paused_until) > Date.now());
+const pauseLeft = l => { const s = Math.max(0, Math.round((Date.parse(l.paused_until) - Date.now()) / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+// таймеры паузы на экране тикают сами; кончилась пауза — перерисовываем
+setInterval(() => {
+  document.querySelectorAll('[data-until]').forEach(el => {
+    const s = Math.round((Date.parse(el.dataset.until) - Date.now()) / 1000);
+    if (s <= 0) { el.removeAttribute('data-until'); if (!$modal.classList.contains('open')) render(); return; }
+    el.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  });
+}, 1000);
 
 async function saveLive(l, btn) {
   const log = liveLog(l);
@@ -1974,7 +1994,11 @@ async function renderScreens() {
   try {
     const list = await S.store.listScreens(S.club.id);
     if (!box.isConnected) return;
-    box.innerHTML = `<div class="card-h"><h3>Подключённые табло</h3></div>` + (list.length ? list.map(s => {
+    const fr = list.map(s => s.frozen_until).filter(x => x && Date.parse(x) > Date.now()).sort().pop();
+    const freezeBox = list.length ? `<div class="tv-freeze ${fr ? 'on' : ''}"><div><b>${fr ? '⏸ Стоп-кадр включён' : '📺 Стоп-кадр табло'}</b><small class="muted">${fr ? `табло ничего не меняет на экране · ещё <span data-until="${esc(fr)}">${pauseLeft({ paused_until: fr })}</span>` : 'табло замрёт на текущей картинке — ничего не переключит и не обновит'}</small></div>
+      ${fr ? '<button class="btn primary" data-act="screen-freeze" data-m="0">▶ Продолжить показ</button>' : '<div class="row-btns"><button class="btn sm" data-act="screen-freeze" data-m="5">5 мин</button><button class="btn sm" data-act="screen-freeze" data-m="15">15 мин</button><button class="btn sm" data-act="screen-freeze" data-m="60">1 час</button></div>'}</div>
+      <a href="#/tables" class="btn ghost full">🖨 Наклейки с QR для столов</a>` : '';
+    box.innerHTML = freezeBox + `<div class="card-h"><h3>Подключённые табло</h3></div>` + (list.length ? list.map(s => {
       const online = s.last_seen && Date.now() - Date.parse(s.last_seen) < 3 * 60e3;
       return `<div class="pl-row"><div class="pl-top"><span class="tv-ic">📺</span><span class="rn"><b>${esc(s.name)}</b><small class="muted">${online ? '🟢 в сети' : s.last_seen ? '⚪ не в сети · был ' + fmtDT(s.last_seen) : '⚪ ещё не выходило в сеть'}</small></span></div>
         <div class="pl-ctl"><label class="init">Фон<select data-act-change="screen-theme" data-id="${s.id}">${TV_THEMES.map(([k, l]) => `<option value="${k}" ${s.theme === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
@@ -2326,11 +2350,28 @@ function mountRacket() {
 }
 
 // ── бонусы и награды за лиги ──
+// задания недели: прогресс считает сервер по подтверждённым матчам
+function tasksCard() {
+  const W = S.tasks; if (!W) return '';
+  const done = t => t.have >= t.goal, got = t => (W.claimed || []).includes(t.key);
+  const ready = W.tasks.filter(t => done(t) && !got(t)).length, total = W.tasks.reduce((a, t) => a + t.reward, 0);
+  const left = Math.max(0, 7 - ((new Date().getDay() + 6) % 7));
+  return `<section class="card wt"><div class="card-h"><h3>🎯 Задания недели</h3><small class="muted">до ${total} PC · обновятся через ${left} ${plural(left, 'день', 'дня', 'дней')}</small></div>
+    ${W.tasks.map(t => `<div class="wt-q ${got(t) ? 'got' : done(t) ? 'done' : ''}"><span class="wt-ic">${t.icon}</span><div><b>${esc(t.title)}</b><small>${t.have} из ${t.goal}</small><div class="wt-bar"><i style="width:${Math.round(t.have / t.goal * 100)}%"></i></div></div>
+      <div class="wt-rw">+${t.reward}${got(t) ? '<span class="muted">✓ получено</span>' : done(t) ? `<button class="btn xs primary" data-act="task-claim" data-k="${t.key}">Забрать</button>` : '<span class="muted">в процессе</span>'}</div></div>`).join('')}
+    ${ready ? '' : '<p class="muted small">Задания проверяются по подтверждённым матчам клуба.</p>'}</section>`;
+}
+function tasksTile() {
+  const W = S.tasks; if (!W) return '';
+  const n = W.tasks.filter(t => t.have >= t.goal).length, ready = W.tasks.filter(t => t.have >= t.goal && !(W.claimed || []).includes(t.key));
+  return `<a href="#/shop?tab=bonus" class="wt-tile"><span>🎯</span><div><b>Задания недели</b><small>${n} из ${W.tasks.length}${ready.length ? ` · можно забрать +${ready.reduce((a, t) => a + t.reward, 0)} PC` : ''}</small><div class="wt-bar"><i style="width:${n / W.tasks.length * 100}%"></i></div></div>${ready.length ? '<em>Забрать</em>' : '<em class="off">→</em>'}</a>`;
+}
+
 function bonusBody() {
   const sk = S.shop.streak, d = sk.day;
   const r = ratingOf(S.me.id);
   const LG = { silver: LEAGUES[1], gold: LEAGUES[2], platinum: LEAGUES[3], diamond: LEAGUES[4] };
-  return `<section class="card sh-streak-card"><div class="card-h"><h3>🔥 Серия: день ${d} из 7</h3></div>
+  return `${tasksCard()}<section class="card sh-streak-card"><div class="card-h"><h3>🔥 Серия: день ${d} из 7</h3></div>
       <p class="muted small">Заходите каждый день — бонус растёт до 120 PC. После 7-го дня серия начинается заново. Пропустили день — тоже с начала.</p>
       <div class="sh-streak">${STREAK.map((v, i) => { const n = i + 1, got = n < d || (n === d && sk.claimed), today = n === d && !sk.claimed; return `<div class="sh-day ${got ? 'got' : today ? 'today' : ''}">День ${n}<b>${v}</b>${got ? '✓' : today ? 'сегодня' : 'PC'}</div>`; }).join('')}</div>
       <button class="btn primary full" data-act="sh-claim" ${sk.claimed ? 'disabled' : ''}>${sk.claimed ? 'Получено — приходите завтра' : `Забрать ${STREAK[d - 1]} PC`}</button></section>
@@ -2481,6 +2522,47 @@ async function mountHome3D() {
       ctl.resize();
     }
   } catch { /* без 3D главная работает как обычно */ }
+}
+
+// ───────────── Быстрый старт по QR на столе ─────────────
+// ссылка из QR: #/play/<клуб>/<стол>. Выбрал соперника — игра началась, стол известен.
+const PLAY = { opp: null, bestOf: 5 };
+function viewPlay(r) {
+  const [cid, no] = r.args, n = Math.max(1, +no || 1);
+  if (cid && S.club?.id !== cid) {
+    if ((S.ctx?.clubs || []).some(c => c.id === cid && c.my_status === 'active')) { setTimeout(() => switchClub(cid), 0); return '<div class="empty"><span class="spin"></span></div>'; }
+    return `<div class="empty">Этот стол принадлежит клубу, в котором вас нет. <a href="#/clubs" class="link">Найти клуб →</a></div>`;
+  }
+  const me = S.me, busyT = S.data.live.find(l => l.status === 'live' && l.table_no === n);
+  // сверху — с кем играли недавно, дальше — по рейтингу
+  const recent = [...new Set(S.data.matches.filter(m => players(m).includes(me.id)).sort((a, b) => ts(b) - ts(a)).flatMap(m => players(m)).filter(id => id !== me.id))];
+  const others = S.rank.map(x => x.p.id).filter(id => id !== me.id && !recent.includes(id));
+  const list = [...recent, ...others].map(id => P(id)).filter(p => p && p.id);
+  return `<div class="page-h"><h1>Игра за столом ${n}</h1></div>
+    <p class="muted small">${esc(S.club?.name || '')} · ${busyT ? `<b class="down">за столом уже идёт игра: ${esc(sideName(busyT, 0))} — ${esc(sideName(busyT, 1))}</b>` : 'стол свободен ✓'}</p>
+    <section class="card pq-me">${ava(me, 'md')}<div><b>Вы — ${esc(me.nickname)}</b><small class="muted">рейтинг ${fmtR(ratingOf(me.id))}</small></div></section>
+    <div class="tf-lbl">С кем играете?</div>
+    <div class="pq-list">${list.map(p => `<button class="pq-p ${PLAY.opp === p.id ? 'on' : ''}" data-act="pq-opp" data-id="${p.id}">${ava(p, 'sm')}<b>${esc(p.nickname)}</b><small>${recent.includes(p.id) ? 'играли недавно' : fmtR(ratingOf(p.id))}</small></button>`).join('')}</div>
+    <div class="tf-lbl">Играем до</div>
+    <div class="seg">${[[3, '2 побед'], [5, '3 побед'], [7, '4 побед']].map(([v, t]) => `<button data-act="pq-bo" data-v="${v}" class="${PLAY.bestOf === v ? 'on' : ''}">${t}</button>`).join('')}</div>
+    <div class="pq-go"><button class="btn primary big full" data-act="pq-start" data-t="${n}" data-s="1" ${PLAY.opp ? '' : 'disabled'}>▶ Начать — вести счёт</button>
+      <button class="btn full" data-act="pq-start" data-t="${n}" data-s="0" ${PLAY.opp ? '' : 'disabled'}>⏱ Начать — счёт в конце</button></div>`;
+}
+// наклейки с QR для столов (печать)
+function viewTables() {
+  if (!isAdmin()) return '<div class="empty">Только для владельца клуба</div>';
+  const n = Math.max(1, Math.min(8, +(lsGet('ponghub_tables') || 1)));
+  return `<div class="page-h"><a href="#/admin/screens" class="back">← Табло</a></div><h1 class="no-print">Наклейки для столов</h1>
+    <p class="muted small no-print">Распечатайте и наклейте на стол. Игрок наводит камеру — и сразу открывается «Игра за столом» с выбором соперника.</p>
+    <div class="row-btns no-print"><span>Столов:</span><button class="btn sm" data-act="tb-n" data-v="${n - 1}">−</button><b>${n}</b><button class="btn sm" data-act="tb-n" data-v="${n + 1}">+</button><button class="btn primary sm" onclick="window.print()">🖨 Печать</button></div>
+    <div class="qr-stickers">${Array.from({ length: n }, (_, k) => `<div class="qr-st"><div class="qr-lg">🏓</div><b>Стол ${k + 1}</b><span>${esc(S.club?.name || '')}</span><div class="qr-img" data-qr="${esc(`${location.origin}${location.pathname}#/play/${S.club.id}/${k + 1}`)}"></div><span>Наведи камеру — и играй</span><em>PONGHUB</em></div>`).join('')}</div>`;
+}
+async function mountStickers() {
+  const els = [...document.querySelectorAll('[data-qr]')]; if (!els.length) return;
+  try {
+    if (!window.qrcode) await new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js'; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc); });
+    els.forEach(el => { const q = window.qrcode(0, 'M'); q.addData(el.dataset.qr); q.make(); el.innerHTML = q.createSvgTag({ cellSize: 4, margin: 1, scalable: true }); });
+  } catch { els.forEach(el => { el.textContent = 'нет связи'; }); }
 }
 
 // ───────────── Админка ─────────────
@@ -3083,7 +3165,13 @@ const ACT = {
   close: () => closeModal(),
   go: el => go(el.dataset.href),
   refresh: el => busy(el, refresh),
-  'live-pt': el => { const l = S.data.live.find(x => x.id === el.dataset.id); const log = liveLog(l); if (replayLive(log, l.best_of, l.points_to, l.first_server).winner === null) pushLive(l, [...log, +el.dataset.side]); },
+  'live-pause': el => busy(el, async () => {
+    const l = S.data.live.find(x => x.id === el.dataset.id); if (!l) return;
+    const from = livePaused(l) && el.dataset.m ? Date.parse(l.paused_until) : Date.now();
+    await S.store.update('live_matches', l.id, { paused_until: new Date(from + 60e3).toISOString() }); await refresh();
+  }),
+  'live-resume': el => busy(el, async () => { await S.store.update('live_matches', el.dataset.id, { paused_until: null }); await refresh(); }),
+  'live-pt': el => { const l = S.data.live.find(x => x.id === el.dataset.id); if (livePaused(l)) return toast('Пауза — сначала «Продолжить»', 'warn'); const log = liveLog(l); if (replayLive(log, l.best_of, l.points_to, l.first_server).winner === null) pushLive(l, [...log, +el.dataset.side]); },
   'live-minus': el => {
     const l = S.data.live.find(x => x.id === el.dataset.id); const log = [...liveLog(l)]; const side = +el.dataset.side;
     // убираем последнее очко этой стороны в текущей партии
@@ -3111,6 +3199,27 @@ const ACT = {
       }));
     });
   },
+  'task-claim': el => busy(el, async () => {
+    S.coins = await S.store.rpc('claim_weekly_task', { cid: S.club.id, p_task: el.dataset.k });
+    if (S.shop) S.shop.balance = S.coins;
+    S.tasks = await S.store.rpc('weekly_tasks', { cid: S.club.id }); render(); toast('Награда получена 🎯');
+  }),
+  'pq-opp': el => { PLAY.opp = el.dataset.id; render(); },
+  'pq-bo': el => { PLAY.bestOf = +el.dataset.v; render(); },
+  'tb-n': el => { lsSet('ponghub_tables', String(Math.max(1, Math.min(8, +el.dataset.v)))); render(); },
+  'pq-start': el => busy(el, async () => {
+    if (!PLAY.opp) throw new Error('Выберите соперника');
+    const row = { kind: 'singles', type: 'free', player1_id: S.me.id, player2_id: PLAY.opp, player3_id: null, player4_id: null, best_of: PLAY.bestOf, points_to: 11, rated: true,
+      tournament_id: null, stage: null, grp: null, round: null, slot: null, challenge_id: null, first_server: 0, log: [], status: 'live', scorer_id: S.me.id, started_by: S.me.id,
+      scoring: el.dataset.s === '1', table_no: +el.dataset.t, ...testFlag() };
+    const l = await S.store.insert('live_matches', row);
+    if (predOn()) await S.store.rpc('create_pred_event', { src: 'live', src_id: l.id, chance: chanceFor(row) }).catch(() => {});
+    PLAY.opp = null; await refresh(); go(`#/live/${l.id}`);
+  }),
+  'screen-freeze': el => busy(el, async () => {
+    const m = +el.dataset.m; await S.store.rpc('screen_freeze', { cid: S.club.id, minutes: m });
+    toast(m ? `Табло замерло на ${m} мин ⏸` : 'Табло снова показывает всё ▶'); renderScreens();
+  }),
   'live-take': el => busy(el, async () => { await S.store.update('live_matches', el.dataset.id, { scorer_id: S.me.id }); await refresh(); toast('Теперь счёт ведёте вы'); }),
   'live-cancel': async el => {
     if (!(await confirmDialog('Отменить игру? Счёт не сохранится.', 'Отменить игру', true))) return;
@@ -3505,6 +3614,7 @@ function afterRender(r) {
   if (r.name === 'player' && feature('shop')) { ensureThree(); mountPlayerRackets(); }
   if (r.name === 'avatar' && feature('avatar')) mountAvatarView(r);
   if (r.name === 'home') mountHome3D();
+  if (r.name === 'tables') mountStickers();
   if (document.getElementById('dir-box')) renderDirectory(document.querySelector('[data-input=dir-search]')?.value || '');
   if (document.getElementById('pick-map')) mountPickMap();
   if (r.name === 'invite') renderInvite();

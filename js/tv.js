@@ -47,6 +47,10 @@ export async function startTV(root, store) {
     try {
       await ensureToken();
       const needFull = !T.full || Date.now() - T.fullAt > FULL_EVERY;
+      // стоп-кадр: табло замирает на текущей картинке — ничего не перерисовываем и не показываем
+      try { const fl = await store.rpc('screen_flags', { p_token: T.token }); T.frozen = !!(fl?.frozen_until && Date.parse(fl.frozen_until) > Date.parse(fl.now)); } catch { T.frozen = false; }
+      root.classList.toggle('tvx-frozen', T.frozen);
+      if (T.frozen && T.data) return;
       let d = await store.rpc('screen_state', { p_token: T.token, p_full: needFull });
       if (d.status === 'unknown') { T.token = null; lsSet(LS, ''); return; }
       // закончилась или началась игра — сразу обновляем рейтинг и сетку
@@ -328,8 +332,32 @@ export async function startTV(root, store) {
       <div class="tvx-bm"><div class="tbd" style="font-style:normal">Полуфинал 2</div>${who(1, 0)}${who(0, 1)}</div>
       <div class="tvx-bm"><div class="tbd" style="font-style:normal">Финал</div><div class="tbd">победитель полуфинала 1</div><div class="tbd">победитель полуфинала 2</div></div></div>`;
   }
-  function breakScreen() {
-    const active = activeTour();
+  const isPaused = l => l.paused_until && Date.parse(l.paused_until) > Date.parse(T.data.now);
+  // пауза в игре: крупный таймер (идёт сам, без перерисовки) и сетка турнира, если игра турнирная
+  function pauseScreen(l) {
+    const g = replayLive(l.log || [], l.best_of, l.points_to, l.first_server);
+    const left = Math.max(0, Math.round((Date.parse(l.paused_until) - Date.parse(T.data.now)) / 1000));
+    T.pauseEnd = Date.now() + left * 1000;
+    const t = l.tournament_id ? activeTour() : null;
+    let grid = '';
+    if (t && t.id === l.tournament_id) { const b = tourBody(t); grid = `<div class="tvx-pgrid">${b.left}</div>`; }
+    return `<section class="tvx-scr">${top(crumbFor(l), '<div class="tvx-tag">Пауза</div>')}
+      <div class="tvx-pause ${grid ? '' : 'solo'}"><div class="tvx-pbig"><b>⏸ ПАУЗА</b><strong class="tvx-ptime">${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}</strong>
+        <small>${esc(sideName(l, 0))} — ${esc(sideName(l, 1))} · ${g.cur[0]}:${g.cur[1]} в партии ${g.sets.length + 1} · по партиям ${g.won[0]}:${g.won[1]}</small></div>${grid}</div>${foot()}</section>`;
+  }
+  function breakScreen() { return breakFrom(activeTour()); }
+  function tourBody(active) { const r = breakParts(active); return r; }
+  function breakFrom(active) {
+    const p = breakParts(active), { left, title, sub, wide, nx } = p;
+    if (wide) {
+      const nxLine = nx ? `<div class="tvx-nxline"><small>Следом за этим столом</small><b>${esc(P(nx.a).nickname)}</b><em>—</em><b>${esc(P(nx.b).nickname)}</b><span>${esc(nx.note)}</span></div>` : '';
+      return `<section class="tvx-scr">${top(`${title} · ${sub}`, '<div class="tvx-tag">Перерыв</div>')}<div class="tvx-wide">${nxLine}${left}</div>${foot()}</section>`;
+    }
+    const right = nx ? `<div class="tvx-next"><small>Следом за этим столом</small>${fitNick(P(nx.a).nickname)}<em>—</em>${fitNick(P(nx.b).nickname)}<span>${esc(nx.note)}</span></div>`
+      : `<div class="tvx-next">${qrCard()}</div>`;
+    return `<section class="tvx-scr">${top(`${title} · ${sub}`, '<div class="tvx-tag">Перерыв</div>')}<div class="tvx-brk"><div class="tvx-left">${left}</div>${right}</div>${foot()}</section>`;
+  }
+  function breakParts(active) {
     const nx = nextPairs()[0];
     let left, title, sub, wide = false;
     if (active) {
@@ -363,13 +391,7 @@ export async function startTV(root, store) {
       }).join('') || '<li class="tvx-muted">Матчей пока нет</li>'}</ol></div>
         <div class="tvx-card tvx-list"><h4>Рейтинг клуба</h4><ol>${(T.rank || []).slice(0, 6).map((x, i) => `<li>${i < 3 ? ['🥇', '🥈', '🥉'][i] : (i + 1) + '.'} ${esc(x.p.nickname)}<span>${fmtR(x.r)}</span></li>`).join('')}</ol></div></div>`;
     }
-    if (wide) {
-      const nxLine = nx ? `<div class="tvx-nxline"><small>Следом за этим столом</small><b>${esc(P(nx.a).nickname)}</b><em>—</em><b>${esc(P(nx.b).nickname)}</b><span>${esc(nx.note)}</span></div>` : '';
-      return `<section class="tvx-scr">${top(`${title} · ${sub}`, '<div class="tvx-tag">Перерыв</div>')}<div class="tvx-wide">${nxLine}${left}</div>${foot()}</section>`;
-    }
-    const right = nx ? `<div class="tvx-next"><small>Следом за этим столом</small>${fitNick(P(nx.a).nickname)}<em>—</em>${fitNick(P(nx.b).nickname)}<span>${esc(nx.note)}</span></div>`
-      : `<div class="tvx-next">${qrCard()}</div>`;
-    return `<section class="tvx-scr">${top(`${title} · ${sub}`, '<div class="tvx-tag">Перерыв</div>')}<div class="tvx-brk"><div class="tvx-left">${left}</div>${right}</div>${foot()}</section>`;
+    return { left, title, sub, wide, nx };
   }
   // приветствие турнира: показывается при подключении табло и когда начинается новый турнир
   function welcomeScreen(t) {
@@ -399,6 +421,7 @@ export async function startTV(root, store) {
     const tw = activeTour();
     if (tw && T.welcomed !== tw.id && !live.length) { T.welcomed = tw.id; T.welcomeUntil = Date.now() + WELCOME; }
     if (tw && !live.length && Date.now() < (T.welcomeUntil || 0)) html = welcomeScreen(tw);
+    else if (live.some(isPaused)) html = pauseScreen(live.find(isPaused));
     else if (live.length) {
       if (Date.now() - T.rotAt > ROTATE) { T.rot++; T.rotAt = Date.now(); }
       html = liveScreen(live[T.rot % live.length]);
@@ -438,4 +461,6 @@ export async function startTV(root, store) {
   await tick();
   setInterval(tick, POLL);
   setInterval(() => { const c = box.querySelector('.tvx-clock'); if (c) c.textContent = clock(); }, 15000);
+  // таймер паузы идёт сам, раз в секунду
+  setInterval(() => { const el = box.querySelector('.tvx-ptime'); if (!el || !T.pauseEnd) return; const left = Math.max(0, Math.round((T.pauseEnd - Date.now()) / 1000)); el.textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`; }, 1000);
 }
