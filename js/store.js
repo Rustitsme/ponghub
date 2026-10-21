@@ -781,7 +781,6 @@ class LocalStore {
       if (e.closes_at && Date.now() > Date.parse(e.closes_at)) { e.status = 'closed'; this.save(); throw new Error('Время приёма прогнозов вышло'); }
       if ([e.player1_id, e.player2_id, e.player3_id, e.player4_id].includes(me)) throw new Error('На свой матч прогноз сделать нельзя');
       if (e.source === 'live') { const l = (this.db.live_matches || []).find(x => x.id === e.source_id); if (!l || l.status !== 'live' || (l.log || []).length) { e.status = 'closed'; this.save(); throw new Error('Игра уже началась — приём прогнозов закрыт'); } }
-      if (this.db.predictions.some(p => p.event_id === e.id && p.user_id === me)) throw new Error('Вы уже сделали прогноз на этот матч');
       const min = this.predSetting('predMin', 10), max = this.predSetting('predMax', 300);
       if (a.amount < min || a.amount > max) throw new Error(`Ставка от ${min} до ${max} PC`);
       await this.rpc('ensure_wallet');

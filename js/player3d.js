@@ -449,13 +449,14 @@ export async function mountAvatar(el, opts = {}) {
 const tvCss = `.p3-ov{position:absolute;inset:0;z-index:50;overflow:hidden;background:radial-gradient(90% 80% at 50% 10%,#1b3d73 0%,#0b1a33 55%,#050b17 100%);color:#fff;opacity:0;transition:opacity .6s}
 .p3-ov.on{opacity:1}.p3-ov canvas{position:absolute;inset:0;width:100%;height:100%}
 .p3-names{position:absolute;inset:0;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 5%;font:800 clamp(28px,6.5vw,110px)/1 "Barlow Condensed","Arial Narrow",sans-serif;text-transform:uppercase;transition:opacity .5s}
+.p3-names .a,.p3-names .b{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .p3-names .a{color:#ff6b75;transform:translateX(-120%);transition:transform .7s cubic-bezier(.2,.9,.2,1);text-shadow:0 6px 30px rgba(230,57,70,.6)}
 .p3-names .b{color:#6fb0ff;text-align:right;transform:translateX(120%);transition:transform .7s cubic-bezier(.2,.9,.2,1);text-shadow:0 6px 30px rgba(47,125,225,.6)}
 .p3-names .vs{font-size:.6em;color:#ffd75e;opacity:0;transform:scale(2.4);transition:all .5s .45s}
 .p3-names.in .a,.p3-names.in .b{transform:none}.p3-names.in .vs{opacity:1;transform:none}
 .p3-card{position:absolute;bottom:12%;width:26%;padding:1.6% 2%;border-radius:1vw;background:rgba(8,18,38,.8);border:1px solid rgba(255,255,255,.15);opacity:0;transition:opacity .45s,transform .45s;font-size:clamp(12px,1.5vw,26px)}
 .p3-card.l{left:6%;transform:translateX(-20px);border-left:5px solid #e63946}.p3-card.r{right:6%;transform:translateX(20px);border-right:5px solid #2f7de1;text-align:right}
-.p3-card.on{opacity:1;transform:none}.p3-card b{display:block;font:800 2.2em/1 "Barlow Condensed","Arial Narrow",sans-serif;text-transform:uppercase}
+.p3-card.on{opacity:1;transform:none}.p3-card b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font:800 2.2em/1 "Barlow Condensed","Arial Narrow",sans-serif;text-transform:uppercase}
 .p3-card .lg{display:inline-block;margin:.5em 0 .3em;padding:.15em .7em;border-radius:999px;background:rgba(255,255,255,.14);font-weight:800}
 .p3-card .rk{opacity:.85;margin-top:.3em}
 .p3-ava{width:4.2em;height:4.2em;border-radius:50%;overflow:hidden;display:grid;place-items:center;font-size:1.6em;background:rgba(255,255,255,.12);border:3px solid rgba(255,255,255,.35);margin-bottom:.4em}.p3-card.r .p3-ava{margin-left:auto}.p3-ava img{width:100%;height:100%;object-fit:cover}
@@ -534,17 +535,26 @@ export async function tvIntro(root, { A, B, grip, cue = () => {} }) {
     S.cam.position.copy(lerp3(from.pos, to.pos, k)); S.cam.lookAt(lerp3(from.look, to.look, k));
     PA.lookAt = PB.lookAt = t > 4 ? S.cam.position : null;
   };
+  // весь сценарий идёт по тем же часам, что и анимация: если телевизор притормаживает — всё замедляется вместе, без рассинхрона
+  const steps = [
+    [.05, () => { names.classList.add('in'); cue('names'); }],
+    [1.5, () => { names.style.opacity = 0; cue('walk'); }],
+    [4.9, () => PA.play('wave', true)],              // первый машет на своём крупном плане
+    [5.3, () => { cA.classList.add('on'); cue('cardA'); }],
+    [7.0, () => cA.classList.remove('on')],
+    [7.5, () => PB.play('wave', true)],              // второй — на своём
+    [7.9, () => { cB.classList.add('on'); cue('cardB'); }],
+    [9.6, () => cB.classList.remove('on')],
+    [10.6, () => { PA.play('clap', true); PB.play('clap', true); cue('go'); }],
+  ];
+  const END = 12.3;
+  let done; const finished = new Promise(r => { done = r; });
+  const move = S.frame;
+  S.frame = dt => { move(dt); while (steps.length && t >= steps[0][0]) steps.shift()[1](); if (t >= END && done) { done(); done = null; } };
+  // длинные ники в заставке: шрифт уменьшается, пока ник не влезет
+  S.ov.querySelectorAll('.p3-names .a, .p3-names .b').forEach(el => { let f = parseFloat(getComputedStyle(el).fontSize); while (el.scrollWidth > el.clientWidth + 1 && f > 14) { f -= 2; el.style.fontSize = f + 'px'; } });
   requestAnimationFrame(() => S.ov.classList.add('on'));
-  await wait(80); names.classList.add('in'); cue('names');
-  await wait(1400); names.style.opacity = 0; cue('walk');
-  await wait(2900); PA.play('wave', true);
-  await wait(300); PB.play('wave', true);
-  await wait(1000); cA.classList.add('on'); cue('cardA');
-  await wait(1600); cA.classList.remove('on');
-  await wait(900); cB.classList.add('on'); cue('cardB');
-  await wait(1600); cB.classList.remove('on');
-  await wait(700); PA.play('clap', true); PB.play('clap', true); cue('go');
-  await wait(1500);
+  await finished;
   await S.end();
 }
 

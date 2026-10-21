@@ -911,12 +911,16 @@ function chanceFor(r) {
 const evName = (e, side) => (side === 1 ? [e.player1_id, e.player3_id] : [e.player2_id, e.player4_id]).filter(Boolean).map(id => P(id).nickname).join(' + ');
 const evPlayers = e => [e.player1_id, e.player2_id, e.player3_id, e.player4_id].filter(Boolean);
 const myPred = e => S.data.predictions.find(p => p.event_id === e.id && p.user_id === S.me.id);
+// все мои прогнозы на матч (их может быть несколько — на любого из игроков)
+const myPreds = e => S.data.predictions.filter(p => p.event_id === e.id && p.user_id === S.me.id);
+const myPredsLine = (e, name) => { const m = myPreds(e); if (!m.length) return ''; return `Ваши прогнозы: ${m.map(p => `<b>${esc(name(p.side))}</b> ${p.stake} × ${p.odds}`).join(' · ')}`; };
 
 function predRow(e) {
   const my = myPred(e), mine = evPlayers(e).includes(S.me.id);
-  const right = my ? `<span class="pr-my">ваш: ${esc(evName(e, my.side))} · ${my.stake}</span>`
-    : mine ? '<span class="muted small">ваш матч</span>'
-      : evOpen(e) ? `<button class="btn sm primary" data-act="predict" data-id="${e.id}">Прогноз</button>` : '<span class="muted small">приём закрыт</span>';
+  const mineBets = myPreds(e);
+  const right = mine ? '<span class="muted small">ваш матч</span>'
+    : evOpen(e) ? `${mineBets.length ? `<span class="pr-my">ваших: ${mineBets.length}</span>` : ''}<button class="btn sm primary" data-act="predict" data-id="${e.id}">${mineBets.length ? '+ ещё' : 'Прогноз'}</button>`
+      : my ? `<span class="pr-my">ваш: ${esc(evName(e, my.side))} · ${my.stake}</span>` : '<span class="muted small">приём закрыт</span>';
   return `<div class="pr-row"><div class="rn"><b>${esc(evName(e, 1))} <span class="muted">×${e.odds1}</span></b><b>${esc(evName(e, 2))} <span class="muted">×${e.odds2}</span></b>
     <small class="muted">${e.source === 'live' ? (e.closes_at ? `● игра идёт · приём ещё ${evLeft(e)} мин` : '● идёт к столу') : '⚔️ вызов принят'} · прогнозов: ${e.bets_count}</small></div>${right}</div>`;
 }
@@ -938,21 +942,24 @@ function openPredict(eid) {
   const bal = S.coins ?? 0;
   const st = { side: e.chance1 >= 0.5 ? 1 : 2, stake: Math.min(100, bal, max) };
   const draw = sh => {
+    const fresh = S.data.predEvents.find(x => x.id === eid); if (fresh) Object.assign(e, fresh);
     const odds = st.side === 1 ? e.odds1 : e.odds2;
     sh.querySelector('.pd-body').innerHTML = `<h3>🎯 Прогноз на матч</h3>
       <div class="pd-vs"><div><b>${esc(evName(e, 1))}</b><small>${pct(e.chance1)}</small></div><span>vs</span><div><b>${esc(evName(e, 2))}</b><small>${pct(1 - e.chance1)}</small></div></div>
       <div class="pd-bar"><i style="width:${e.chance1 * 100}%"></i></div>
-      <small class="muted">Шансы по рейтингу. Чем меньше шанс — тем выше коэффициент.</small>
+      <small class="muted">${e.source === 'live' ? '● Коэффициенты меняются по ходу игры — ставка фиксируется по текущему.' : 'Шансы по рейтингу. Чем меньше шанс — тем выше коэффициент.'}</small>
       <div class="pd-sides">${[1, 2].map(sd => `<button type="button" class="pd-side s${sd} ${st.side === sd ? 'on' : ''}" data-side="${sd}"><span>${esc(evName(e, sd))}</span><b>×${sd === 1 ? e.odds1 : e.odds2}</b></button>`).join('')}</div>
       <div class="pd-stakes">${[min, 50, 100, 250, max].filter((v, i, a) => v >= min && v <= max && a.indexOf(v) === i).map(v => `<button type="button" class="chip ${st.stake === v ? 'on' : ''}" data-stake="${v}">${v}</button>`).join('')}
         <input type="number" min="${min}" max="${max}" value="${st.stake}" class="pd-input" aria-label="Своя сумма"></div>
       <div class="pd-sum">Ставка <b>${st.stake} PC</b> · выигрыш <b class="up">${Math.round(st.stake * odds)} PC</b><small class="muted">На счёте: ${fmtC(bal)} PC</small></div>
       <div class="mf-err"></div>
       <button class="btn primary big" data-go="1">Поставить на ${esc(evName(e, st.side))}</button>
-      <small class="muted center">Прогноз нельзя отменить. Баллы не влияют на рейтинг.</small>`;
+      <small class="muted center">Сделанный прогноз нельзя изменить или отменить — можно поставить ещё, на любого игрока. Баллы не влияют на рейтинг.</small>`;
   };
   openModal('<div class="pd-body stack"></div>', sh => {
     draw(sh);
+    // пришли новые данные (очко в игре) — обновляем коэффициенты прямо в окне
+    S.modalRefresh = () => { if (sh.isConnected) { const ae = document.activeElement; if (!(ae && ae.classList.contains('pd-input'))) draw(sh); } else S.modalRefresh = null; };
     sh.addEventListener('click', async ev => {
       const sd = ev.target.closest('[data-side]'); if (sd) { st.side = +sd.dataset.side; return draw(sh); }
       const sk = ev.target.closest('[data-stake]'); if (sk) { st.stake = +sk.dataset.stake; return draw(sh); }
@@ -1083,7 +1090,10 @@ function liveBlock() {
 }
 
 const minsAgo = iso => Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 60000));
-const evOpen = e => e && e.status === 'open' && (!e.closes_at || Date.now() < Date.parse(e.closes_at));
+// приём открыт, пока жив сам матч: игра ещё идёт / вызов принят и не сыгран
+const evAlive = e => e.source === 'live' ? S.data.live.some(l => l.id === e.source_id && l.status === 'live')
+  : e.source === 'challenge' ? S.data.challenges.some(c => c.id === e.source_id && c.status === 'accepted' && !c.match_id) : true;
+const evOpen = e => e && e.status === 'open' && (!e.closes_at || Date.now() < Date.parse(e.closes_at)) && evAlive(e);
 const evLeft = e => (e?.closes_at ? Math.max(0, Math.ceil((Date.parse(e.closes_at) - Date.now()) / 60000)) : null);
 
 function viewLiveNoScore(l) {
@@ -1091,7 +1101,7 @@ function viewLiveNoScore(l) {
   const ids = [l.player1_id, l.player2_id, l.player3_id, l.player4_id];
   const imPlayer = ids.includes(S.me.id);
   const canFinish = imPlayer || l.started_by === S.me.id || isAdmin();
-  const myP = ev && S.data.predictions.find(p => p.event_id === ev.id);
+  const myP = ev && myPreds(ev)[0];
   const t = l.tournament_id ? tById(l.tournament_id) : null;
   const card = side => `<div class="lv-panel p${side}"><div class="lv-who">${sideIds(l, side).map(id => ava(P(id), 'sm')).join('')}<b>${esc(sideName(l, side))}</b></div></div>`;
   const need = winsNeeded(l.best_of);
@@ -1099,8 +1109,8 @@ function viewLiveNoScore(l) {
     <div class="lv-meta">${l.kind === 'doubles' ? 'Пары 2×2' : t ? '🏆 ' + esc(t.name) : 'Свободная игра'} · до ${need} ${plural(need, 'победы', 'побед', 'побед')} · партия до ${l.points_to}</div>
     <div class="lv-board">${card(0)}<div class="lv-sets-score ns">⏱ ${minsAgo(l.created_at)} мин</div>${card(1)}</div>
     <div class="card ns-info">Игра идёт без ведения счёта. Итоговый счёт внесут после игры.</div>
-    ${ev ? `<div class="card lv-pred">🎯 <span>${myP ? `Ваш прогноз: <b>${esc(sideName(l, myP.side - 1))}</b> · ${myP.stake} PC × ${myP.odds}` : evOpen(ev) ? `Приём прогнозов ещё ${evLeft(ev)} мин · уже ${ev.bets_count}` : `Прогнозов: ${ev.bets_count} · приём закрыт`}</span>
-      ${!myP && !imPlayer && evOpen(ev) ? `<button class="btn sm primary" data-act="predict" data-id="${ev.id}">×${ev.odds1} / ×${ev.odds2}</button>` : ''}</div>` : ''}
+    ${ev ? `<div class="card lv-pred">🎯 <span>${myP ? myPredsLine(ev, sd => sideName(l, sd - 1)) : evOpen(ev) ? `Приём прогнозов ещё ${evLeft(ev)} мин · уже ${ev.bets_count}` : `Прогнозов: ${ev.bets_count} · приём закрыт`}</span>
+      ${!imPlayer && evOpen(ev) ? `<button class="btn sm primary" data-act="predict" data-id="${ev.id}">${myP ? '+ ещё ' : ''}×${ev.odds1} / ×${ev.odds2}</button>` : ''}</div>` : ''}
     ${canFinish ? `<div class="stack"><button class="btn primary big" data-act="live-final" data-id="${l.id}">🏁 Внести итоговый счёт</button>
       <button class="btn ghost danger" data-act="live-cancel" data-id="${l.id}">Отменить игру</button></div>`
       : '<p class="muted small center">Итоговый счёт внесёт кто-то из игроков.</p>'}`;
@@ -1129,9 +1139,9 @@ function viewLive(r) {
   const sets = g.sets.map((x, i) => `<span>П${i + 1} <b>${x[0]}:${x[1]}</b></span>`).join('');
   const ev = S.data.predEvents.find(e => e.source_id === l.id);
   const imPlayer = [l.player1_id, l.player2_id, l.player3_id, l.player4_id].includes(S.me.id);
-  const myP = ev && S.data.predictions.find(p => p.event_id === ev.id);
-  const predBar = !ev ? '' : `<div class="card lv-pred">🎯 <span>${myP ? `Ваш прогноз: <b>${esc(sideName(l, myP.side - 1))}</b> · ${myP.stake} PC × ${myP.odds}` : ev.status === 'open' ? `Прогнозы открыты · коэффициенты меняются по ходу игры · уже ${ev.bets_count}` : `Прогнозов: ${ev.bets_count} · приём закрыт`}</span>
-    ${!myP && !imPlayer && ev.status === 'open' ? `<button class="btn sm primary" data-act="predict" data-id="${ev.id}">×${ev.odds1} / ×${ev.odds2}</button>` : ''}</div>`;
+  const myP = ev && myPreds(ev)[0];
+  const predBar = !ev ? '' : `<div class="card lv-pred">🎯 <span>${myP ? myPredsLine(ev, sd => sideName(l, sd - 1)) : ev.status === 'open' ? `Прогнозы открыты · коэффициенты меняются по ходу игры · уже ${ev.bets_count}` : `Прогнозов: ${ev.bets_count} · приём закрыт`}</span>
+    ${!imPlayer && ev.status === 'open' ? `<button class="btn sm primary" data-act="predict" data-id="${ev.id}">${myP ? '+ ещё ' : ''}×${ev.odds1} / ×${ev.odds2}</button>` : ''}</div>`;
   return `<div class="page-h"><a href="#/home" class="back">← Главная</a><span class="live">● LIVE</span></div>
     <div class="lv-meta">${tableOf(l) ? `Стол ${tableOf(l)} · ` : ''}${l.kind === 'doubles' ? 'Пары 2×2' : t ? '🏆 ' + esc(t.name) : l.type === 'tournament' ? 'Турнирный матч' : 'Свободная игра'} · до ${g.need} ${plural(g.need, 'победы', 'побед', 'побед')} · партия до ${l.points_to}${g.deuce && g.winner === null ? ' · <b>баланс</b>' : ''}</div>
     ${scorer && needServe ? `<div class="card lv-first"><b>🏓 Кто подаёт первым?</b><span class="muted small">Разыграйте подачу и нажмите на того, кто начинает</span><div class="lv-first-btns">${[0, 1].map(sd => `<button class="lv-first-b p${sd}" data-act="live-first" data-id="${l.id}" data-side="${sd}">${sideIds(l, sd).map(id => ava(P(id), 'sm')).join('')}<b>${esc(sideName(l, sd))}</b></button>`).join('')}</div></div>` : ''}
@@ -3009,7 +3019,7 @@ function openTournamentForm() {
     <label>Название<input name="name" required maxlength="60" placeholder="Например: Кубок офиса"></label>
     <div class="tf-sec"><small class="tf-lbl">Вид турнира</small><div class="tf-fmt">${[['ko', '🏆', 'Олимпийская', 'на вылет'], ['groups', '🗂', 'Группы', '+ плей-офф'], ['rr', '🔄', 'Круг', 'все со всеми']].map(([k, ic, v, d], n) => `<label><input type="radio" name="format" value="${k}" ${n === 0 ? 'checked' : ''}><span><i>${ic}</i><b>${v}</b><small>${d}</small></span></label>`).join('')}</div><p class="hint" id="fmt-hint"></p></div>
     <div class="tf-sec"><small class="tf-lbl">Участники</small><button type="button" class="tf-pick" id="t-open"><span class="tf-stack" id="t-stack"></span><b id="t-cnt">0 игроков</b><span class="tf-go">Выбрать игроков ›</span></button></div>
-    <div class="two only-groups"><label>Групп<input type="number" name="groups" value="2" min="1" max="8"></label><label>Выходят из группы<select name="advance"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option></select></label></div>
+    <div class="two only-groups"><label>Игроков в группе<input type="number" name="gsize" value="4" min="2" max="16"></label><input type="hidden" name="groups" value="2"><label>Выходят из группы<select name="advance"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option></select></label></div>
     <p class="hint only-groups" id="grp-hint"></p>
     <div class="tf-sec"><div class="tf-row2"><div><small class="tf-lbl">Столов</small><div class="tf-step"><button type="button" data-step="-1">−</button><input type="number" name="tables" value="1" min="1" max="8" readonly><button type="button" data-step="1">+</button></div></div>
       <div><small class="tf-lbl">Счёт</small><div class="tf-seg2"><label><input type="radio" name="scoring" value="points" checked><span>По очкам</span></label><label><input type="radio" name="scoring" value="final"><span>Только итог</span></label></div></div></div>
@@ -3036,7 +3046,9 @@ function openTournamentForm() {
       sh.querySelector('#t-cnt2').textContent = ids.length;
       sh.querySelector('#t-stack').innerHTML = ids.slice(0, 6).map(id => ava(P(id), 'xs')).join('');
       // как поделятся группы (любое число игроков — как можно ровнее)
-      const g = Math.max(1, Math.min(+f.groups.value || 1, Math.floor(ids.length / 2) || 1));
+      // число групп считается из «игроков в группе»: 11 игроков по 4 → 3 группы (4, 4, 3)
+      const size = Math.max(2, +f.gsize.value || 4), g = Math.max(1, Math.min(Math.round(ids.length / size) || 1, Math.floor(ids.length / 2) || 1));
+      f.groups.value = g;
       const sizes = Array.from({ length: g }, (_, k) => Math.floor(ids.length / g) + (k < ids.length % g ? 1 : 0));
       sh.querySelector('#grp-hint').textContent = ids.length >= 2 ? `${ids.length} ${plural(ids.length, 'игрок', 'игрока', 'игроков')} → ${sizes.map((n, k) => `группа ${String.fromCharCode(1040 + k)}: ${n}`).join(', ')}. Сильных система разводит по разным группам.` : '';
       // секундант на каждый стол (при счёте «только итог» не нужен)
@@ -3044,7 +3056,7 @@ function openTournamentForm() {
       const prev = [...box.querySelectorAll('select')].map(x => x.value);
       box.innerHTML = f.querySelector('[name=scoring]:checked').value === 'points' ? `<small class="tf-lbl">Секундант на каждом столе</small>${Array.from({ length: T }, (_, k) => `<label class="tf-sc"><span>Стол ${k + 1}</span><select name="scorer">${opt(prev[k] ?? (k === 0 ? S.me.id : ''))}</select></label>`).join('')}` : '';
     };
-    f.addEventListener('change', e => { if (e.target.name !== 'scorer') sync(); }); f.addEventListener('input', e => { if (['groups', 'tables'].includes(e.target.name)) sync(); }); sync();
+    f.addEventListener('change', e => { if (e.target.name !== 'scorer') sync(); }); f.addEventListener('input', e => { if (['gsize', 'tables'].includes(e.target.name)) sync(); }); sync();
     const show = on => { main.hidden = on; pl.hidden = !on; sh.scrollTop = 0; };
     sh.querySelector('#t-open').onclick = () => show(true);
     sh.querySelector('#t-back').onclick = () => { show(false); sync(); };
@@ -3533,7 +3545,7 @@ async function boot() {
     // не перерисовываем, пока человек что-то печатает в форме на странице
     const ae = document.activeElement;
     if (ae && $app.contains(ae) && /INPUT|SELECT|TEXTAREA/.test(ae.tagName)) return;
-    if (!$modal.classList.contains('open')) render();
+    if (!$modal.classList.contains('open')) render(); else S.modalRefresh?.();
   });
   // открыли из фона: если вышла новая версия — перезагружаемся, иначе просто обновляем данные
   let appVer = null;
