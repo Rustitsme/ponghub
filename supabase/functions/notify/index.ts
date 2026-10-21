@@ -71,10 +71,10 @@ async function sendPush(userIds: (string | null | undefined)[], msg: Msg): Promi
 const ROLE: Record<string, string> = { owner: 'admin', helper: 'editor', player: 'player' };
 const STATUS: Record<string, string> = { active: 'approved', pending: 'pending', archived: 'archived', former: 'archived' };
 async function members(clubId: string) {
-  const { data } = await sb.from('club_members').select('role, status, initial_rating, profile:profiles(*)').eq('club_id', clubId);
+  const { data } = await sb.from('club_members').select('role, status, initial_rating, joined_at, profile:profiles(*)').eq('club_id', clubId);
   // deno-lint-ignore no-explicit-any
   return (data ?? []).filter((m: any) => m.profile && !m.profile.is_test).map((m: any) => ({
-    ...m.profile, role: ROLE[m.role] ?? 'player', initial_rating: m.initial_rating,
+    ...m.profile, role: ROLE[m.role] ?? 'player', initial_rating: m.initial_rating, joined_at: m.joined_at,
     status: m.profile.status === 'deleted' ? 'deleted' : STATUS[m.status] ?? 'archived',
   }));
 }
@@ -237,6 +237,47 @@ async function seasonDigest() {
   return total;
 }
 
+// Напоминание тем, кто давно не играл: раз в день проверяем отметки (14, 30, 60 дней без игр;
+// новичку без матчей — через 3 и 10 дней после вступления) и предлагаем соперника по силам для вызова.
+const IDLE_DAYS = [14, 30, 60];
+const NEWBIE_DAYS = [3, 10];
+async function idleReminders() {
+  let total = 0;
+  const now = Date.now();
+  const days = (t: number) => Math.floor((now - t) / 864e5);
+  for (const c of await clubsList()) {
+    const { profiles, matches, settings } = await loadClub(c);
+    if (settings.remindIdle === false) continue;
+    const pool = profiles.filter((p) => ['approved', 'archived', 'deleted'].includes(p.status));
+    const A = analyze(pool, matches, settings);
+    const rating = (id: string) => A.rating.get(id) ?? A.S.initialRating;
+    const last = new Map<string, number>();
+    for (const m of matches) {
+      if (m.status !== 'approved') continue;
+      for (const id of [m.player1_id, m.player2_id, m.player3_id, m.player4_id]) if (id) last.set(id, Math.max(last.get(id) ?? 0, Date.parse(m.played_at)));
+    }
+    const active = profiles.filter((p) => p.status === 'approved');
+    // соперников предлагаем из тех, кто играл последний месяц
+    const playing = active.filter((p) => last.has(p.id) && days(last.get(p.id)!) < 30);
+    for (const p of active) {
+      const t = last.get(p.id);
+      const d = t ? days(t) : days(Date.parse(p.joined_at));
+      if (!(t ? IDLE_DAYS : NEWBIE_DAYS).includes(d)) continue;
+      const r = rating(p.id);
+      const opp = playing.filter((o) => o.id !== p.id).sort((a, b) => Math.abs(rating(a.id) - r) - Math.abs(rating(b.id) - r))[0];
+      const call = opp ? `Вызовите ${opp.nickname} на матч — вы примерно равны по силе.` : 'Вызовите кого-нибудь на матч!';
+      const decay = t && A.S.decayEnabled && d >= A.S.decayGraceDays ? ' Рейтинг снижается без игр — один матч это остановит.' : '';
+      total += await sendPush([p.id], {
+        title: t ? `🏓 ${d} дней без пинг-понга` : `🏓 Пора сыграть первый матч`,
+        body: t ? `Стол в «${c.name}» скучает. ${call}${decay}` : `Вы в клубе «${c.name}», но ещё не сыграли. ${call}`,
+        url: inClub(opp ? `#/player/${opp.id}` : '#/players', c.id),
+        tag: 'idle-' + c.id,
+      });
+    }
+  }
+  return total;
+}
+
 async function backup(): Promise<string> {
   const tables = ['clubs', 'club_members', 'profiles', 'matches', 'tournaments', 'events', 'challenges', 'settings', 'coin_tx'];
   const out: Record<string, unknown> = { created_at: new Date().toISOString() };
@@ -329,6 +370,7 @@ Deno.serve(async (req) => {
   if (body.secret && body.secret === (await getSecret('webhook_secret'))) {
     if (body.job === 'weekly') return json({ sent: await weeklyDigest() });
     if (body.job === 'season') return json({ sent: await seasonDigest() });
+    if (body.job === 'idle') return json({ sent: await idleReminders() });
     if (body.job === 'backup') return json({ name: await backup() });
     await onChange(String(body.table), String(body.type), body.record, body.old_record, (body.actor as string) ?? null, (body.reason as string) ?? null);
     return json({ ok: true });

@@ -565,6 +565,7 @@ end $$;
 select cron.schedule('ponghub-weekly', '0 7 * * 1', $$select public.call_notify('weekly')$$);
 select cron.schedule('ponghub-season', '0 7 1 * *', $$select public.call_notify('season')$$);
 select cron.schedule('ponghub-backup', '0 2 * * 1', $$select public.call_notify('backup')$$);
+select cron.schedule('ponghub-idle', '0 9 * * *', $$select public.call_notify('idle')$$);  -- напоминания «давно не играли» (миграция 27)
 
 -- ───────────── Живые обновления ─────────────
 do $$
