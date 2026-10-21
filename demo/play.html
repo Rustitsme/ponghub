@@ -83,22 +83,37 @@ h2 { font: 800 28px var(--d); text-transform: uppercase; margin: 34px 0 6px; } h
     <div class="note2" style="max-width:none"><b>Что даёт QR</b>Игра начинается за 2 касания. Система знает стол — на табло нужного стола сразу пойдёт выход игроков и счёт.</div></div></div></div>
 </div>
 
-<h2>2. Пауза — посмотреть сетку</h2>
-<p class="lead">Перед началом матча или прямо во время игры (между розыгрышами) секундант жмёт «⏸ Пауза». На табло — крупный таймер паузы и турнирная сетка: кто где, с кем следующий раунд. На телефоне — таймер и «Продолжить». Пауза 1 минута, можно продлить; счёт и время матча при паузе не теряются.</p>
+<h2>2. Две паузы</h2>
+<p class="lead"><b>А. Пауза в игре</b> — только когда идёт матч или турнир. Секундант жмёт «⏸ Пауза»: на табло крупный таймер и турнирная сетка, очки не добавляются, счёт не теряется. <b>Б. Стоп-кадр табло</b> — когда нужно, чтобы на экране ничего не менялось: табло замирает на том, что сейчас показывает (не переключается на итоги, сетку, выход игроков, не обновляет счёт), пока не нажмёте «Продолжить».</p>
 <div class="row">
-  <div><p class="cap">Табло во время паузы</p>
+  <div><p class="cap">А · Табло: пауза в игре<small>идёт матч Рустам — GOAT</small></p>
     <div class="tv"><div class="top">Кубок кубков · 1/4 финала<span>ПАУЗА</span></div>
       <div class="duel"><div class="pn p1">7</div><div class="mid">1:0</div><div class="pn p2">5</div></div>
       <div class="pause"><div class="big"><b>⏸ ПАУЗА</b><strong>0:47</strong><small>Рустам — GOAT · 7:5 в партии 2</small></div>
         <div class="grid"><h5>Сетка турнира</h5>
           <div class="bm now"><div>Рустам</div><div>GOAT</div></div><div class="bm"><div class="t">ждём</div><div class="t">ждём</div></div><div class="bm"><div class="t">финал</div><div class="t">ждём</div></div>
           <div class="bm"><div>Neazk</div><div>Амир</div></div><div class="bm"><div>Redhead</div><div class="t">ждём</div></div><div class="bm" style="border-style:dashed;text-align:center"><div style="font-size:2.4cqw">🏆</div></div></div></div></div></div>
-  <div><p class="cap">Телефон секунданта</p><div class="ph"><div class="sc">
+  <div><p class="cap">А · Телефон секунданта<small>кнопка есть только во время игры</small></p><div class="ph"><div class="sc">
     <div class="ttl">Стол 1 · Live<small>Кубок кубков · 1/4 финала</small></div>
     <div class="vs"><div>Рустам<b style="font-size:34px">7</b></div><i>1 : 0</i><div>GOAT<b style="font-size:34px">5</b></div></div>
-    <div class="tmr"><span class="lbl">Пауза</span><b>0:47</b><small>на табло показана сетка турнира</small></div>
+    <div class="tmr"><span class="lbl">Пауза в игре</span><b>0:47</b><small>на табло показана сетка турнира</small></div>
     <div class="btn alt">+1 минута</div><div class="btn blue">▶ Продолжить игру</div>
-    <div class="note2" style="max-width:none;margin-top:auto"><b>Когда можно</b>Перед первым очком и между розыгрышами. Очки, пока пауза, не добавляются.</div></div></div></div>
+    <div class="note2" style="max-width:none;margin-top:auto"><b>Когда доступна</b>Только пока идёт матч (в том числе в турнире). Перед игрой и в перерыве табло — кнопки нет.</div></div></div></div>
+</div>
+<div class="row" style="margin-top:22px">
+  <div><p class="cap">Б · Табло: стоп-кадр<small>было на экране — то и осталось</small></p>
+    <div class="tv"><div class="top">Коворкинг «IT Park» KZN<span>ПЕРЕРЫВ</span></div>
+      <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:2cqw;margin-top:2cqw">
+        <div class="bm" style="padding:1.4cqw"><div style="font-size:1.4cqw;color:#93a7c6">ПОСЛЕДНИЕ ИГРЫ</div><div>Рустам 3:1 GOAT</div><div>Neazk 2:3 Амир</div><div>Redhead 3:0 Рената</div></div>
+        <div class="bm" style="padding:1.4cqw;text-align:center;border-color:#e63946"><div style="font-size:1.3cqw;color:#e63946">СЛЕДОМ ЗА ЭТИМ СТОЛОМ</div><div style="font-size:3cqw">Дамир</div><div style="font-size:3cqw">Эльвира</div></div></div>
+      <div style="position:absolute;right:2cqw;bottom:1.6cqw;padding:.4cqw 1cqw;border-radius:99px;background:rgba(255,255,255,.08);font:700 1.1cqw var(--f);color:#93a7c6">⏸</div></div>
+    <p class="note2" style="margin-top:10px"><b>Что видно на экране</b>Ровно то, что было в момент нажатия. В углу — маленький неяркий значок ⏸, чтобы было понятно, что табло не зависло (можно убрать совсем — скажите).</p></div>
+  <div><p class="cap">Б · Телефон владельца<small>Управление → Табло (и на экране игры)</small></p><div class="ph"><div class="sc">
+    <div class="ttl">Табло<small>Коворкинг «IT Park» KZN</small></div>
+    <div class="card" style="display:flex;align-items:center;gap:10px"><span style="font-size:28px">📺</span><div><b style="font:800 16px var(--d)">Табло у стола</b><div class="lbl" style="text-transform:none;letter-spacing:0">● подключено · показывает перерыв</div></div></div>
+    <div class="tmr" style="background:#eef3fb;border-color:#1f5fc4"><span class="lbl">Стоп-кадр включён</span><b style="font-size:30px">⏸ 2 мин</b><small style="color:#3a4a62">табло ничего не меняет на экране</small></div>
+    <div class="btn blue">▶ Продолжить показ</div>
+    <div class="note2" style="max-width:none;margin-top:auto"><b>Зачем</b>Объявить что-то залу, сфотографировать сетку, разобрать спорный момент — экран не перескочит на другое.</div></div></div></div>
 </div>
 
 <h2>3. Задания недели за пинг-коины</h2>
