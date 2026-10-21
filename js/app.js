@@ -159,6 +159,8 @@ async function reload() {
       lsSet('ponghub_join', '');
       setTimeout(() => openInvite(pendingJoin), 0);
     }
+    const after = lsGet('ponghub_after');
+    if (after && S.ctx?.me) { lsSet('ponghub_after', ''); setTimeout(() => location.replace(after), 0); }
     pickClub();
     S.data = S.club ? await S.store.loadAll() : EMPTY();
     if (isAdmin()) S.emails = await S.store.adminEmails();
@@ -228,13 +230,20 @@ function render() {
     if (!S.tvStarted) { S.tvStarted = true; import('./tv.js').then(m => m.startTV($app, S.store)); }
     return;
   }
-  if (!S.user) { if (r.name === 'join' && r.args[0]) lsSet('ponghub_join', r.args[0]); html = authView(r); }
+  if (!S.user) {
+    if (r.name === 'join' && r.args[0]) lsSet('ponghub_join', r.args[0]);
+    // QR со стола: после входа вернёмся к этому столу
+    if (r.name === 'play' && r.args[0]) lsSet('ponghub_after', location.hash);
+    html = authView(r);
+  }
   else if (S.recovery) html = recoveryView();
   else if (!S.ctx?.me) html = gateView('🤔', 'Профиль не найден', 'Аккаунт создан, но профиль в базе отсутствует. Напишите администратору.', true);
   else if (CLUB_FREE[r.name]) html = CLUB_FREE[r.name](r);
+  // QR со стола у человека без клуба — сразу на страницу клуба с заявкой
+  else if (!S.club && r.name === 'play' && r.args[0]) html = bare(viewPlay(r));
   else if (!S.club) html = S.ctx.me.legacy && !S.ctx.platform?.migration_done && !isFounder() ? waitView() : viewClubs(r);
   else {
-    const views = { shop: r => feature('shop') ? viewShop(r) : viewHome(r), racket: () => feature('shop') ? viewRacket() : viewHome(), avatar: r => feature('avatar') ? viewAvatar(r) : viewHome(r), invite: viewInvite, clubedit: viewClubEdit, home: viewHome, rating: viewRating, players: viewPlayers, matches: viewMatches, player: viewPlayer, h2h: viewH2H, tournaments: viewTournaments, tournament: viewTournament, calendar: viewCalendar, admin: viewAdmin, rules: viewRules, me: viewMe, help: viewHelp, seasons: viewSeasons, live: viewLive, inbox: viewInbox, predict: viewPredict, play: viewPlay, tables: viewTables };
+    const views = { shop: r => feature('shop') ? viewShop(r) : viewHome(r), racket: () => feature('shop') ? viewRacket() : viewHome(), avatar: r => feature('avatar') ? viewAvatar(r) : viewHome(r), invite: viewInvite, clubedit: viewClubEdit, home: viewHome, rating: viewRating, players: viewPlayers, matches: viewMatches, player: viewPlayer, h2h: viewH2H, tournaments: viewTournaments, tournament: viewTournament, calendar: viewCalendar, admin: viewAdmin, rules: viewRules, me: viewMe, help: viewHelp, seasons: viewSeasons, live: viewLive, inbox: viewInbox, predict: viewPredict, play: viewPlay, tables: viewPrint, print: viewPrint };
     const v = views[r.name] || viewHome;
     html = shell(r, v(r));
   }
@@ -300,7 +309,8 @@ function authView(r) {
   const mode = r.name === 'join' ? 'register' : ['register', 'forgot'].includes(r.name) ? r.name : 'login';
   const demo = S.store.mode === 'demo';
   const head = `<div class="auth-hero"><img src="${logo()}" alt="" width="84" height="84"><h1>PongHub</h1><p>Клубы настольного тенниса: рейтинг, матчи, турниры</p></div>
-    ${lsGet('ponghub_join') ? '<div class="auth-card invite-note">✉️ Вас пригласили в клуб. Зарегистрируйтесь или войдите — и откроется страница клуба, где можно отправить заявку.</div>' : ''}`;
+    ${lsGet('ponghub_join') ? '<div class="auth-card invite-note">✉️ Вас пригласили в клуб. Зарегистрируйтесь или войдите — заявка в клуб отправится сама.</div>'
+      : lsGet('ponghub_after') ? '<div class="auth-card invite-note">🏓 Вы у стола клуба. Зарегистрируйтесь или войдите — и сразу к игре (если вы ещё не в клубе, заявка отправится сама).</div>' : ''}`;
   let form;
   if (mode === 'register') form = `
     <form data-form="register" class="stack">
@@ -310,7 +320,7 @@ function authView(r) {
       <label>Email<input name="email" type="email" required autocomplete="email"></label>
       <label>Пароль<input name="password" type="password" required minlength="6" autocomplete="new-password"></label>
       <button class="btn primary big">Зарегистрироваться</button>
-      <p class="muted small center">${lsGet('ponghub_join') ? 'После регистрации откроется клуб, куда вас пригласили, — останется отправить заявку.' : 'После регистрации вы сможете вступить в клуб по приглашению, найти клуб или создать свой.'}</p>
+      <p class="muted small center">${lsGet('ponghub_join') ? 'После регистрации заявка в клуб, куда вас пригласили, отправится сама.' : 'После регистрации вы сможете вступить в клуб по приглашению, найти клуб или создать свой.'}</p>
       <a href="#/login" class="link center">Уже есть аккаунт? Войти</a>
     </form>`;
   else if (mode === 'forgot') form = `
@@ -1409,7 +1419,7 @@ function idleNudge() {
     : s.decayEnabled && d >= s.decayGraceDays ? 'Рейтинг понемногу снижается без игр — один матч это остановит.' : 'Стол скучает! Вызовите кого-нибудь на матч.';
   return `<section class="card nudge"><div class="card-h"><h3>🏓 ${head}</h3><a href="#/players" class="link">Все игроки →</a></div>
     <p class="muted small">${why}</p>
-    ${opps.map(({ p }) => `<div class="pl-row"><a href="#/player/${p.id}" class="pl-main">${ava(p, 'sm')}<span class="rn"><b>${esc(p.nickname)}</b><small>${fmtR(ratingOf(p.id))} · шанс ${pct(expected(ratingOf(S.me.id), ratingOf(p.id), S.A.S.spread))}</small></span></a>${challengeBtn(p.id)}</div>`).join('')}
+    ${opps.map(({ p }) => `<div class="plx-row"><a href="#/player/${p.id}" class="pl-main">${ava(p, 'sm')}<span class="rn"><b>${esc(p.nickname)}</b><small>${fmtR(ratingOf(p.id))} · шанс ${pct(expected(ratingOf(S.me.id), ratingOf(p.id), S.A.S.spread))}</small></span></a>${challengeBtn(p.id)}</div>`).join('')}
   </section>`;
 }
 function viewPlayers(r) {
@@ -1423,7 +1433,7 @@ function viewPlayers(r) {
   const row = p => {
     const top = badgesOf(p.id).slice(0, 3).map(b => b.icon).join('');
     const d = idleDays(last, p.id);
-    return `<div class="pl-row" data-name="${esc((p.nickname + ' ' + (p.full_name || '')).toLowerCase())}">
+    return `<div class="plx-row" data-name="${esc((p.nickname + ' ' + (p.full_name || '')).toLowerCase())}">
       <a href="#/player/${p.id}" class="pl-main"><span class="pos">${pos.get(p.id) || '–'}</span>${ava(p, 'md')}
         <span class="rn"><b>${esc(p.nickname)}${top ? ` <i class="pl-bdg">${top}</i>` : ''}</b><small>${leagueOf(ratingOf(p.id)).name} · ${fmtR(ratingOf(p.id))} · <span class="${d == null || d > 14 ? 'idle' : ''}">${lastText(d)}</span></small></span></a>
       ${challengeBtn(p.id)}</div>`;
@@ -1438,7 +1448,7 @@ function viewPlayers(r) {
 function filterPlayers(q) {
   q = q.trim().toLowerCase();
   let n = 0;
-  for (const el of document.querySelectorAll('.pl-list .pl-row')) { const ok = !q || el.dataset.name.includes(q); el.hidden = !ok; n += ok; }
+  for (const el of document.querySelectorAll('.pl-list .plx-row')) { const ok = !q || el.dataset.name.includes(q); el.hidden = !ok; n += ok; }
   const none = document.getElementById('pl-none');
   if (none) none.hidden = n > 0;
 }
@@ -1700,7 +1710,7 @@ function viewMe() {
   ${isAdmin() ? `<a href="#/admin" class="card menu-item">🛠️ <span>Управление клубом</span>${pendingCounts().total ? `<i class="dot inline">${pendingCounts().total}</i>` : ''}<span>→</span></a>` : ''}
   <a href="#/matches" class="card menu-item">📋 <span>Матчи<small class="muted" style="display:block;font-weight:500">все игры клуба, ваши результаты, личные встречи</small></span><span>→</span></a>
   <section class="card menu">
-    ${isAdmin() ? '<a class="menu-item" href="#/invite">✉️ <span>Пригласить в клуб</span></a><a class="menu-item" href="#/clubedit">🏠 <span>Клуб: название, адрес, карта</span></a>' : ''}
+    ${isAdmin() ? '<a class="menu-item" href="#/invite">✉️ <span>Пригласить в клуб</span></a><a class="menu-item" href="#/print">🖨 <span>Печать: плакат и домики на столы</span></a><a class="menu-item" href="#/clubedit">🏠 <span>Клуб: название, адрес, карта</span></a>' : ''}
     ${feature('shop') ? '<a class="menu-item" href="#/shop">🛍️ <span>Магазин</span><small class="muted">' + fmtC(S.coins) + ' PC</small></a><a class="menu-item" href="#/racket">🏓 <span>Моя ракетка</span></a>' : ''}
     ${feature('avatar') ? '<a class="menu-item" href="#/avatar">🧍 <span>Мой игрок</span></a>' : ''}
     <a class="menu-item" href="#/clubs">🏠 <span>Мои клубы</span><small class="muted">${(S.ctx?.clubs || []).filter(c => c.my_status === 'active').length}</small></a>
@@ -1978,7 +1988,7 @@ async function renderInvite() {
         <div class="row-btns"><button class="btn primary" data-act="share-invite" data-link="${esc(link)}">Поделиться</button><button class="btn" data-act="copy" data-text="${esc(link)}">Скопировать</button></div></div>
       <div><b class="small">Код приглашения</b><div class="invite-code">${esc(code)}</div></div>
       <div class="center"><b class="small">QR-код для стенда у стола</b><div id="qr" class="qr-box"></div>
-        <button class="btn" data-act="print-qr" data-link="${esc(link)}">🖨 Плакат для печати</button></div>
+        <a class="btn" href="#/print">🖨 Плакат и домики для столов</a></div>
       <button class="btn ghost sm" data-act="rotate-invite">Сменить ссылку и код</button>
       <small class="muted">Если код попал не туда — смените его. Старые ссылка, код и QR перестанут работать, участники клуба останутся.</small>`;
     await drawQr(document.getElementById('qr'), link, 6);
@@ -2038,12 +2048,19 @@ function renderMapList(q) {
 function viewClubPage(r) {
   return bare(`<div id="club-page"><div class="empty">Загружаю клуб…</div></div>`, S.club ? '#/home' : '#/map');
 }
-async function renderClubPage(id, code = null) {
+async function renderClubPage(id, code = null, auto = false, table = null) {
   const box = document.getElementById('club-page');
   if (!box) return;
   let d;
   try { d = await S.store.clubPublic(id, code); } catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
   if (!box.isConnected) return;
+  // пришли по QR (плакат, приглашение, стол) — заявка уходит сама, один раз
+  if (auto && (!d.my_status || d.my_status === 'former') && !(S.autoJoined ||= new Set()).has(id)) {
+    S.autoJoined.add(id);
+    try { await S.store.requestJoin(id, code || null); S.ctx = await S.store.loadContext(); toast('Заявка отправлена — клуб рассмотрит её'); }
+    catch (e) { toast(e.message, 'err'); }
+    return renderClubPage(id, code, false, table);
+  }
   const st = { ...DEFAULT_SETTINGS, ...(d.settings || {}) };
   const pool = d.players.filter(p => ['approved', 'archived', 'deleted'].includes(p.status));
   const A = analyze(pool, d.matches, st);
@@ -2053,7 +2070,8 @@ async function renderClubPage(id, code = null) {
   const since = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'][cd.getMonth()] + ' ' + cd.getFullYear();
   const active = d.players.filter(p => p.status === 'approved').length;
   const btn = d.my_status === 'active' ? `<button class="btn primary big full" data-act="switch-club" data-id="${c.id}">Открыть клуб</button>`
-    : d.my_status === 'pending' ? `<div class="card row-btns"><span>⏳ Заявка отправлена</span><button class="btn ghost sm" data-act="cancel-request" data-id="${c.id}">Отозвать</button></div>`
+    : d.my_status === 'pending' ? `<div class="card row-btns"><span>⏳ Заявка отправлена</span><button class="btn ghost sm" data-act="cancel-request" data-id="${c.id}">Отозвать</button></div>
+      <p class="muted small center">${table ? `Как только владелец примет заявку, снова наведите камеру на QR-код стола ${esc(table)} — и сразу к игре.` : 'Как только владелец примет заявку, клуб откроется — мы пришлём уведомление.'}</p>`
     : `${code ? '<p class="muted small center">✉️ Вас пригласили в этот клуб. Отправьте заявку — в клуб вы попадёте, когда её примут.</p>' : ''}<button class="btn primary big full" data-act="request-join" data-id="${c.id}" data-code="${esc(code || '')}">Отправить заявку</button>`;
   const fin = d.tournaments.filter(t => t.status === 'finished' && t.results?.gold).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const nick = pid => d.players.find(p => p.id === pid)?.nickname || 'Игрок';
@@ -2078,7 +2096,7 @@ function viewJoin() {
 async function openInvite(code) {
   try {
     const cid = await S.store.clubByInvite(code);
-    location.replace(`#/club/${cid}?code=${encodeURIComponent(code)}`);
+    location.replace(`#/club/${cid}?code=${encodeURIComponent(code)}&auto=1`);
   } catch (e) { toast(e.message, 'err'); location.replace(S.club ? '#/home' : '#/clubs'); }
 }
 
@@ -2143,14 +2161,6 @@ function openClubMenu() {
     </div>`);
 }
 
-function printPoster(link) {
-  const c = S.store.club || S.club;
-  let el = document.getElementById('print-area');
-  if (!el) { el = document.createElement('div'); el.id = 'print-area'; document.body.appendChild(el); }
-  el.innerHTML = `<div class="poster"><img src="${logo()}" alt="" width="90" height="90"><h1>${esc(c.name)}</h1><p>Наведите камеру телефона, чтобы вступить в клуб настольного тенниса</p><div id="qr-print" class="qr-print"></div><p class="small">или откройте PongHub и введите код</p><b class="poster-code">${esc(link.split('/join/')[1] || '')}</b></div>`;
-  drawQr(document.getElementById('qr-print'), link, 10).then(() => setTimeout(() => window.print(), 300));
-}
-
 async function copyText(text) {
   try { await navigator.clipboard.writeText(text); toast('Скопировано'); }
   catch { window.prompt('Скопируйте:', text); }
@@ -2200,7 +2210,7 @@ async function renderScreens() {
     const fr = list.map(s => s.frozen_until).filter(x => x && Date.parse(x) > Date.now()).sort().pop();
     const freezeBox = list.length ? `<div class="tv-freeze ${fr ? 'on' : ''}"><div><b>${fr ? '⏸ Стоп-кадр включён' : '📺 Стоп-кадр табло'}</b><small class="muted">${fr ? `табло ничего не меняет на экране · ещё <span data-until="${esc(fr)}">${pauseLeft({ paused_until: fr })}</span>` : 'табло замрёт на текущей картинке — ничего не переключит и не обновит'}</small></div>
       ${fr ? '<button class="btn primary" data-act="screen-freeze" data-m="0">▶ Продолжить показ</button>' : '<div class="row-btns"><button class="btn sm" data-act="screen-freeze" data-m="5">5 мин</button><button class="btn sm" data-act="screen-freeze" data-m="15">15 мин</button><button class="btn sm" data-act="screen-freeze" data-m="60">1 час</button></div>'}</div>
-      <a href="#/tables" class="btn ghost full">🖨 Наклейки с QR для столов</a>` : '';
+      <a href="#/print" class="btn ghost full">🖨 Плакат и домики с QR для столов</a>` : '';
     box.innerHTML = freezeBox + `<div class="card-h"><h3>Подключённые табло</h3></div>` + (list.length ? list.map(s => {
       const online = s.last_seen && Date.now() - Date.parse(s.last_seen) < 3 * 60e3;
       return `<div class="pl-row"><div class="pl-top"><span class="tv-ic">📺</span><span class="rn"><b>${esc(s.name)}</b><small class="muted">${online ? '🟢 в сети' : s.last_seen ? '⚪ не в сети · был ' + fmtDT(s.last_seen) : '⚪ ещё не выходило в сеть'}</small></span></div>
@@ -2290,10 +2300,10 @@ const CLUB_ACT = {
     copyText(link);
   },
   'rotate-invite': async el => {
-    if (!(await confirmDialog('Сменить ссылку и код? Старые ссылка, код и QR перестанут работать.', 'Сменить'))) return;
-    await busy(el, async () => { await S.store.rotateInvite(S.club.id); await renderInvite(); toast('Новая ссылка готова'); });
+    if (!(await confirmDialog('Сменить ссылку и код? Старые ссылка, код и QR перестанут работать — и на распечатанных плакатах и домиках тоже (их надо будет напечатать заново).', 'Сменить'))) return;
+    await busy(el, async () => { await S.store.rotateInvite(S.club.id); S.printCode = null; await renderInvite(); toast('Новая ссылка готова'); });
   },
-  'print-qr': el => printPoster(el.dataset.link),
+  'print-sheets': el => busy(el, () => printSheets(el.dataset.what)),
   'transfer-club': async el => {
     const to = document.getElementById('tr-to').value, name = document.getElementById('tr-name').value.trim();
     const c = S.store.club || S.club;
@@ -2734,7 +2744,10 @@ function viewPlay(r) {
   const [cid, no] = r.args, n = Math.max(1, +no || 1);
   if (cid && S.club?.id !== cid) {
     if ((S.ctx?.clubs || []).some(c => c.id === cid && c.my_status === 'active')) { setTimeout(() => switchClub(cid), 0); return '<div class="empty"><span class="spin"></span></div>'; }
-    return `<div class="empty">Этот стол принадлежит клубу, в котором вас нет. <a href="#/clubs" class="link">Найти клуб →</a></div>`;
+    // не в клубе — страница клуба, заявка уходит сама; после «принять» сканируют стол снова
+    const code = r.q.get('code');
+    setTimeout(() => location.replace(`#/club/${cid}?auto=1&table=${n}${code ? '&code=' + encodeURIComponent(code) : ''}`), 0);
+    return '<div class="empty"><span class="spin"></span></div>';
   }
   const me = S.me, busyT = S.data.live.find(l => l.status === 'live' && l.table_no === n);
   // сверху — с кем играли недавно, дальше — по рейтингу
@@ -2751,21 +2764,61 @@ function viewPlay(r) {
     <div class="pq-go"><button class="btn primary big full" data-act="pq-start" data-t="${n}" data-s="1" ${PLAY.opp ? '' : 'disabled'}>▶ Начать — вести счёт</button>
       <button class="btn full" data-act="pq-start" data-t="${n}" data-s="0" ${PLAY.opp ? '' : 'disabled'}>⏱ Начать — счёт в конце</button></div>`;
 }
-// наклейки с QR для столов (печать)
-function viewTables() {
-  if (!isAdmin()) return '<div class="empty">Только для владельца клуба</div>';
-  const n = Math.max(1, Math.min(8, +(lsGet('ponghub_tables') || 1)));
-  return `<div class="page-h"><a href="#/admin/screens" class="back">← Табло</a></div><h1 class="no-print">Наклейки для столов</h1>
-    <p class="muted small no-print">Распечатайте и наклейте на стол. Игрок наводит камеру — и сразу открывается «Игра за столом» с выбором соперника.</p>
-    <div class="row-btns no-print"><span>Столов:</span><button class="btn sm" data-act="tb-n" data-v="${n - 1}">−</button><b>${n}</b><button class="btn sm" data-act="tb-n" data-v="${n + 1}">+</button><button class="btn primary sm" onclick="window.print()">🖨 Печать</button></div>
-    <div class="qr-stickers">${Array.from({ length: n }, (_, k) => `<div class="qr-st"><div class="qr-lg">🏓</div><b>Стол ${k + 1}</b><span>${esc(S.club?.name || '')}</span><div class="qr-img" data-qr="${esc(`${location.origin}${location.pathname}#/play/${S.club.id}/${k + 1}`)}"></div><span>Наведи камеру — и играй</span><em>PONGHUB</em></div>`).join('')}</div>`;
+// ───────────── Печать для клуба (только владелец): плакат А4 и «домики» на столы ─────────────
+// QR ведут только в этот клуб: плакат — ссылка-приглашение (заявка уходит сама после регистрации),
+// домик — «Игра за столом» этого клуба (с кодом приглашения, чтобы новичок сразу подал заявку).
+const tablesN = () => Math.max(1, Math.min(12, +(lsGet('ponghub_tables') || 1)));
+const tableLink = (n, code) => `${location.origin}${location.pathname}#/play/${S.club.id}/${n}${code ? '?code=' + encodeURIComponent(code) : ''}`;
+function posterSheet() {
+  return `<div class="prn-a4"><div class="prn-in prn-poster">
+    <div class="prn-logo"><img src="${logo()}" alt="">PONGHUB</div>
+    <div class="prn-club">${esc(S.club.name)}</div>
+    <h3>Играешь<br>в <em>пинг-понг?</em></h3>
+    <div class="prn-qrbox"><div class="prn-qr" data-prn="join"></div></div>
+    <div class="prn-scan">📷 Наведи камеру телефона</div>
+    <div class="prn-steps"><div><i>1</i>Наведи камеру на QR-код</div><div><i>2</i>Создай аккаунт за минуту</div><div><i>3</i>Заявка в клуб уйдёт сама</div></div>
+    <div class="prn-foot">🏆 Рейтинг · ⚔️ Вызовы · 🗓 Турниры</div>
+  </div></div>`;
 }
-async function mountStickers() {
-  const els = [...document.querySelectorAll('[data-qr]')]; if (!els.length) return;
-  try {
-    if (!window.qrcode) await new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js'; sc.onload = res; sc.onerror = rej; document.head.appendChild(sc); });
-    els.forEach(el => { const q = window.qrcode(0, 'M'); q.addData(el.dataset.qr); q.make(); el.innerHTML = q.createSvgTag({ cellSize: 4, margin: 1, scalable: true }); });
-  } catch { els.forEach(el => { el.textContent = 'нет связи'; }); }
+function tentSheet(n) {
+  const half = pos => `<div class="prn-half ${pos}"><div class="prn-qrbox"><div class="prn-qr" data-prn="table" data-n="${n}"></div></div>
+    <div><div class="prn-t1">${esc(S.club.name)}</div><div class="prn-t2">Стол ${n}</div><div class="prn-t3">Наведи камеру —<br>сыграй матч</div><div class="prn-t4">Соперник, формат, счёт на табло — всё в телефоне.</div></div></div>`;
+  return `<div class="prn-a4"><div class="prn-in prn-tent">${half('prn-up')}<div class="prn-fold"><span>сгиб</span></div>${half('prn-down')}</div></div>`;
+}
+function viewPrint() {
+  if (!isAdmin()) return '<div class="empty">Печать доступна только владельцу клуба</div>';
+  const n = tablesN();
+  return `<div class="page-h"><a href="#/me" class="back">← Профиль</a></div><h1>Печать для клуба</h1>
+    <p class="muted small">QR-коды ведут только в «${esc(S.club.name)}». Печатайте на А4, масштаб 100%, без полей.</p>
+    <section class="card"><div class="card-h"><h3>📣 Рекламный плакат</h3></div>
+      <p class="muted small">Человек наводит камеру → регистрируется → заявка в клуб уходит сама. Вам придёт уведомление — примите её во вкладке «Заявки».</p>
+      <div class="prn-prev">${posterSheet()}</div>
+      <button class="btn primary full" data-act="print-sheets" data-what="poster">🖨 Печать плаката</button></section>
+    <section class="card"><div class="card-h"><h3>🏓 Домик на стол</h3></div>
+      <p class="muted small">Сложите лист пополам по пунктиру — домик стоит на столе, QR видно с двух сторон. Наведя камеру, игрок сразу попадает в «Игру за столом»: выбирает соперника и формат. Если он ещё не в клубе — регистрируется, заявка уходит сама, а после вашего «Принять» он снова сканирует стол и играет. Лучше плотная бумага 160–200 г/м².</p>
+      <div class="row-btns"><span>Столов:</span><button class="btn sm" data-act="tb-n" data-v="${n - 1}">−</button><b>${n}</b><button class="btn sm" data-act="tb-n" data-v="${n + 1}">+</button></div>
+      <div class="prn-prev">${tentSheet(1)}</div>
+      <button class="btn primary full" data-act="print-sheets" data-what="tables">🖨 Печать домиков · ${n} ${plural(n, 'лист', 'листа', 'листов')}</button></section>
+    <p class="muted small">Если сменить ссылку приглашения (Профиль → Пригласить), старые плакаты и домики перестанут принимать новичков — участники клуба будут играть по ним как раньше. Тогда просто распечатайте заново.</p>`;
+}
+async function fillPrintQr(root) {
+  const code = S.printCode?.club === S.club.id ? S.printCode.code : (S.printCode = { club: S.club.id, code: await S.store.inviteCode(S.club.id) }).code;
+  await Promise.all([...root.querySelectorAll('[data-prn]')].map(el =>
+    drawQr(el, el.dataset.prn === 'join' ? inviteLink(code) : tableLink(el.dataset.n, code), 4)));
+}
+async function renderPrint() {
+  const host = document.querySelector('.page');
+  if (!host || !isAdmin()) return;
+  try { await fillPrintQr(host); } catch (e) { toast(e.message, 'err'); }
+}
+async function printSheets(what) {
+  let el = document.getElementById('print-area');
+  if (!el) { el = document.createElement('div'); el.id = 'print-area'; document.body.appendChild(el); }
+  el.innerHTML = what === 'poster' ? posterSheet() : Array.from({ length: tablesN() }, (_, k) => tentSheet(k + 1)).join('');
+  await fillPrintQr(el);
+  await document.fonts?.ready;
+  await new Promise(res => setTimeout(res, 300));
+  window.print();
 }
 
 // ───────────── Админка ─────────────
@@ -3411,7 +3464,7 @@ const ACT = {
   }),
   'pq-opp': el => { PLAY.opp = el.dataset.id; render(); },
   'pq-bo': el => { PLAY.bestOf = +el.dataset.v; render(); },
-  'tb-n': el => { lsSet('ponghub_tables', String(Math.max(1, Math.min(8, +el.dataset.v)))); render(); },
+  'tb-n': el => { lsSet('ponghub_tables', String(Math.max(1, Math.min(12, +el.dataset.v)))); render(); },
   'pq-start': el => busy(el, async () => {
     if (!PLAY.opp) throw new Error('Выберите соперника');
     const row = { kind: 'singles', type: 'free', player1_id: S.me.id, player2_id: PLAY.opp, player3_id: null, player4_id: null, best_of: PLAY.bestOf, points_to: 11, rated: true,
@@ -3824,12 +3877,12 @@ function afterRender(r) {
   if (r.name === 'player' && feature('shop')) { ensureThree(); mountPlayerRackets(); }
   if (r.name === 'avatar' && feature('avatar')) mountAvatarView(r);
   if (r.name === 'home') mountHome3D();
-  if (r.name === 'tables') mountStickers();
+  if (r.name === 'print' || r.name === 'tables') renderPrint();
   if (document.getElementById('dir-box')) renderDirectory(document.querySelector('[data-input=dir-search]')?.value || '');
   if (document.getElementById('pick-map')) mountPickMap();
   if (r.name === 'invite') renderInvite();
   if (r.name === 'map') renderMap();
-  if (r.name === 'club' && r.args[0]) renderClubPage(r.args[0], r.q.get('code'));
+  if (r.name === 'club' && r.args[0]) renderClubPage(r.args[0], r.q.get('code'), r.q.get('auto') === '1', r.q.get('table'));
   if (r.name === 'founder') renderFounder();
   if (r.name === 'join' && r.args[0] && S.user) openInvite(r.args[0]);
   const f = document.querySelector('[data-form=settings]');

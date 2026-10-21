@@ -776,14 +776,12 @@ form[data-sys="league"] .only-elo, form[data-sys="elo"] .only-league { display: 
 .spin.big { width: 34px; height: 34px; margin: 10px auto; border-width: 3px; color: var(--red); }
 #print-area { display: none; }
 @media print {
+  @page { size: A4; margin: 0; }
   body > *:not(#print-area) { display: none !important; }
   #print-area { display: block; }
-  .poster { text-align: center; font-family: var(--font); color: #000; padding: 20mm 10mm; }
-  .poster h1 { font: 800 40pt/1.1 var(--display); margin: 10mm 0 4mm; }
-  .poster p { font-size: 16pt; margin: 4mm 0; }
-  .qr-print { width: 110mm; height: 110mm; margin: 8mm auto; }
-  .qr-print svg { width: 100%; height: 100%; }
-  .poster-code { font: 700 28pt ui-monospace, Menlo, monospace; letter-spacing: 6pt; }
+  #print-area .prn-a4 { width: 210mm; height: 297mm; aspect-ratio: auto; box-shadow: none; border-radius: 0; break-after: page; page-break-after: always; }
+  #print-area .prn-a4:last-child { break-after: auto; page-break-after: auto; }
+  #print-area * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 #club-page > * + *, #founder-box > * + *, #invite-box > * + * { margin-top: 14px; }
 .creator-star { margin-left: 1px; }
@@ -1259,13 +1257,7 @@ body.av-big { overflow: hidden; }
 .pq-p.on { border-color: #1f5fc4; background: color-mix(in srgb, #1f5fc4 10%, var(--surface)); }
 .pq-go { display: grid; gap: 8px; margin-top: 16px; }
 /* наклейки с QR */
-.qr-stickers { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; margin-top: 14px; }
-.qr-st { display: grid; justify-items: center; gap: 6px; padding: 18px; border-radius: 22px; background: linear-gradient(160deg, #2f74d6, #1f5fc4 45%, #0e3b8c); color: #fff; text-align: center; break-inside: avoid; }
-.qr-lg { width: 46px; height: 46px; border-radius: 12px; background: #fff; display: grid; place-items: center; font-size: 26px; }
-.qr-st b { font: 800 28px var(--display); text-transform: uppercase; } .qr-st span { font: 700 13px var(--font); opacity: .95; }
-.qr-img { width: 180px; height: 180px; padding: 8px; border-radius: 14px; background: #fff; } .qr-img svg { width: 100%; height: 100%; display: block; }
-.qr-st em { padding: 4px 12px; border-radius: 99px; background: #ffd75e; color: #2a1d00; font: 800 12px var(--font); font-style: normal; }
-@media print { .top, .tabs, .no-print, .page-h, .ios-hint { display: none !important; } body { background: #fff; } .qr-st { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+@media print { .top, .tabs, .no-print, .page-h, .ios-hint { display: none !important; } body { background: #fff; } }
 /* задания недели */
 .wt .card-h small { margin-left: auto; }
 .wt-q { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 4px; border-top: 1px solid var(--line); }
@@ -1281,13 +1273,13 @@ body.av-big { overflow: hidden; }
 /* ── Игроки, значки, сезоны, напоминание ── */
 .pl-search { width: 100%; margin-bottom: 10px; }
 .pl-list { margin-top: 10px; padding: 6px 12px; }
-.pl-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
-.pl-row:last-of-type { border-bottom: 0; }
-.pl-row[hidden] { display: none; }
+.plx-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.plx-row:last-of-type { border-bottom: 0; }
+.plx-row[hidden] { display: none; }
 .pl-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; color: inherit; }
 .pl-bdg { font-style: normal; font-size: 13px; letter-spacing: 1px; }
-.pl-row .idle { color: var(--warn); }
-.pl-row .btn.sm { flex: none; }
+.plx-row .idle { color: var(--warn); }
+.plx-row .btn.sm { flex: none; }
 .pl-ch, .pl-me { flex: none; font-size: 12px; font-weight: 600; color: var(--muted); padding: 0 4px; }
 .nudge { border-color: color-mix(in srgb, var(--red) 40%, var(--line)); }
 .nudge > .muted { margin: -4px 0 6px; }
@@ -1303,3 +1295,38 @@ body.av-big { overflow: hidden; }
 .ssn-me { margin: -2px 0 8px; font-weight: 600; }
 .ssn-place { width: 34px; text-align: center; font: 700 18px var(--display); color: var(--muted); }
 .ssn-place.ssn-top { font-size: 22px; }
+
+/* ── Печать для клуба: плакат А4 и домик на стол (размеры в cqw — доля ширины листа) ── */
+.prn-prev { max-width: 340px; margin: 12px auto; }
+.prn-a4 { width: 100%; aspect-ratio: 210 / 297; container-type: inline-size; position: relative; overflow: hidden; background: #fff; box-shadow: 0 10px 28px rgba(16, 32, 61, .22); border-radius: 3px; font-family: Inter, system-ui, sans-serif; color: #fff; text-shadow: none; }
+.prn-in { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.prn-qrbox { background: #fff; }
+.prn-qr { aspect-ratio: 1; display: grid; place-items: center; color: #10203d; font-size: 3cqw; }
+.prn-qr svg { width: 100%; height: 100%; display: block; }
+.prn-logo { display: flex; align-items: center; gap: 2.4cqw; font: 800 6cqw/1 "Barlow Condensed", sans-serif; letter-spacing: .04em; }
+.prn-logo img { width: 9cqw; height: 9cqw; border-radius: 2cqw; }
+.prn-poster { background: linear-gradient(165deg, #3b7fd4, #1f5fc4 50%, #0e3b8c); padding: 8cqw 9cqw 9cqw; }
+.prn-poster::before { content: ''; position: absolute; top: 0; bottom: 0; left: 50%; border-left: .7cqw solid rgba(255, 255, 255, .22); }
+.prn-poster::after { content: ''; position: absolute; inset: 2.6cqw; border: .9cqw solid rgba(255, 255, 255, .9); pointer-events: none; }
+.prn-poster > * { position: relative; z-index: 1; }
+.prn-club { margin-top: 4cqw; font: 700 3.6cqw/1.2 Inter, sans-serif; text-align: center; opacity: .95; }
+.prn-poster h3 { margin: 1.5cqw 0 0; text-align: center; font: 800 11cqw/0.95 "Barlow Condensed", sans-serif; text-transform: uppercase; }
+.prn-poster h3 em { font-style: normal; color: #ffd75e; }
+.prn-poster .prn-qrbox { margin: 4.5cqw auto 0; width: 44cqw; padding: 3cqw; border-radius: 4cqw; box-shadow: 0 2cqw 0 rgba(0, 0, 0, .18); }
+.prn-scan { margin: 2.6cqw auto 0; padding: 1.4cqw 4cqw; border-radius: 99px; background: #ffd75e; color: #2a1d00; font: 800 3.6cqw Inter, sans-serif; }
+.prn-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2.4cqw; margin-top: auto; }
+.prn-steps div { background: rgba(0, 0, 0, .22); border-radius: 3cqw; padding: 2.6cqw 1.6cqw; text-align: center; font: 600 2.6cqw/1.25 Inter, sans-serif; }
+/* цифра ровно по центру кружка */
+.prn-steps i { display: flex; align-items: center; justify-content: center; width: 7cqw; height: 7cqw; margin: 0 auto 1.4cqw; border-radius: 50%; background: #fff; color: #1f5fc4; font: 800 3.8cqw/1 Inter, sans-serif; font-style: normal; font-variant-numeric: tabular-nums; }
+.prn-foot { margin-top: 3.6cqw; text-align: center; font: 700 2.9cqw Inter, sans-serif; opacity: .95; }
+.prn-tent { background: #fff; }
+.prn-half { position: absolute; left: 0; right: 0; height: 50%; display: grid; grid-template-columns: 40cqw 1fr; gap: 5cqw; align-items: center; padding: 0 7cqw; background: linear-gradient(165deg, #3b7fd4, #1f5fc4 50%, #0e3b8c); }
+.prn-half.prn-up { top: 0; transform: rotate(180deg); }
+.prn-half.prn-down { bottom: 0; }
+.prn-half .prn-qrbox { padding: 2.2cqw; border-radius: 3.6cqw; }
+.prn-t1 { font: 700 3cqw/1.2 Inter, sans-serif; color: #ffd75e; }
+.prn-t2 { font: 800 11cqw/0.9 "Barlow Condensed", sans-serif; text-transform: uppercase; margin: 1cqw 0 2cqw; }
+.prn-t3 { font: 800 5.4cqw/0.95 "Barlow Condensed", sans-serif; text-transform: uppercase; }
+.prn-t4 { margin-top: 2cqw; font: 500 2.5cqw/1.35 Inter, sans-serif; opacity: .9; }
+.prn-fold { position: absolute; left: 0; right: 0; top: 50%; border-top: .5cqw dashed #fff; z-index: 2; }
+.prn-fold span { position: absolute; right: 3cqw; top: -2.6cqw; background: #fff; color: #6b7a90; font: 700 2.2cqw Inter, sans-serif; padding: .4cqw 1.6cqw; border-radius: 99px; }
