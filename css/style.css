@@ -1217,3 +1217,20 @@ body.av-big { overflow: hidden; }
 .tf-p:has(input:checked) { border-color: #1f5fc4; } .tf-p:has(input:checked) i { background: #1f5fc4; border-color: #1f5fc4; color: #fff; }
 .tf-done { flex: none; padding: 14px; font-size: 16px; border-radius: 16px; }
 .lv-lock { text-align: center; margin: 6px 0 0; }
+
+/* табло: зеркальная олимпийская сетка (8+ мест) */
+.tvx-wide { display: flex; flex-direction: column; gap: .8cqw; min-height: 0; }
+.tvx-nxline { display: flex; align-items: baseline; gap: .8cqw; align-self: center; padding: .4cqw 1.4cqw; border-radius: 99px; border: .12cqw solid var(--red); background: var(--tv-card); white-space: nowrap; max-width: 100%; overflow: hidden; }
+.tvx-nxline small { font: 700 .9cqw var(--font); letter-spacing: .15cqw; text-transform: uppercase; color: var(--red); }
+.tvx-nxline b { font: 800 1.7cqw var(--display); } .tvx-nxline em { font-style: normal; color: var(--tv-muted); } .tvx-nxline span { font-size: 1cqw; color: var(--tv-muted); }
+.tvx-mir { flex: 1; display: grid; gap: .9cqw; min-height: 0; }
+.tvx-mcol, .tvx-mfin { position: relative; display: flex; flex-direction: column; justify-content: space-around; gap: .4cqw; min-height: 0; min-width: 0; padding-top: 1.5cqw; }
+.tvx-mfin { justify-content: center; gap: 1cqw; }
+.tvx-mcol h5, .tvx-mfin h5 { position: absolute; top: 0; left: 0; right: 0; margin: 0; text-align: center; font: 700 .85cqw var(--font); letter-spacing: .12cqw; text-transform: uppercase; color: var(--tv-muted); white-space: nowrap; }
+.tvx-mfin h5 { color: #ffd75e; }
+.tvx-mir .tvx-bm div { padding: var(--py) .6cqw; font: 700 var(--fs)/1.15 var(--display); gap: .45cqw; }
+.tvx-mir .tvx-av { width: calc(var(--fs) * 1.25); font-size: calc(var(--fs) * .75); }
+.tvx-mir .tvx-bm .tbd { font: italic 600 calc(var(--fs) * .82) var(--font); }
+.tvx-mir .tvx-bm.now::before { content: none; }
+.tvx-mir .tvx-bm.now { border-color: #ffd75e; box-shadow: 0 0 1.4cqw rgba(255, 215, 94, .5); animation: none; }
+.tvx-mfin .tvx-champ { padding: .8cqw; } .tvx-mfin .tvx-champ i { font-size: 2.4cqw; } .tvx-mfin .tvx-champ b { font-size: 1.5cqw; }

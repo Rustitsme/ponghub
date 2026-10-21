@@ -292,6 +292,27 @@ export async function startTV(root, store) {
     const champ = br.champion ? `<b>${esc(P(br.champion).nickname)}</b>` : '<b>?</b><span>определится в финале</span>';
     return `<div class="tvx-bracket" style="grid-template-columns:repeat(${rounds.length},minmax(0,1fr)) minmax(0,.7fr)">${cols}<div class="tvx-round"><h5>Чемпион</h5><div class="tvx-champ"><i>🏆</i>${champ}</div></div></div>`;
   }
+  // большая олимпийка (8+ мест): зеркальная сетка — половина слева, половина справа, финал по центру;
+  // «свободные проходы» не показываем — такие игроки сразу стоят во 2-м раунде; шрифт подстраивается под число матчей
+  function koMirror(slots, ms, third, nx) {
+    const br = koBracket(slots, ms, third), R = br.rounds.length;
+    const isNx = c => nx && c.a && c.b && ((nx.a === c.a && nx.b === c.b) || (nx.a === c.b && nx.b === c.a));
+    const nm = (id, c) => id ? `<div class="${c.winner === id && !c.bye ? 'w' : c.winner && !c.bye ? 'l' : ''}">${avaTv(P(id))}<span class="tvx-nk">${esc(P(id).nickname)}</span><span class="sc">${c.match && c.match.status === 'approved' ? (c.match.player1_id === id ? c.match.sets1 : c.match.sets2) : ''}</span></div>`
+      : `<div class="tbd">ждём</div>`;
+    const cell = c => `<div class="tvx-bm ${isNx(c) ? 'now' : ''}">${nm(c.a, c)}${nm(c.b, c)}</div>`;
+    const shown = (c, r) => !c.empty && !(r === 0 && c.bye);
+    const half = side => br.rounds.slice(0, R - 1).map((row, r) => { const h = row.length / 2; return { r, cells: (side ? row.slice(h) : row.slice(0, h)).filter(c => shown(c, r)) }; }).filter(x => x.cells.length);
+    const L = half(0), Rt = half(1).reverse();
+    const rows = Math.max(1, ...L.map(x => x.cells.length), ...Rt.map(x => x.cells.length));
+    const fs = Math.max(.72, Math.min(1.35, 9.5 / rows)), py = Math.max(.1, Math.min(.42, 3.2 / rows));
+    const col = x => `<div class="tvx-mcol"><h5>${esc(roundName(x.r, R))}</h5>${x.cells.map(cell).join('')}</div>`;
+    const fin = br.rounds[R - 1][0];
+    const champ = br.champion ? `<b>${esc(P(br.champion).nickname)}</b>` : '<b>?</b><span>чемпион</span>';
+    const w = k => (1 + Math.max(0, L.length - 1 - k) * .18).toFixed(2);
+    const colsCss = [...L.map((_, k) => `minmax(0,${w(k)}fr)`), 'minmax(0,1.15fr)', ...Rt.map((_, k) => `minmax(0,${w(Rt.length - 1 - k)}fr)`)].join(' ');
+    return `<div class="tvx-mir" style="grid-template-columns:${colsCss};--fs:${fs.toFixed(2)}cqw;--py:${py.toFixed(2)}cqw">
+      ${L.map(col).join('')}<div class="tvx-mfin"><h5>Финал</h5>${cell(fin)}<div class="tvx-champ"><i>🏆</i>${champ}</div></div>${Rt.map(col).join('')}</div>`;
+  }
   // группа / круг: места и победы простыми словами
   function placesCard(title, sub, ids, ms, adv) {
     const st = standings(ids, ms);
@@ -310,15 +331,15 @@ export async function startTV(root, store) {
   function breakScreen() {
     const active = activeTour();
     const nx = nextPairs()[0];
-    let left, title, sub;
+    let left, title, sub, wide = false;
     if (active) {
       title = esc(active.name);
       const ms = (T.full.matches || []).filter(m => m.tournament_id === active.id);
-      if (active.format === 'ko' && active.config?.slots) { sub = 'олимпийская система'; left = koTree(active.config.slots, ms, active.config.thirdPlace, nx); }
+      if (active.format === 'ko' && active.config?.slots) { sub = 'олимпийская система'; if (active.config.slots.length >= 8) { wide = true; left = koMirror(active.config.slots, ms, active.config.thirdPlace, nx); } else left = koTree(active.config.slots, ms, active.config.thirdPlace, nx); }
       else if (active.format === 'groups') {
         const groups = active.config?.groups || [], adv = active.config?.advance || 2;
         const koMs = ms.filter(m => m.stage === 'ko' || m.stage === 'ko3');
-        if (active.config?.slots && koMs.length) { sub = 'плей-офф'; left = koTree(active.config.slots, koMs, active.config.thirdPlace, nx); }
+        if (active.config?.slots && koMs.length) { sub = 'плей-офф'; if (active.config.slots.length >= 8) { wide = true; left = koMirror(active.config.slots, koMs, active.config.thirdPlace, nx); } else left = koTree(active.config.slots, koMs, active.config.thirdPlace, nx); }
         else {
           sub = 'групповой этап';
           left = `<div class="tvx-steps"><span class="on">Этап 1 · Группы</span><i>→</i><span>Этап 2 · Плей-офф</span><em>Из каждой группы в плей-офф выходят ${adv}</em></div>
@@ -341,6 +362,10 @@ export async function startTV(root, store) {
         return `<li>${esc(a)} ${m.sets1}:${m.sets2} ${esc(b)}<span>${new Date(m.played_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}</span></li>`;
       }).join('') || '<li class="tvx-muted">Матчей пока нет</li>'}</ol></div>
         <div class="tvx-card tvx-list"><h4>Рейтинг клуба</h4><ol>${(T.rank || []).slice(0, 6).map((x, i) => `<li>${i < 3 ? ['🥇', '🥈', '🥉'][i] : (i + 1) + '.'} ${esc(x.p.nickname)}<span>${fmtR(x.r)}</span></li>`).join('')}</ol></div></div>`;
+    }
+    if (wide) {
+      const nxLine = nx ? `<div class="tvx-nxline"><small>Следом за этим столом</small><b>${esc(P(nx.a).nickname)}</b><em>—</em><b>${esc(P(nx.b).nickname)}</b><span>${esc(nx.note)}</span></div>` : '';
+      return `<section class="tvx-scr">${top(`${title} · ${sub}`, '<div class="tvx-tag">Перерыв</div>')}<div class="tvx-wide">${nxLine}${left}</div>${foot()}</section>`;
     }
     const right = nx ? `<div class="tvx-next"><small>Следом за этим столом</small>${fitNick(P(nx.a).nickname)}<em>—</em>${fitNick(P(nx.b).nickname)}<span>${esc(nx.note)}</span></div>`
       : `<div class="tvx-next">${qrCard()}</div>`;
