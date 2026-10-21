@@ -1329,7 +1329,8 @@ body.av-big { overflow: hidden; }
 .prn-half .prn-qrbox { padding: 2.2cqw; border-radius: 3.6cqw; }
 .prn-t1 { font: 700 3cqw/1.2 Inter, sans-serif; color: #ffd75e; }
 .prn-t2 { font: 800 10.5cqw/1.05 "Barlow Condensed", sans-serif; text-transform: uppercase; margin: 1cqw 0 2cqw; }
-.prn-t3 { font: 800 6.6cqw/1.12 "Barlow Condensed", sans-serif; text-transform: uppercase; overflow-wrap: break-word; }
+.prn-t3 { font: 800 6.6cqw/1.12 "Barlow Condensed", sans-serif; text-transform: uppercase; text-align: center; width: fit-content; max-width: 100%; }
+.prn-t3 span { display: block; }
 .prn-t4 { margin-top: 2cqw; font: 500 2.5cqw/1.35 Inter, sans-serif; opacity: .9; }
 .prn-fold { position: absolute; left: 0; right: 0; top: 50%; border-top: .5cqw dashed #fff; z-index: 2; }
 .prn-fold span { position: absolute; right: 3cqw; top: -2.6cqw; background: #fff; color: #6b7a90; font: 700 2.2cqw Inter, sans-serif; padding: .4cqw 1.6cqw; border-radius: 99px; }

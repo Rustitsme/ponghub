@@ -2782,7 +2782,7 @@ function posterSheet() {
 function tentSheet(n) {
   const half = pos => `<div class="prn-half ${pos}"><div class="prn-logo"><img src="${logo()}" alt="">PONGHUB</div>
     <div class="prn-row"><div class="prn-qrbox"><div class="prn-qr" data-prn="table" data-n="${n}"></div></div>
-    <div class="prn-txt"><div class="prn-t1">${esc(S.club.name)}</div><div class="prn-t2 prn-fit">Стол ${n}</div><div class="prn-t3">Наведи камеру&nbsp;— сыграй матч</div><div class="prn-t4">Соперник, формат, счёт на табло — всё в телефоне.</div></div></div></div>`;
+    <div class="prn-txt"><div class="prn-t1">${esc(S.club.name)}</div><div class="prn-t2 prn-fit">Стол ${n}</div><div class="prn-t3 prn-fit"><span>Наведи камеру</span><span>—</span><span>Сыграй матч</span></div><div class="prn-t4">Соперник, формат, счёт на табло — всё в телефоне.</div></div></div></div>`;
   return `<div class="prn-a4"><div class="prn-in prn-tent">${half('prn-up')}<div class="prn-fold"><span>сгиб</span></div>${half('prn-down')}</div></div>`;
 }
 function viewPrint() {
@@ -2818,7 +2818,6 @@ function fitPrint(root) {
   // домик: если половина не вмещает надписи, уменьшаем их понемногу
   for (const half of root.querySelectorAll('.prn-half')) {
     const els = [...half.querySelectorAll('.prn-t2, .prn-t3, .prn-t4')], sheet = half.closest('.prn-a4').clientWidth;
-    els.forEach(el => { el.style.fontSize = ''; });
     const base = els.map(el => parseFloat(getComputedStyle(el).fontSize));
     const need = () => [...half.children].reduce((a, c) => a + c.offsetHeight, 0) + parseFloat(getComputedStyle(half).rowGap || 0) * (half.children.length - 1);
     let k = 1;
