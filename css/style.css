@@ -1298,7 +1298,7 @@ body.av-big { overflow: hidden; }
 
 /* ── Печать для клуба: плакат А4 и домик на стол (размеры в cqw — доля ширины листа) ── */
 .prn-prev { max-width: 340px; margin: 12px auto; }
-.prn-a4 { width: 100%; aspect-ratio: 210 / 297; container-type: inline-size; position: relative; overflow: hidden; background: #fff; box-shadow: 0 10px 28px rgba(16, 32, 61, .22); border-radius: 3px; font-family: Inter, system-ui, sans-serif; color: #fff; text-shadow: none; }
+.prn-a4 { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; width: 100%; aspect-ratio: 210 / 297; container-type: inline-size; position: relative; overflow: hidden; background: #fff; box-shadow: 0 10px 28px rgba(16, 32, 61, .22); border-radius: 3px; font-family: Inter, system-ui, sans-serif; color: #fff; text-shadow: none; }
 .prn-in { position: absolute; inset: 0; display: flex; flex-direction: column; }
 .prn-qrbox { background: #fff; }
 .prn-qr { aspect-ratio: 1; display: grid; place-items: center; color: #10203d; font-size: 3cqw; }
@@ -1310,23 +1310,27 @@ body.av-big { overflow: hidden; }
 .prn-poster::after { content: ''; position: absolute; inset: 2.6cqw; border: .9cqw solid rgba(255, 255, 255, .9); pointer-events: none; }
 .prn-poster > * { position: relative; z-index: 1; }
 .prn-club { margin-top: 4cqw; font: 700 3.6cqw/1.2 Inter, sans-serif; text-align: center; opacity: .95; }
-.prn-poster h3 { margin: 1.5cqw 0 0; text-align: center; font: 800 11cqw/0.95 "Barlow Condensed", sans-serif; text-transform: uppercase; }
+.prn-poster h3 { margin: 1.5cqw 0 0; text-align: center; font: 800 11cqw/1 "Barlow Condensed", sans-serif; text-transform: uppercase; }
+.prn-fit { display: block; white-space: nowrap; overflow: hidden; }
 .prn-poster h3 em { font-style: normal; color: #ffd75e; }
 .prn-poster .prn-qrbox { margin: 4.5cqw auto 0; width: 44cqw; padding: 3cqw; border-radius: 4cqw; box-shadow: 0 2cqw 0 rgba(0, 0, 0, .18); }
 .prn-scan { margin: 2.6cqw auto 0; padding: 1.4cqw 4cqw; border-radius: 99px; background: #ffd75e; color: #2a1d00; font: 800 3.6cqw Inter, sans-serif; }
-.prn-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2.4cqw; margin-top: auto; }
+.prn-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2.4cqw; margin-top: auto; padding-top: 4cqw; }
 .prn-steps div { background: rgba(0, 0, 0, .22); border-radius: 3cqw; padding: 2.6cqw 1.6cqw; text-align: center; font: 600 2.6cqw/1.25 Inter, sans-serif; }
 /* цифра ровно по центру кружка */
 .prn-steps i { display: flex; align-items: center; justify-content: center; width: 7cqw; height: 7cqw; margin: 0 auto 1.4cqw; border-radius: 50%; background: #fff; color: #1f5fc4; font: 800 3.8cqw/1 Inter, sans-serif; font-style: normal; font-variant-numeric: tabular-nums; }
-.prn-foot { margin-top: 3.6cqw; text-align: center; font: 700 2.9cqw Inter, sans-serif; opacity: .95; }
 .prn-tent { background: #fff; }
-.prn-half { position: absolute; left: 0; right: 0; height: 50%; display: grid; grid-template-columns: 40cqw 1fr; gap: 5cqw; align-items: center; padding: 0 7cqw; background: linear-gradient(165deg, #3b7fd4, #1f5fc4 50%, #0e3b8c); }
+.prn-half { position: absolute; left: 0; right: 0; height: 50%; display: flex; flex-direction: column; justify-content: center; gap: 4cqw; padding: 0 7cqw; background: linear-gradient(165deg, #3b7fd4, #1f5fc4 50%, #0e3b8c); }
+.prn-half .prn-logo { font-size: 5.4cqw; } .prn-half .prn-logo img { width: 8cqw; height: 8cqw; }
+.prn-row { display: grid; grid-template-columns: 40cqw 1fr; gap: 5cqw; align-items: center; }
+.prn-txt { min-width: 0; }
 .prn-half.prn-up { top: 0; transform: rotate(180deg); }
 .prn-half.prn-down { bottom: 0; }
 .prn-half .prn-qrbox { padding: 2.2cqw; border-radius: 3.6cqw; }
 .prn-t1 { font: 700 3cqw/1.2 Inter, sans-serif; color: #ffd75e; }
-.prn-t2 { font: 800 11cqw/0.9 "Barlow Condensed", sans-serif; text-transform: uppercase; margin: 1cqw 0 2cqw; }
-.prn-t3 { font: 800 5.4cqw/0.95 "Barlow Condensed", sans-serif; text-transform: uppercase; }
+.prn-t2 { font: 800 10.5cqw/1.05 "Barlow Condensed", sans-serif; text-transform: uppercase; margin: 1cqw 0 2cqw; }
+.prn-t3 { font: 800 6.6cqw/1.12 "Barlow Condensed", sans-serif; text-transform: uppercase; text-align: center; width: fit-content; max-width: 100%; }
+.prn-t3 span { display: block; }
 .prn-t4 { margin-top: 2cqw; font: 500 2.5cqw/1.35 Inter, sans-serif; opacity: .9; }
 .prn-fold { position: absolute; left: 0; right: 0; top: 50%; border-top: .5cqw dashed #fff; z-index: 2; }
 .prn-fold span { position: absolute; right: 3cqw; top: -2.6cqw; background: #fff; color: #6b7a90; font: 700 2.2cqw Inter, sans-serif; padding: .4cqw 1.6cqw; border-radius: 99px; }
