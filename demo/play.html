@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="robots" content="noindex">
+<title>Быстрый старт, пауза, задания — макет</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap">
+<style>
+/* Макет трёх улучшений игры: QR на столе, пауза с сеткой, задания недели. Данные — пример. */
+:root { --d: "Barlow Condensed", sans-serif; --f: Inter, system-ui, sans-serif; --red: #e63946; --blue: #1f5fc4; --gold: #ffd75e; --muted: #6b7a90; }
+* { box-sizing: border-box; }
+body { margin: 0; font-family: var(--f); background: #e9eef6; color: #10203d; }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 16px 16px 60px; }
+h2 { font: 800 28px var(--d); text-transform: uppercase; margin: 34px 0 6px; } h2:first-of-type { margin-top: 6px; }
+.lead { font-size: 15px; line-height: 1.45; color: #3a4a62; margin: 0 0 14px; max-width: 900px; }
+.row { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; }
+.cap { text-align: center; font: 800 14px var(--f); margin: 0 0 8px; } .cap small { display: block; font-weight: 500; color: var(--muted); }
+.ph { width: 300px; border-radius: 34px; padding: 10px; background: #10203d; box-shadow: 0 18px 36px rgba(16,32,61,.3); }
+.sc { height: 600px; border-radius: 25px; overflow: hidden; background: #f3f6fb; padding: 14px; display: flex; flex-direction: column; gap: 10px; position: relative; }
+.ttl { font: 800 22px/1.05 var(--d); text-transform: uppercase; } .ttl small { display: block; font: 600 12px var(--f); color: var(--muted); text-transform: none; margin-top: 3px; }
+.card { background: #fff; border-radius: 16px; padding: 12px; box-shadow: 0 2px 8px rgba(16,32,61,.06); }
+.btn { display: block; text-align: center; padding: 13px; border-radius: 14px; background: var(--red); color: #fff; font: 800 15px var(--f); }
+.btn.alt { background: #fff; color: #10203d; border: 2px solid #dbe2ec; } .btn.blue { background: var(--blue); }
+.av { --c: #e63946; display: inline-grid; place-items: center; flex: none; width: 34px; aspect-ratio: 1; border-radius: 50%; background: color-mix(in srgb, var(--c) 25%, #fff); border: 2px solid var(--c); font-size: 17px; }
+.lbl { font: 700 11px var(--f); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+/* наклейка на стол */
+.sticker { width: 300px; border-radius: 22px; padding: 18px; background: linear-gradient(160deg, #2f74d6, #1f5fc4 45%, #0e3b8c); color: #fff; text-align: center; box-shadow: 0 18px 36px rgba(16,32,61,.3); }
+.sticker .lg { width: 46px; height: 46px; margin: 0 auto 6px; border-radius: 12px; background: #fff; display: grid; place-items: center; font-size: 26px; }
+.sticker b { display: block; font: 800 26px var(--d); text-transform: uppercase; } .sticker .qr { width: 190px; height: 190px; margin: 12px auto; border-radius: 14px; background: #fff; padding: 10px; }
+.sticker .qr i { display: block; width: 100%; height: 100%; background: repeating-conic-gradient(#10203d 0 25%, #fff 0 50%) 0 0 / 18px 18px; border-radius: 4px; }
+.sticker span { font: 700 14px var(--f); opacity: .95; } .sticker em { display: inline-block; margin-top: 8px; padding: 5px 12px; border-radius: 99px; background: var(--gold); color: #2a1d00; font: 800 13px var(--f); font-style: normal; }
+.pick { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; } .pick div { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 12px; background: #fff; border: 2px solid transparent; font: 700 14px var(--d); }
+.pick div.on { border-color: var(--blue); background: #e7f0ff; }
+.here { font-size: 11px; color: #157a4b; font-weight: 700; }
+.vs { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px; border-radius: 16px; background: linear-gradient(135deg, var(--blue), #0e3b8c); color: #fff; }
+.vs div { display: grid; justify-items: center; gap: 4px; flex: 1; font: 800 16px var(--d); } .vs i { font-style: normal; font: 800 14px var(--f); color: var(--gold); }
+.seg { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; padding: 3px; border-radius: 12px; background: #e3e8f0; } .seg span { text-align: center; padding: 8px 2px; border-radius: 9px; font: 700 12px var(--f); color: #4a5a72; } .seg span.on { background: #fff; color: #10203d; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+/* табло 16:9 */
+.tv { container-type: inline-size; width: 620px; max-width: 100%; aspect-ratio: 16/9; border-radius: 14px; overflow: hidden; position: relative; color: #eef3fb;
+  background: radial-gradient(120% 90% at 50% 0%, #163463 0%, #0b1a33 55%, #070f1f 100%); box-shadow: 0 18px 36px rgba(0,0,0,.4); padding: 2.4cqw; }
+.tv .top { display: flex; align-items: center; gap: 1.2cqw; font: 800 2.4cqw var(--d); text-transform: uppercase; } .tv .top span { margin-left: auto; padding: .5cqw 1.4cqw; border-radius: 99px; background: rgba(255,255,255,.08); font: 700 1.3cqw var(--f); color: #93a7c6; }
+.tv .duel { display: grid; grid-template-columns: 1fr auto 1fr; gap: 2cqw; margin-top: 3cqw; filter: blur(.25cqw) brightness(.55); }
+.tv .pn { border-radius: 2cqw; padding: 2cqw; text-align: center; font: 800 12cqw/1 var(--d); } .tv .p1 { background: rgba(214,40,57,.6); } .tv .p2 { background: rgba(47,125,225,.6); }
+.tv .mid { align-self: center; font: 800 5cqw var(--d); }
+.pause { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 1.25fr; gap: 2cqw; padding: 9cqw 2.4cqw 2.4cqw; background: rgba(7,15,31,.82); }
+.pause .big { display: grid; place-content: center; justify-items: center; gap: 1cqw; text-align: center; border-radius: 2cqw; background: rgba(255,215,94,.12); border: .3cqw solid var(--gold); }
+.pause .big b { font: 800 4.6cqw var(--d); color: var(--gold); letter-spacing: .2cqw; } .pause .big strong { font: 800 9cqw/1 var(--d); } .pause .big small { font: 600 1.5cqw var(--f); color: #c9d6ea; }
+.pause .grid { border-radius: 2cqw; background: rgba(255,255,255,.06); padding: 1.6cqw; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.2cqw; align-items: center; }
+.pause .grid h5 { grid-column: 1 / -1; margin: 0; font: 700 1.3cqw var(--f); color: #93a7c6; letter-spacing: .15cqw; text-transform: uppercase; }
+.bm { border-radius: .8cqw; background: rgba(255,255,255,.08); border: .1cqw solid rgba(255,255,255,.14); } .bm div { padding: .5cqw .8cqw; font: 700 1.5cqw var(--d); } .bm div + div { border-top: .1cqw solid rgba(255,255,255,.08); }
+.bm .t { color: #6f83a3; font: italic 600 1.2cqw var(--f); } .bm.now { border-color: var(--gold); box-shadow: 0 0 1.2cqw rgba(255,215,94,.5); }
+.tmr { display: grid; justify-items: center; gap: 6px; padding: 18px; border-radius: 18px; background: #fff7d6; border: 2px solid #f2b600; text-align: center; }
+.tmr b { font: 800 46px/1 var(--d); } .tmr small { color: #6b5a00; font-weight: 600; }
+/* задания недели */
+.wk { display: flex; justify-content: space-between; align-items: baseline; } .wk b { font: 800 15px var(--d); color: var(--blue); }
+.q { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 10px; align-items: center; background: #fff; border-radius: 16px; padding: 10px; box-shadow: 0 2px 8px rgba(16,32,61,.06); }
+.q .ic { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-size: 22px; background: #eef3fb; }
+.q b { display: block; font: 700 14px/1.2 var(--f); } .q small { color: var(--muted); font-size: 12px; }
+.bar { height: 7px; border-radius: 9px; background: #e3e8f0; margin-top: 6px; overflow: hidden; } .bar i { display: block; height: 100%; background: var(--blue); border-radius: 9px; }
+.q .rw { display: grid; justify-items: end; gap: 4px; font: 800 15px var(--d); color: #157a4b; white-space: nowrap; }
+.q .get { padding: 6px 10px; border-radius: 99px; background: var(--red); color: #fff; font: 800 11px var(--f); } .q .ok { color: #9aa6b8; font: 700 11px var(--f); }
+.q.done { background: #effaf4; } .q.done .bar i { background: #16a34a; }
+.tile { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 12px; border-radius: 18px; background: #fff; border: 4px solid var(--blue); box-shadow: 0 0 0 3px #0e3b8c, 0 0 0 5px rgba(255,210,63,.9); }
+.tile b { display: block; font: 800 17px var(--d); text-transform: uppercase; } .tile small { color: var(--muted); font-size: 12px; } .tile em { font-style: normal; padding: 6px 12px; border-radius: 99px; background: var(--red); color: #fff; font: 800 12px var(--f); }
+.note2 { font-size: 13px; color: #3a4a62; background: #fff; border-radius: 14px; padding: 12px 14px; max-width: 360px; line-height: 1.45; } .note2 b { display: block; margin-bottom: 4px; }
+</style></head>
+<body><div class="wrap">
+
+<h2>1. Быстрый старт по QR на столе</h2>
+<p class="lead">На каждом столе — наклейка с QR. Навёл камеру телефона → сразу открывается «Игра за столом 1»: выбираешь соперника (сверху те, кто сейчас в клубе) и жмёшь «Начать». Не нужно искать в меню. Если на табло подключён этот стол — игра сразу появляется на табло.</p>
+<div class="row">
+  <div><p class="cap">Наклейка на стол<small>печатается из «Управление → Столы»</small></p>
+    <div class="sticker"><div class="lg">🏓</div><b>Стол 1</b><span>Коворкинг «IT Park» KZN</span><div class="qr"><i></i></div><span>Наведи камеру — и играй</span><br><em>PONGHUB</em></div></div>
+  <div><p class="cap">Открылось после скана<small>выбрать соперника</small></p><div class="ph"><div class="sc">
+    <div class="ttl">Игра за столом 1<small>Коворкинг «IT Park» KZN · стол свободен ✓</small></div>
+    <div class="card" style="display:flex;align-items:center;gap:10px"><span class="av" style="--c:#e63946">😎</span><div><b style="font:800 16px var(--d)">Вы — Рустам</b><div class="lbl" style="text-transform:none;letter-spacing:0">рейтинг 38.3</div></div></div>
+    <div class="lbl">С кем играете?</div>
+    <div class="pick"><div class="on"><span class="av" style="--c:#2f7de1">⚡</span><span>GOAT<br><span class="here">● в клубе</span></span></div><div><span class="av" style="--c:#8b5cf6">💨</span><span>Вайнсмо…<br><span class="here">● в клубе</span></span></div>
+      <div><span class="av" style="--c:#f97316">🦊</span>Redhead</div><div><span class="av" style="--c:#f2b600">⭐</span>Neazk</div><div><span class="av" style="--c:#2a9d8f">🎯</span>Дамир</div><div><span class="av" style="--c:#ec4899">🌸</span>Эльвира</div></div>
+    <div class="lbl">Играем до</div><div class="seg"><span>2 побед</span><span class="on">3 побед</span><span>4 побед</span></div>
+    <div style="margin-top:auto;display:grid;gap:8px"><div class="btn">▶ Начать — вести счёт</div><div class="btn alt">⏱ Начать — счёт в конце</div></div></div></div></div>
+  <div><p class="cap">Игра началась<small>на телефоне и на табло</small></p><div class="ph"><div class="sc">
+    <div class="ttl">Стол 1 · Live<small>Свободная игра · до 3 побед</small></div>
+    <div class="vs"><div><span class="av" style="--c:#e63946">😎</span>Рустам</div><i>VS</i><div><span class="av" style="--c:#2f7de1">⚡</span>GOAT</div></div>
+    <div class="card"><b style="font:800 15px var(--d)">🏓 Кто подаёт первым?</b><div class="pick" style="margin-top:8px"><div>Рустам</div><div>GOAT</div></div></div>
+    <div class="note2" style="max-width:none"><b>Что даёт QR</b>Игра начинается за 2 касания. Система знает стол — на табло нужного стола сразу пойдёт выход игроков и счёт.</div></div></div></div>
+</div>
+
+<h2>2. Пауза — посмотреть сетку</h2>
+<p class="lead">Перед началом матча или прямо во время игры (между розыгрышами) секундант жмёт «⏸ Пауза». На табло — крупный таймер паузы и турнирная сетка: кто где, с кем следующий раунд. На телефоне — таймер и «Продолжить». Пауза 1 минута, можно продлить; счёт и время матча при паузе не теряются.</p>
+<div class="row">
+  <div><p class="cap">Табло во время паузы</p>
+    <div class="tv"><div class="top">Кубок кубков · 1/4 финала<span>ПАУЗА</span></div>
+      <div class="duel"><div class="pn p1">7</div><div class="mid">1:0</div><div class="pn p2">5</div></div>
+      <div class="pause"><div class="big"><b>⏸ ПАУЗА</b><strong>0:47</strong><small>Рустам — GOAT · 7:5 в партии 2</small></div>
+        <div class="grid"><h5>Сетка турнира</h5>
+          <div class="bm now"><div>Рустам</div><div>GOAT</div></div><div class="bm"><div class="t">ждём</div><div class="t">ждём</div></div><div class="bm"><div class="t">финал</div><div class="t">ждём</div></div>
+          <div class="bm"><div>Neazk</div><div>Амир</div></div><div class="bm"><div>Redhead</div><div class="t">ждём</div></div><div class="bm" style="border-style:dashed;text-align:center"><div style="font-size:2.4cqw">🏆</div></div></div></div></div></div>
+  <div><p class="cap">Телефон секунданта</p><div class="ph"><div class="sc">
+    <div class="ttl">Стол 1 · Live<small>Кубок кубков · 1/4 финала</small></div>
+    <div class="vs"><div>Рустам<b style="font-size:34px">7</b></div><i>1 : 0</i><div>GOAT<b style="font-size:34px">5</b></div></div>
+    <div class="tmr"><span class="lbl">Пауза</span><b>0:47</b><small>на табло показана сетка турнира</small></div>
+    <div class="btn alt">+1 минута</div><div class="btn blue">▶ Продолжить игру</div>
+    <div class="note2" style="max-width:none;margin-top:auto"><b>Когда можно</b>Перед первым очком и между розыгрышами. Очки, пока пауза, не добавляются.</div></div></div></div>
+</div>
+
+<h2>3. Задания недели за пинг-коины</h2>
+<p class="lead">Каждый понедельник — 4 новых задания для всех в клубе. Прогресс считается сам по сыгранным матчам. Выполнил — «Забрать» и пинг-коины на счёт. На главной — плитка с прогрессом, полный список — в «Магазин → Бонусы».</p>
+<div class="row">
+  <div><p class="cap">Магазин → Бонусы</p><div class="ph"><div class="sc">
+    <div class="ttl">Задания недели<small>обновятся в понедельник · осталось 4 дня</small></div>
+    <div class="wk"><span class="lbl">Выполнено 1 из 4</span><b>до 600 PC</b></div>
+    <div class="q done"><span class="ic">🤝</span><div><b>Сыграй с 3 разными игроками</b><small>3 из 3</small><div class="bar"><i style="width:100%"></i></div></div><div class="rw">+100<span class="get">Забрать</span></div></div>
+    <div class="q"><span class="ic">🔥</span><div><b>Выиграй 3 матча подряд</b><small>серия 1 из 3</small><div class="bar"><i style="width:33%"></i></div></div><div class="rw">+150<span class="ok">в процессе</span></div></div>
+    <div class="q"><span class="ic">💪</span><div><b>Обыграй соперника сильнее тебя</b><small>0 из 1</small><div class="bar"><i style="width:0%"></i></div></div><div class="rw">+200<span class="ok">в процессе</span></div></div>
+    <div class="q"><span class="ic">🏓</span><div><b>Сыграй 10 матчей за неделю</b><small>6 из 10</small><div class="bar"><i style="width:60%"></i></div></div><div class="rw">+150<span class="ok">в процессе</span></div></div>
+    <div class="note2" style="max-width:none;margin-top:auto"><b>Примеры других заданий</b>Реванш у того, кому проиграл · выиграй 3:0 · сыграй в турнире · сделай 3 прогноза · сыграй пару 2×2.</div></div></div></div>
+  <div><p class="cap">Плитка на главной</p><div class="ph"><div class="sc">
+    <div class="ttl">Главная<small>под шапкой с ракеткой</small></div>
+    <div class="tile"><span class="ic" style="font-size:28px">🎯</span><div><b>Задания недели</b><small>1 из 4 · можно забрать +100 PC</small><div class="bar"><i style="width:25%"></i></div></div><em>Забрать</em></div>
+    <div class="card" style="opacity:.55">«Мой игрок», пинг-коины, бонус дня…</div><div class="card" style="opacity:.55">Вызовы, турниры…</div>
+    <div class="note2" style="max-width:none;margin-top:auto"><b>Как считается</b>Задания проверяются по подтверждённым матчам клуба. Пинг-коины начисляются в кошелёк клуба, как бонус дня.</div></div></div></div>
+</div>
+</div></body></html>
