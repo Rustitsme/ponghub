@@ -234,7 +234,7 @@ function render() {
   else if (CLUB_FREE[r.name]) html = CLUB_FREE[r.name](r);
   else if (!S.club) html = S.ctx.me.legacy && !S.ctx.platform?.migration_done && !isFounder() ? waitView() : viewClubs(r);
   else {
-    const views = { shop: r => feature('shop') ? viewShop(r) : viewHome(r), racket: () => feature('shop') ? viewRacket() : viewHome(), avatar: r => feature('avatar') ? viewAvatar(r) : viewHome(r), invite: viewInvite, clubedit: viewClubEdit, home: viewHome, rating: viewRating, matches: viewMatches, player: viewPlayer, h2h: viewH2H, tournaments: viewTournaments, tournament: viewTournament, calendar: viewCalendar, admin: viewAdmin, rules: viewRules, me: viewMe, help: viewHelp, seasons: viewSeasons, live: viewLive, inbox: viewInbox, predict: viewPredict, play: viewPlay, tables: viewTables };
+    const views = { shop: r => feature('shop') ? viewShop(r) : viewHome(r), racket: () => feature('shop') ? viewRacket() : viewHome(), avatar: r => feature('avatar') ? viewAvatar(r) : viewHome(r), invite: viewInvite, clubedit: viewClubEdit, home: viewHome, rating: viewRating, players: viewPlayers, matches: viewMatches, player: viewPlayer, h2h: viewH2H, tournaments: viewTournaments, tournament: viewTournament, calendar: viewCalendar, admin: viewAdmin, rules: viewRules, me: viewMe, help: viewHelp, seasons: viewSeasons, live: viewLive, inbox: viewInbox, predict: viewPredict, play: viewPlay, tables: viewTables };
     const v = views[r.name] || viewHome;
     html = shell(r, v(r));
   }
@@ -253,6 +253,7 @@ const ICONS = {
   bell: '<path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4zM10 20a2 2 0 0 0 4 0"/>',
   cal: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5M15.5 4.6a3.5 3.5 0 0 1 0 6.8M18 14.8c2 .7 3.2 2.5 3.6 5.2"/>',
 };
 const icon = (n, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[n]}</svg>`;
 
@@ -279,7 +280,8 @@ function shell(r, body) {
   <main class="page">${body}</main>
   <nav class="tabs">
     ${tab('home', 'Главная', 'home')}
-    ${tab('rating', 'Рейтинг', 'rating')}
+    ${tab('rating', 'Рейтинг', 'rating', ['seasons'])}
+    ${tab('players', 'Игроки', 'users', ['player'])}
     <span class="tab tab-mid"><button class="fab" data-act="add-match" aria-label="${isAdmin() ? 'Внести матч' : 'Внести результат'}">${icon('plus')}</button></span>
     ${tab('tournaments', 'Турниры', 'cup', ['tournament'])}
     ${tab('me', 'Профиль', 'user', ['admin', 'rules', 'matches', 'h2h'])}
@@ -494,6 +496,7 @@ function viewHome() {
   ${!showRk && feature('shop') && S.shop && !S.shop.streak.claimed ? `<a href="#/shop?tab=bonus" class="card sh-home"><span class="sh-home-ic">🔥</span><span class="rn"><b>Бонус дня: +${STREAK[S.shop.streak.day - 1]} PC</b><small class="muted">День ${S.shop.streak.day} из 7 — заберите, пока не сгорело</small></span><span class="btn sm primary">Забрать</span></a>` : ''}
   ${predHomeBlock()}
   ${challengesBlock()}
+  ${idleNudge()}
   ${weekCard()}
 
   ${active.map(t => `<a href="#/tournament/${t.id}" class="card live-t"><span class="live">● LIVE</span><div><b>${esc(t.name)}</b><div class="muted small">${FORMATS[t.format]} · ${t.participants.length} участников</div></div><span>→</span></a>`).join('')}
@@ -501,6 +504,7 @@ function viewHome() {
   ${pom ? `<section class="card pom" data-act="go" data-href="#/seasons">
     <div class="pom-badge">⭐ Лидер сезона · ${new Date().toLocaleDateString('ru-RU', { month: 'long' })}</div>
     <div class="pom-row">${ava(P(pom.id), 'md')}<div><b>${esc(P(pom.id).nickname)}</b><div class="muted small">прибавил ${fmtD(pom.g)} за месяц · все сезоны →</div></div></div>
+    <div class="pom-me">${seasonMine(me.id)}</div>
   </section>` : ''}
 
   <section class="card">
@@ -603,6 +607,8 @@ function viewPlayer(r) {
   const ins = insights(st);
   const opps = [...st.opponents].map(([oid, o]) => ({ oid, ...o })).sort((a, b) => (b.w + b.l) - (a.w + a.l));
   const unlocked = ACHIEVEMENTS.filter(a => a.test(st));
+  S.badges = badgesOf(id, st);
+  const special = S.badges.filter(b => !ACHIEVEMENTS.some(a => a.name === b.name));
   const medalsTotal = st.medals.gold + st.medals.silver + st.medals.bronze;
   const mine = id === S.me.id;
   const hand = p.hand === 'left' ? 'Левша' : p.hand === 'right' ? 'Правша' : '';
@@ -615,11 +621,13 @@ function viewPlayer(r) {
       <div class="hero-rank"><small>место</small><b>${st.matches ? pos : '—'}</b><small>из ${S.rank.length}</small></div>
     </div>
     ${p.bio ? `<p class="bio">${esc(p.bio)}</p>` : ''}
+    ${badgeStrip(S.badges)}
     <div class="hero-mid"><div><div class="big-num">${fmtR(rt)}</div><div class="muted small">пик ${fmtR(st.peak)} · старт ${fmtR(hist[0]?.r)}${decay > 0.005 ? ` · −${fmtR(decay)} за паузы в игре` : ''}</div></div>
       ${medalsTotal || titles.length ? `<div class="medals" title="${titles.map(t => 'Чемпион сезона: ' + monthName(t.key)).join(', ')}">${'🏆'.repeat(titles.length)}${'🥇'.repeat(st.medals.gold)}${'🥈'.repeat(st.medals.silver)}${'🥉'.repeat(st.medals.bronze)}</div>` : ''}</div>
     ${nl ? `<div class="next-league"><span>До лиги «${nl.name}»: ${fmtR(nl.min - rt)}</span><div class="bar thin"><i style="width:${Math.max(4, Math.min(100, 100 - (nl.min - rt) * 5))}%"></i></div></div>` : ''}
     <div class="row-btns">
-      ${mine ? '<button class="btn ghost-light" data-act="edit-profile">✏️ Редактировать</button>' : `<a class="btn ghost-light" href="#/h2h/${S.me.id}/${id}">📊 Сравнить</a>${p.status === 'approved' ? `<button class="btn ghost-light" data-act="challenge" data-id="${id}">⚔️ Вызвать на матч</button>` : ''}`}
+      ${mine ? '<button class="btn ghost-light" data-act="edit-profile">✏️ Редактировать</button>' : `<a class="btn ghost-light" href="#/h2h/${S.me.id}/${id}">📊 Сравнить</a>${p.status === 'approved' && !openChallenge(id) ? `<button class="btn ghost-light" data-act="challenge" data-id="${id}">⚔️ Вызвать на матч</button>` : ''}`}
+      <button class="btn ghost-light" data-act="share-player" data-id="${id}">📤 Карточка в чат</button>
     </div>
   </section>
   ${feature('avatar') ? `<section class="card"><div class="card-h"><h3>🧍 Игрок</h3><a href="#/avatar/${p.id}" class="link">${p.id === S.me.id ? 'Мой игрок →' : 'Посмотреть →'}</a></div><p class="muted small">3D-игрок в форме и с ракеткой${p.id === S.me.id ? '' : ' соперника'}.</p></section>` : ''}
@@ -652,8 +660,10 @@ function viewPlayer(r) {
   </section>
 
   ${doublesBlock(id)}
+  ${seasonsBlock(id)}
 
   <section class="card"><div class="card-h"><h3>🏅 Достижения</h3><span class="muted small">${unlocked.length} из ${ACHIEVEMENTS.length}</span></div>
+    ${special.length ? `<div class="ach-grid mb">${special.map(b => `<div class="ach ok special"><span class="ach-i">${b.icon}</span><b>${esc(b.name)}</b><small>${esc(b.desc)}</small></div>`).join('')}</div>` : ''}
     <div class="ach-grid">${ACHIEVEMENTS.map(a => { const ok = a.test(st); const pr = !ok && a.prog ? a.prog(st) : null; return `<div class="ach ${ok ? 'ok' : ''}" title="${esc(a.desc)}"><span class="ach-i">${a.icon}</span><b>${a.name}</b><small>${esc(a.desc)}</small>${pr ? `<div class="bar thin"><i style="width:${Math.min(100, pr[0] / pr[1] * 100)}%"></i></div><small>${pr[0]}/${pr[1]}</small>` : ''}</div>`; }).join('')}</div>
   </section>
 
@@ -1304,17 +1314,210 @@ function viewSeasons() {
     <section class="card season ${live ? 'live-season' : ''}">
       <div class="card-h"><h3>${live ? '🔥 ' : '🏆 '}${monthName(t.key)}</h3><span class="muted small">${t.total} ${plural(t.total, 'матч', 'матча', 'матчей')}</span></div>
       ${t.champion ? `<div class="champ">${ava(P(t.champion.id), 'md')}<div><small>${live ? 'Сейчас лидирует' : 'Чемпион сезона'}</small><b>${esc(P(t.champion.id).nickname)}</b><span class="up">${fmtD(t.champion.gain)}</span></div></div>` : `<p class="muted small">Пока никто не сыграл ${min} ${plural(min, 'матч', 'матча', 'матчей')} — нужно для борьбы за титул.</p>`}
-      ${t.eligible.slice(live ? 0 : 1, live ? 10 : 3).map((r, i) => `<a href="#/player/${r.id}" class="rank-row"><span class="pos">${live ? i + 1 : i + 2}</span>${ava(P(r.id), 'sm')}<span class="rn"><b>${esc(P(r.id).nickname)}</b><small>${r.matches} ${plural(r.matches, 'матч', 'матча', 'матчей')} · ${r.wins}В</small></span><span class="rr">${delta(r.gain)}</span></a>`).join('')}
+      ${live ? `<p class="small ssn-me">⏳ ${seasonMine(S.me.id)}</p>` : ''}
+      ${t.eligible.slice(live ? 0 : 1, live ? 10 : 3).map((r, i) => `<a href="#/player/${r.id}" class="rank-row ${r.id === S.me.id ? 'me' : ''}"><span class="pos">${live ? i + 1 : i + 2}</span>${ava(P(r.id), 'sm')}<span class="rn"><b>${esc(P(r.id).nickname)}</b><small>${r.matches} ${plural(r.matches, 'матч', 'матча', 'матчей')} · ${r.wins}В</small></span><span class="rr">${delta(r.gain)}</span></a>`).join('')}
       ${live && t.rest.length ? `<p class="muted small mt">Ещё не набрали ${min} матча: ${t.rest.map(r => `${esc(P(r.id).nickname)} (${r.matches})`).join(', ')}</p>` : ''}
     </section>`;
   const cur = list.find(t => !t.finished);
   const past = list.filter(t => t.finished);
   return `<div class="page-h"><a href="#/rating" class="back">← Рейтинг</a></div>
     <h1>Сезоны</h1>
-    <p class="muted small">Каждый месяц — отдельный сезон. Чемпион — тот, кто сильнее всех прибавил в рейтинге за месяц (нужно сыграть минимум ${min} ${plural(min, 'матч', 'матча', 'матчей')}). Общий рейтинг не обнуляется. 1-го числа всем приходит уведомление с итогами.</p>
+    <p class="muted small">Каждый месяц — отдельный сезон. Чемпион — тот, кто сильнее всех прибавил в рейтинге за месяц (нужно сыграть минимум ${min} ${plural(min, 'матч', 'матча', 'матчей')}). Общий рейтинг не обнуляется. 1-го числа всем приходит уведомление с итогами, а призёры получают значки в профиль: 🏆 чемпион, 🥈 и 🥉 — второе и третье места.</p>
     ${cur ? table(cur, true) : ''}
     ${past.length ? `<div class="sec-h"><h3>Прошлые сезоны</h3></div>${past.map(t => table(t, false)).join('')}` : ''}
     ${!list.length ? '<div class="empty">Сезоны появятся после первых матчей</div>' : ''}`;
+}
+
+// ───────────── Сезон: моё место, дни до конца, история по сезонам ─────────────
+const seasonDaysLeft = () => { const d = new Date(); return Math.max(1, Math.ceil((new Date(d.getFullYear(), d.getMonth() + 1, 1) - d) / DAY)); };
+function seasonPlace(t, id) {
+  const i = t.eligible.findIndex(r => r.id === id);
+  if (i >= 0) return { place: i + 1, row: t.eligible[i] };
+  const row = t.rest.find(r => r.id === id);
+  return row ? { place: null, row } : null;
+}
+function seasonMine(id) {
+  const t = S.seasons.find(x => !x.finished);
+  const min = S.A.S.seasonMinMatches;
+  const left = `до конца сезона ${seasonDaysLeft()} ${plural(seasonDaysLeft(), 'день', 'дня', 'дней')}`;
+  const sp = t && seasonPlace(t, id);
+  if (!sp) return `Вы ещё не играли в этом сезоне · ${left}`;
+  if (!sp.place) { const k = min - sp.row.matches; return `Ещё ${k} ${plural(k, 'матч', 'матча', 'матчей')} — и вы в борьбе за титул · ${left}`; }
+  return `Вы ${sp.place}-й из ${t.eligible.length} · ${fmtD(sp.row.gain)} · ${left}`;
+}
+function seasonsBlock(id) {
+  const rows = S.seasons.map(t => ({ t, sp: seasonPlace(t, id) })).filter(x => x.sp).slice(0, 6);
+  if (!rows.length) return '';
+  return `<section class="card"><div class="card-h"><h3>🗓 Сезоны</h3><a href="#/seasons" class="link">Все сезоны →</a></div>
+    ${rows.map(({ t, sp }) => `<div class="opp-row"><span class="ssn-place ${sp.place && sp.place <= 3 && t.finished ? 'ssn-top' : ''}">${sp.place ? (t.finished && sp.place <= 3 ? ['🏆', '🥈', '🥉'][sp.place - 1] : '#' + sp.place) : '—'}</span>
+      <span class="rn"><b>${monthName(t.key)}${t.finished ? '' : ' · идёт'}</b><small>${sp.row.matches} ${plural(sp.row.matches, 'матч', 'матча', 'матчей')} · ${sp.row.wins}В${sp.place ? '' : ' · мало матчей для титула'}</small></span>${delta(sp.row.gain)}</div>`).join('')}
+  </section>`;
+}
+
+// ───────────── Значки: достижения + сезоны + турниры + вызовы ─────────────
+function badgesOf(id, st = playerStats(id, S.A, S.data.tournaments)) {
+  const out = [];
+  for (const t of S.seasons) {
+    if (!t.finished) continue;
+    const i = t.eligible.findIndex(r => r.id === id);
+    if (i >= 0 && i < 3 && t.eligible[i].gain > 0) out.push({ icon: ['🏆', '🥈', '🥉'][i], name: i ? `${i + 1}-е место сезона` : 'Чемпион сезона', desc: monthName(t.key), rank: 3 - i });
+  }
+  const cs = challengeStats(id);
+  if (cs.sent >= 5) out.push({ icon: '🤺', name: 'Дуэлянт', desc: 'Бросить 5 вызовов на матч', rank: 0 });
+  if (cs.accepted >= 5) out.push({ icon: '🛡️', name: 'Не боится вызовов', desc: 'Принять 5 вызовов', rank: 0 });
+  for (const a of ACHIEVEMENTS) if (a.test(st)) out.push({ icon: a.icon, name: a.name, desc: a.desc, rank: 0 });
+  return out.sort((a, b) => b.rank - a.rank);
+}
+// значки-кружочки в шапке профиля: нажмёшь — покажет, за что
+function badgeStrip(list) {
+  if (!list.length) return '';
+  return `<div class="badge-strip">${list.map((b, i) => `<button class="bdg ${b.rank ? 'gold' : ''}" data-act="badge" data-i="${i}" title="${esc(b.name)}">${b.icon}</button>`).join('')}</div>`;
+}
+
+// ───────────── Игроки ─────────────
+function lastPlayedMap() {
+  const last = new Map();
+  for (const m of S.data.matches) if (m.status === 'approved') for (const id of players(m)) if (id) last.set(id, Math.max(last.get(id) || 0, ts(m)));
+  return last;
+}
+const idleDays = (last, id) => (last.get(id) ? Math.floor((Date.now() - last.get(id)) / DAY) : null);
+const lastText = d => (d == null ? 'ещё не играл(а)' : d === 0 ? 'играл(а) сегодня' : d === 1 ? 'играл(а) вчера' : `играл(а) ${d} ${plural(d, 'день', 'дня', 'дней')} назад`);
+const openChallenge = id => S.data.challenges.find(c => ((c.from_id === S.me.id && c.to_id === id) || (c.to_id === S.me.id && c.from_id === id)) && ['pending', 'accepted'].includes(c.status));
+// соперники для вызова: ближе всех по рейтингу, сначала те, кто играет последний месяц
+function suggestOpponents(n = 3) {
+  const last = lastPlayedMap(), r = ratingOf(S.me.id);
+  return S.data.profiles.filter(p => p.status === 'approved' && p.id !== S.me.id && !openChallenge(p.id))
+    .map(p => { const d = idleDays(last, p.id); return { p, d, k: Math.abs(ratingOf(p.id) - r) + (d == null || d > 30 ? 100 : 0) }; })
+    .sort((a, b) => a.k - b.k).slice(0, n);
+}
+function challengeBtn(id) {
+  if (id === S.me.id) return '<span class="pl-me">это вы</span>';
+  const c = openChallenge(id);
+  if (c) return `<span class="pl-ch">${c.status === 'accepted' ? '⚔️ к столу' : c.from_id === S.me.id ? '⏳ вызван' : '⚔️ вызывает вас'}</span>`;
+  return `<button class="btn sm primary" data-act="challenge" data-id="${id}">⚔️ Вызвать</button>`;
+}
+// напоминание на главной: давно не играли — вызовите кого-нибудь
+function idleNudge() {
+  if (S.me.status !== 'approved') return '';
+  const d = idleDays(lastPlayedMap(), S.me.id);
+  if (d != null && d < 10) return '';
+  const opps = suggestOpponents(3);
+  if (!opps.length) return '';
+  const s = S.A.S;
+  const head = d == null ? 'Вы ещё не сыграли ни одного матча' : `Вы не играли ${d} ${plural(d, 'день', 'дня', 'дней')}`;
+  const why = d == null ? 'Вызовите кого-нибудь — первый матч сразу даст рейтинг и место в таблице.'
+    : s.decayEnabled && d >= s.decayGraceDays ? 'Рейтинг понемногу снижается без игр — один матч это остановит.' : 'Стол скучает! Вызовите кого-нибудь на матч.';
+  return `<section class="card nudge"><div class="card-h"><h3>🏓 ${head}</h3><a href="#/players" class="link">Все игроки →</a></div>
+    <p class="muted small">${why}</p>
+    ${opps.map(({ p }) => `<div class="pl-row"><a href="#/player/${p.id}" class="pl-main">${ava(p, 'sm')}<span class="rn"><b>${esc(p.nickname)}</b><small>${fmtR(ratingOf(p.id))} · шанс ${pct(expected(ratingOf(S.me.id), ratingOf(p.id), S.A.S.spread))}</small></span></a>${challengeBtn(p.id)}</div>`).join('')}
+  </section>`;
+}
+function viewPlayers(r) {
+  const sort = ['name', 'recent'].includes(r.q.get('sort')) ? r.q.get('sort') : 'rating';
+  const last = lastPlayedMap();
+  const pos = new Map(S.rank.map((x, i) => [x.p.id, x.g ? i + 1 : null]));
+  const list = S.data.profiles.filter(p => p.status === 'approved');
+  if (sort === 'name') list.sort((a, b) => a.nickname.localeCompare(b.nickname, 'ru'));
+  else if (sort === 'recent') list.sort((a, b) => (last.get(b.id) || 0) - (last.get(a.id) || 0));
+  else list.sort((a, b) => (pos.get(a.id) ?? 1e9) - (pos.get(b.id) ?? 1e9) || ratingOf(b.id) - ratingOf(a.id));
+  const row = p => {
+    const top = badgesOf(p.id).slice(0, 3).map(b => b.icon).join('');
+    const d = idleDays(last, p.id);
+    return `<div class="pl-row" data-name="${esc((p.nickname + ' ' + (p.full_name || '')).toLowerCase())}">
+      <a href="#/player/${p.id}" class="pl-main"><span class="pos">${pos.get(p.id) || '–'}</span>${ava(p, 'md')}
+        <span class="rn"><b>${esc(p.nickname)}${top ? ` <i class="pl-bdg">${top}</i>` : ''}</b><small>${leagueOf(ratingOf(p.id)).name} · ${fmtR(ratingOf(p.id))} · <span class="${d == null || d > 14 ? 'idle' : ''}">${lastText(d)}</span></small></span></a>
+      ${challengeBtn(p.id)}</div>`;
+  };
+  const qs = s => `#/players${s === 'rating' ? '' : '?sort=' + s}`;
+  return `<div class="page-h"><h1>Игроки</h1><span class="muted small">${list.length} в клубе</span></div>
+    <input type="search" class="pl-search" data-input="pl-search" placeholder="Найти по нику или имени" autocomplete="off">
+    <div class="seg">${[['rating', 'По рейтингу'], ['name', 'По имени'], ['recent', 'Кто играл']].map(([k, l]) => `<a href="${qs(k)}" class="${sort === k ? 'on' : ''}">${l}</a>`).join('')}</div>
+    <section class="card pl-list">${list.map(row).join('') || '<div class="empty">В клубе пока никого нет</div>'}<div class="empty" id="pl-none" hidden>Никого не нашли</div></section>
+    ${isAdmin() ? '<a href="#/invite" class="btn ghost full">✉️ Пригласить в клуб</a>' : ''}`;
+}
+function filterPlayers(q) {
+  q = q.trim().toLowerCase();
+  let n = 0;
+  for (const el of document.querySelectorAll('.pl-list .pl-row')) { const ok = !q || el.dataset.name.includes(q); el.hidden = !ok; n += ok; }
+  const none = document.getElementById('pl-none');
+  if (none) none.hidden = n > 0;
+}
+
+// ───────────── Карточка игрока для чата ─────────────
+async function sharePlayer(id, noPhoto = false) {
+  const p = P(id), st = playerStats(id, S.A, S.data.tournaments), r = ratingOf(id), lg = leagueOf(r);
+  const pos = S.rank.findIndex(x => x.p.id === id) + 1;
+  const W = 1080, H = 1350;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  const g = x.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#3b7fd4'); g.addColorStop(1, '#1c4f9c');
+  x.fillStyle = g; x.fillRect(0, 0, W, H);
+  x.strokeStyle = 'rgba(255,255,255,.9)'; x.lineWidth = 14; x.strokeRect(50, 50, W - 100, H - 100);
+  x.strokeStyle = 'rgba(255,255,255,.18)'; x.lineWidth = 6; x.beginPath(); x.moveTo(540, 50); x.lineTo(540, H - 50); x.stroke();
+  const img = (src, cors) => new Promise(res => { const i = new Image(); if (cors) i.crossOrigin = 'anonymous'; i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
+  const logoImg = await img(logo());
+  if (logoImg) x.drawImage(logoImg, 100, 100, 90, 90);
+  x.fillStyle = '#fff'; x.textBaseline = 'middle';
+  x.font = '800 54px "Barlow Condensed", sans-serif'; x.textAlign = 'left'; x.fillText('PONGHUB', 210, 147);
+  const club = settings().clubName || 'PongHub';
+  x.font = '500 34px Inter, sans-serif'; x.textAlign = 'right';
+  let cl = club; while (x.measureText(cl).width > 480 && cl.length > 4) cl = cl.slice(0, -2) + '…';
+  x.fillText(cl, 980, 147);
+  // аватар: фото (если сервер разрешает) или эмодзи на цветном круге
+  const cx = 540, cy = 400, R = 160;
+  x.save(); x.beginPath(); x.arc(cx, cy, R, 0, Math.PI * 2); x.closePath();
+  x.fillStyle = p.color || '#e63946'; x.fill(); x.clip();
+  const photo = p.photo_url && !noPhoto ? await img(p.photo_url, true) : null;
+  if (photo) { const k = Math.max(2 * R / photo.width, 2 * R / photo.height); x.drawImage(photo, cx - photo.width * k / 2, cy - photo.height * k / 2, photo.width * k, photo.height * k); }
+  else { x.fillStyle = '#fff'; x.textAlign = 'center'; x.font = '160px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif'; x.fillText(p.avatar || (p.nickname || '?')[0], cx, cy + 10); }
+  x.restore();
+  x.strokeStyle = '#fff'; x.lineWidth = 10; x.beginPath(); x.arc(cx, cy, R, 0, Math.PI * 2); x.stroke();
+  // ник, лига, место
+  x.textAlign = 'center'; x.fillStyle = '#fff';
+  let s = 110; do { x.font = `800 ${s}px "Barlow Condensed", sans-serif`; s -= 4; } while (x.measureText(p.nickname).width > 860 && s > 40);
+  x.fillText(p.nickname, cx, 650);
+  const LG = { bronze: '#c98a4b', silver: '#b8c2cf', gold: '#ffd166', platinum: '#7fe0d6', diamond: '#a5b4ff' };
+  const tag = `${lg.name}${pos && st.matches ? ` · ${pos}-е место из ${S.rank.length}` : ''}`;
+  x.font = '700 38px Inter, sans-serif';
+  const tw = x.measureText(tag).width + 60;
+  x.fillStyle = 'rgba(0,0,0,.25)'; x.beginPath(); x.roundRect(cx - tw / 2, 705, tw, 64, 32); x.fill();
+  x.fillStyle = LG[lg.cls] || '#fff'; x.fillText(tag, cx, 739);
+  // рейтинг
+  x.fillStyle = '#16181d'; x.beginPath(); x.roundRect(340, 795, 400, 180, 36); x.fill();
+  x.fillStyle = '#fff'; x.font = '800 116px "Barlow Condensed", sans-serif'; x.fillText(fmtR(r), cx, 865);
+  x.font = '500 28px Inter, sans-serif'; x.fillStyle = 'rgba(255,255,255,.75)'; x.fillText('рейтинг', cx, 945);
+  // цифры
+  const nums = [[st.matches, 'матчей'], [st.wins, 'побед'], [pct(st.winRate), 'побед, %'], [st.bestStreak, 'лучшая серия']];
+  nums.forEach(([v, l], i) => {
+    const nx = 190 + i * 233;
+    x.fillStyle = '#fff'; x.font = '800 72px "Barlow Condensed", sans-serif'; x.fillText(String(v), nx, 1040);
+    x.fillStyle = 'rgba(255,255,255,.75)'; x.font = '500 26px Inter, sans-serif'; x.fillText(l, nx, 1092);
+  });
+  // значки
+  const bs = badgesOf(id, st).slice(0, 9);
+  if (bs.length) {
+    x.font = '56px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+    const step = 88, x0 = cx - (bs.length - 1) * step / 2;
+    bs.forEach((b, i) => x.fillText(b.icon, x0 + i * step, 1170));
+  }
+  x.font = '600 32px Inter, sans-serif'; x.fillStyle = '#7dffc4';
+  x.fillText('Вызови меня на матч в PongHub! 🏓', cx, 1250);
+  const blob = await new Promise(res => { try { c.toBlob(res, 'image/png'); } catch { res(null); } });
+  // фото с чужого сервера могло «испачкать» холст — тогда рисуем заново с эмодзи
+  if (!blob && photo) return sharePlayer(id, true);
+  if (!blob) return toast('Не удалось сделать картинку', 'err');
+  const link = `${location.origin}${location.pathname}#/player/${id}${S.club ? '?club=' + S.club.id : ''}`;
+  const text = `${p.nickname} — ${fmtR(r)} в рейтинге «${club}», ${lg.name}. Вызови на матч: ${link}`;
+  const file = new File([blob], 'ponghub-player.png', { type: 'image/png' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: p.nickname, text }); } catch { /* закрыли меню */ }
+  } else {
+    download('ponghub-player.png', blob, 'image/png');
+    await copyText(text);
+    toast('Картинка сохранена, ссылка скопирована — отправьте в чат');
+  }
 }
 
 // ───────────── Карточка результата ─────────────
@@ -2641,6 +2844,8 @@ function viewAdmin(r) {
       ${f('decayGraceDays', 'Дней без игр без штрафа', 'После этого рейтинг начинает снижаться', 1)}
       ${f('decayPerWeek', 'Минус за каждую неделю', 'Рейтинг не опускается ниже стартового', 0.1)}
       ${f('seasonMinMatches', 'Матчей для борьбы за титул сезона', 'Минимум матчей за месяц, чтобы стать чемпионом', 1)}
+      <hr><b class="small">🏓 Напоминания</b>
+      <label class="switch"><input type="checkbox" name="remindIdle" ${s.remindIdle !== false ? 'checked' : ''}><i></i><span>Напоминать тем, кто давно не играл (через 14, 30 и 60 дней), и предлагать соперника для вызова</span></label>
       <hr><b class="small">🎯 Прогнозы на матчи</b>
       <label class="switch"><input type="checkbox" name="predEnabled" ${s.predEnabled ? 'checked' : ''}><i></i><span>Включены</span></label>
       ${f('predStart', 'Стартовый баланс, PC', 'Сколько пинг-коинов получает каждый в начале', 50)}
@@ -3233,6 +3438,8 @@ const ACT = {
       challengeId: l.challenge_id, liveId: l.id } });
   },
   challenge: el => openChallengeForm(el.dataset.id),
+  'share-player': el => busy(el, () => sharePlayer(el.dataset.id)),
+  badge: el => { const b = S.badges?.[+el.dataset.i]; if (b) openModal(`<div class="center stack"><div class="bdg-big">${b.icon}</div><h3>${esc(b.name)}</h3><p class="muted">${esc(b.desc)}</p><button class="btn primary" data-act="close">Понятно</button></div>`); },
   'ch-accept': el => busy(el, async () => {
     const c = await S.store.update('challenges', el.dataset.id, { status: 'accepted', responded_at: new Date().toISOString() });
     if (predOn()) await S.store.rpc('create_pred_event', { src: 'challenge', src_id: c.id, chance: chanceFor({ player1_id: c.from_id, player2_id: c.to_id }) }).catch(() => {});
@@ -3394,6 +3601,7 @@ const FORMS = {
     s.system = fd.get('system') === 'elo' ? 'elo' : 'league';
     s.decayEnabled = !!fd.get('decayEnabled');
     s.predEnabled = !!fd.get('predEnabled');
+    s.remindIdle = !!fd.get('remindIdle');
     for (const k of ['predStart', 'predMin', 'predMax', 'predWindowMin']) s[k] = Math.round(+fd.get(k) || 0);
     if (!(s.spread > 0)) throw new Error('Масштаб должен быть больше нуля');
     s.marginBonus = !!fd.get('marginBonus');
@@ -3463,6 +3671,7 @@ document.addEventListener('input', e => {
   const inp = e.target.closest('[data-input]');
   if (inp?.dataset.input === 'dir-search') { clearTimeout(dirTimer); dirTimer = setTimeout(() => renderDirectory(inp.value), 300); }
   if (inp?.dataset.input === 'map-search') renderMapList(inp.value);
+  if (inp?.dataset.input === 'pl-search') filterPlayers(inp.value);
   if (inp?.dataset.input === 'addr') addrInput(inp);
 });
 document.addEventListener('keydown', e => {
@@ -3486,15 +3695,16 @@ function b64ToBytes(b64) {
 }
 // ───────────── Окна при входе: «Что нового» и напоминание об уведомлениях ─────────────
 const WHATS_NEW = {
-  id: '2026-10-clubs',
-  title: 'Теперь в PongHub есть клубы 🎉',
+  id: '2026-10-players',
+  title: 'Игроки, значки и сезоны 🎉',
   items: [
-    ['🏓', 'Ваш клуб на месте', 'Все матчи, рейтинг, турниры и пинг-коины сохранились — ничего делать не нужно.'],
-    ['⇄', 'Несколько клубов', 'Можно состоять в нескольких клубах: в каждом свой рейтинг и свои пинг-коины. Переключение — нажмите на название клуба вверху.'],
-    ['✉️', 'Позовите друзей', 'Пригласить можно ссылкой, кодом или QR-кодом у стола: новичок откроет страницу клуба и отправит заявку, а его примут.'],
-    ['🗺', 'Клубы на карте', 'Найдите клубы рядом или создайте свой — бесплатно.'],
+    ['👥', 'Вкладка «Игроки»', 'Все участники клуба в одном списке: поиск, кто когда играл и кнопка «Вызвать» прямо в строке.'],
+    ['📤', 'Карточка игрока для чата', 'В профиле любого игрока — «Карточка в чат»: картинка с рейтингом, лигой и значками и ссылка, чтобы вызвать на матч.'],
+    ['🏅', 'Значки в профиле', 'Достижения, титулы сезонов и вызовы — значками под ником. Нажмите на значок, чтобы узнать, за что он.'],
+    ['🗓', 'Сезоны', 'Ваше место в текущем сезоне и сколько дней до конца. Призёры месяца получают 🏆 🥈 🥉 в профиль.'],
+    ['🔔', 'Напоминания', 'Давно не играли — придёт напоминание с соперником по силам, которого можно вызвать.'],
   ],
-  cta: ['Посмотреть карту клубов', '#/map'],
+  cta: ['Открыть игроков', '#/players'],
 };
 
 async function startupModals() {
