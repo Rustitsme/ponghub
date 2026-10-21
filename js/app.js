@@ -289,11 +289,10 @@ function shell(r, body) {
   <main class="page">${body}</main>
   <nav class="tabs">
     ${tab('home', 'Главная', 'home')}
-    ${tab('rating', 'Рейтинг', 'rating', ['seasons'])}
     ${tab('players', 'Игроки', 'users', ['player'])}
     <span class="tab tab-mid"><button class="fab" data-act="add-match" aria-label="${isAdmin() ? 'Внести матч' : 'Внести результат'}">${icon('plus')}</button></span>
     ${tab('tournaments', 'Турниры', 'cup', ['tournament'])}
-    ${tab('me', 'Профиль', 'user', ['admin', 'rules', 'matches', 'h2h'])}
+    ${tab('me', 'Профиль', 'user', ['admin', 'rules', 'matches', 'h2h', 'rating', 'seasons'])}
   </nav>${iosInstallHint()}`;
 }
 
@@ -547,7 +546,7 @@ function rankRow(x, i) {
 function viewRating(r) {
   const mode = r?.q.get('mode') === 'doubles' ? 'doubles' : 'singles';
   const tabs = `<div class="seg"><a href="#/rating" class="${mode === 'singles' ? 'on' : ''}">Одиночный 1×1</a><a href="#/rating?mode=doubles" class="${mode === 'doubles' ? 'on' : ''}">Парный 2×2</a></div>`;
-  const head = `<div class="page-h"><h1>Рейтинг</h1><div class="row-inline"><a href="#/seasons" class="link">🏆 Сезоны</a>${isAdmin() ? '<a href="#/rules" class="link">Как считается?</a>' : ''}</div></div>${tabs}`;
+  const head = `<div class="page-h"><a href="#/me" class="back">← Профиль</a></div><div class="page-h"><h1>Рейтинг</h1><div class="row-inline"><a href="#/seasons" class="link">🏆 Сезоны</a>${isAdmin() ? '<a href="#/rules" class="link">Как считается?</a>' : ''}</div></div>${tabs}`;
   if (mode === 'doubles') {
     const list = rankingDoubles(S.D, S.data.profiles);
     return `${head}<p class="muted small">Отдельный рейтинг только по парным играм. У всех стартует с ${S.D.S.initialRating}.</p>
@@ -1701,6 +1700,7 @@ function viewHelp() {
 // ───────────── Профиль / настройки ─────────────
 function viewMe() {
   const me = S.me;
+  const myPos = S.rank.findIndex(x => x.p.id === me.id && x.g) + 1;
   let theme = 'light';
   try { theme = localStorage.getItem('ponghub_theme') || 'light'; } catch { /* */ }
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -1708,6 +1708,7 @@ function viewMe() {
   return `<div class="page-h"><h1>Профиль</h1></div>
   <a href="#/player/${me.id}" class="card me-card">${ava(me, 'md')}<div><b>${esc(me.nickname)}</b> ${roleBadge(me)}<div class="muted small">${esc(me.full_name || '')}</div></div><span>→</span></a>
   ${isAdmin() ? `<a href="#/admin" class="card menu-item">🛠️ <span>Управление клубом</span>${pendingCounts().total ? `<i class="dot inline">${pendingCounts().total}</i>` : ''}<span>→</span></a>` : ''}
+  <a href="#/rating" class="card menu-item">🏆 <span>Рейтинг<small class="muted" style="display:block;font-weight:500">${myPos ? `вы ${myPos}-й из ${S.rank.length} · ` : ''}одиночный и парный, сезоны</small></span><span>→</span></a>
   <a href="#/matches" class="card menu-item">📋 <span>Матчи<small class="muted" style="display:block;font-weight:500">все игры клуба, ваши результаты, личные встречи</small></span><span>→</span></a>
   <section class="card menu">
     ${isAdmin() ? '<a class="menu-item" href="#/invite">✉️ <span>Пригласить в клуб</span></a><a class="menu-item" href="#/print">🖨 <span>Печать: плакат и домики на столы</span></a><a class="menu-item" href="#/clubedit">🏠 <span>Клуб: название, адрес, карта</span></a>' : ''}
