@@ -2782,7 +2782,7 @@ function posterSheet() {
 function tentSheet(n) {
   const half = pos => `<div class="prn-half ${pos}"><div class="prn-logo"><img src="${logo()}" alt="">PONGHUB</div>
     <div class="prn-row"><div class="prn-qrbox"><div class="prn-qr" data-prn="table" data-n="${n}"></div></div>
-    <div class="prn-txt"><div class="prn-t1">${esc(S.club.name)}</div><div class="prn-t2 prn-fit">Стол ${n}</div><div class="prn-t3"><span class="prn-fit">Наведи камеру —</span><span class="prn-fit">сыграй матч</span></div><div class="prn-t4">Соперник, формат, счёт на табло — всё в телефоне.</div></div></div></div>`;
+    <div class="prn-txt"><div class="prn-t1">${esc(S.club.name)}</div><div class="prn-t2 prn-fit">Стол ${n}</div><div class="prn-t3">Наведи камеру&nbsp;— сыграй матч</div><div class="prn-t4">Соперник, формат, счёт на табло — всё в телефоне.</div></div></div></div>`;
   return `<div class="prn-a4"><div class="prn-in prn-tent">${half('prn-up')}<div class="prn-fold"><span>сгиб</span></div>${half('prn-down')}</div></div>`;
 }
 function viewPrint() {
@@ -2814,6 +2814,15 @@ function fitPrint(root) {
     const sheet = el.closest('.prn-a4').clientWidth, base = parseFloat(getComputedStyle(el).fontSize);
     let k = 1;
     while (el.scrollWidth > el.clientWidth + 1 && k > 0.5) { k -= 0.04; el.style.fontSize = `${base * k / sheet * 100}cqw`; }
+  }
+  // домик: если половина не вмещает надписи, уменьшаем их понемногу
+  for (const half of root.querySelectorAll('.prn-half')) {
+    const els = [...half.querySelectorAll('.prn-t2, .prn-t3, .prn-t4')], sheet = half.closest('.prn-a4').clientWidth;
+    els.forEach(el => { el.style.fontSize = ''; });
+    const base = els.map(el => parseFloat(getComputedStyle(el).fontSize));
+    const need = () => [...half.children].reduce((a, c) => a + c.offsetHeight, 0) + parseFloat(getComputedStyle(half).rowGap || 0) * (half.children.length - 1);
+    let k = 1;
+    while (need() > half.clientHeight * 0.94 && k > 0.55) { k -= 0.05; els.forEach((el, i) => { el.style.fontSize = `${base[i] * k / sheet * 100}cqw`; }); }
   }
   for (const sh of root.querySelectorAll('.prn-poster')) {
     const box = sh.querySelector('.prn-qrbox');
