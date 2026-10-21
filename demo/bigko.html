@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="robots" content="noindex">
+<title>Большая олимпийская сетка на табло — варианты</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap">
+<style>
+/* Макет: как показать олимпийскую сетку на 10–30 игроков на телевизоре 16:9. Данные — пример. */
+:root { --d: "Barlow Condensed", sans-serif; --f: Inter, system-ui, sans-serif; --gold: #ffd75e; --muted: #93a7c6; }
+* { box-sizing: border-box; }
+body { margin: 0; font-family: var(--f); background: #0b1220; color: #eef3fb; }
+.bar { position: sticky; top: 0; z-index: 5; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 10px 16px; background: #0b1220; border-bottom: 1px solid #1d2a44; }
+.bar b { font: 800 13px var(--f); color: var(--muted); margin: 0 4px 0 10px; }
+.bar button { border: 0; border-radius: 99px; padding: 8px 14px; background: #1b2740; color: #fff; font: 700 13px var(--f); cursor: pointer; }
+.bar button.on { background: #e63946; }
+.wrap { max-width: 1400px; margin: 0 auto; padding: 14px 16px 40px; }
+.note { padding: 12px 14px; border-radius: 14px; background: #fff7d6; color: #4a3a00; font: 500 14px/1.45 var(--f); margin-bottom: 14px; } .note b { display: block; font-size: 16px; margin-bottom: 2px; }
+.tv { container-type: inline-size; width: 100%; aspect-ratio: 16/9; border-radius: 14px; overflow: hidden; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 1.2cqw; padding: 2cqw 2.4cqw 1.4cqw;
+  background: radial-gradient(120% 90% at 50% 0%, #163463 0%, #0b1a33 55%, #070f1f 100%); box-shadow: 0 20px 50px rgba(0,0,0,.5); }
+.top { display: flex; align-items: center; gap: 1.2cqw; } .top .lg { width: 3cqw; height: 3cqw; border-radius: .7cqw; background: #2563b8; }
+.top b { font: 800 1.9cqw var(--d); text-transform: uppercase; } .top small { display: block; font-size: 1.05cqw; color: var(--muted); }
+.top .tag { margin-left: auto; padding: .45cqw 1.2cqw; border-radius: 99px; background: rgba(255,255,255,.08); font: 700 1cqw var(--f); color: var(--muted); }
+.foot { border-top: .1cqw solid rgba(255,255,255,.1); padding-top: .8cqw; font: 600 1.05cqw var(--f); color: var(--muted); display: flex; justify-content: space-between; }
+/* ячейка матча */
+.m { border-radius: .7cqw; background: rgba(255,255,255,.06); border: .1cqw solid rgba(255,255,255,.12); overflow: hidden; }
+.m div { display: flex; align-items: center; gap: .5cqw; padding: var(--py, .32cqw) .6cqw; font: 700 var(--fs, 1.1cqw)/1.15 var(--d); min-width: 0; }
+.m div + div { border-top: .08cqw solid rgba(255,255,255,.08); }
+.m .nk { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .m .sc { flex: none; color: var(--muted); }
+.m .w { color: #fff; } .m .w .sc { color: var(--gold); } .m .l { opacity: .5; } .m .t { color: #6f83a3; font: italic 600 calc(var(--fs, 1.1cqw) * .85) var(--f); }
+.m.now { border-color: var(--gold); box-shadow: 0 0 1.4cqw rgba(255,215,94,.5); }
+.av { width: calc(var(--fs, 1.1cqw) * 1.25); aspect-ratio: 1; border-radius: 50%; flex: none; display: grid; place-items: center; font-size: calc(var(--fs, 1.1cqw) * .75); background: color-mix(in srgb, var(--c) 30%, #10203d); border: .1cqw solid var(--c); }
+/* А: зеркальная сетка */
+.mir { display: grid; min-height: 0; gap: 1cqw; align-items: stretch; }
+.col { display: flex; flex-direction: column; justify-content: space-around; gap: .45cqw; min-height: 0; position: relative; padding-top: 1.6cqw; }
+.col h5 { position: absolute; top: 0; left: 0; right: 0; margin: 0; text-align: center; font: 700 .85cqw var(--f); letter-spacing: .12cqw; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.mid { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 1cqw; padding-top: 1.6cqw; }
+.cup { text-align: center; padding: 1cqw; border-radius: 1cqw; border: .12cqw dashed rgba(255,215,94,.5); } .cup i { font-style: normal; font-size: 2.6cqw; } .cup b { display: block; font: 800 1.5cqw var(--d); color: var(--gold); } .cup span { font-size: .85cqw; color: var(--muted); }
+.mid .m { width: 100%; } .mid h5 { margin: 0; font: 700 .9cqw var(--f); letter-spacing: .12cqw; color: var(--gold); text-transform: uppercase; }
+/* Б: текущий раунд крупно */
+.cur { display: grid; grid-template-columns: minmax(0, 1.9fr) minmax(0, 1fr); gap: 1.6cqw; min-height: 0; }
+.big { display: flex; flex-direction: column; gap: .8cqw; min-height: 0; }
+.big h4 { margin: 0; display: flex; align-items: baseline; gap: 1cqw; font: 800 1.8cqw var(--d); text-transform: uppercase; } .big h4 small { font: 600 1cqw var(--f); color: var(--muted); text-transform: none; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8cqw 1.2cqw; align-content: start; }
+.grid .m { --fs: 1.55cqw; --py: .55cqw; }
+.dots { display: flex; gap: .5cqw; margin-top: auto; } .dots i { width: .7cqw; height: .7cqw; border-radius: 50%; background: rgba(255,255,255,.25); } .dots i.on { background: var(--gold); width: 1.8cqw; border-radius: .4cqw; }
+.side { display: flex; flex-direction: column; gap: 1cqw; min-height: 0; }
+.card { padding: 1cqw 1.2cqw; border-radius: 1cqw; background: rgba(255,255,255,.05); border: .1cqw solid rgba(255,255,255,.1); }
+.card h5 { margin: 0 0 .6cqw; font: 700 .9cqw var(--f); letter-spacing: .12cqw; text-transform: uppercase; color: var(--muted); }
+.path { display: flex; align-items: center; gap: .5cqw; font: 700 1.1cqw var(--d); } .path span { flex: 1; text-align: center; padding: .5cqw .2cqw; border-radius: .6cqw; background: rgba(255,255,255,.05); color: var(--muted); }
+.path span.on { background: var(--gold); color: #2a1d00; } .path span.done { color: #fff; } .path i { font-style: normal; color: var(--muted); font-size: .9cqw; }
+.nx { display: grid; justify-items: center; text-align: center; gap: .4cqw; border-color: #e63946; } .nx small { font: 700 .95cqw var(--f); letter-spacing: .15cqw; color: #e63946; text-transform: uppercase; } .nx b { font: 800 2.4cqw/1.05 var(--d); } .nx em { font-style: normal; color: var(--muted); }
+.lbl { font: 800 15px var(--f); margin: 18px 0 8px; } .lbl small { font-weight: 500; color: var(--muted); }
+</style></head>
+<body><div class="bar"><b>Игроков:</b><button data-n="10">10</button><button data-n="20">20</button><button data-n="30">30</button></div>
+<div class="wrap"><div class="note"><b>Олимпийка на 10–30 игроков — как уместить на телевизор</b>Переключайте число игроков сверху. Сейчас у 10 игроков сетка уже вылезает вниз. <b style="display:inline">А</b> — зеркальная сетка (как на чемпионате мира): половина слева, половина справа, финал по центру; «свободные проходы» не занимают места — такие игроки сразу стоят во 2-м раунде. <b style="display:inline">Б</b> — текущий раунд крупно (если матчей много — листается страницами каждые 10 сек), справа путь до финала и кто следующий.</div>
+<p class="lbl">А · Зеркальная сетка <small>— видно всё сразу</small></p><div id="a"></div>
+<p class="lbl">Б · Текущий раунд крупно <small>— крупные ники, листается</small></p><div id="b"></div></div>
+<script>
+const NAMES = ['Вайнсмоукер', 'GOAT', 'type2b', 'Neazk', 'muhammet_magsumov', 'Амир', 'Aintmoses', 'Рустам', 'Redhead', 'Рената', 'Armlet1', 'Ramilich', 'Дамир', 'Эльвира', 'Тимур', 'Камила', 'Ильдар', 'Артур', 'Алина', 'Марат', 'Карина', 'Булат', 'Айдар', 'Лиана', 'Ринат', 'Гульнара', 'Азат', 'Диана', 'Нияз', 'Софья'];
+const COL = ['#e63946', '#2f7de1', '#f2b600', '#2a9d8f', '#8b5cf6', '#ec4899', '#f97316', '#06b6d4', '#16a34a', '#a16207'];
+const nextPow2 = n => { let s = 1; while (s < n) s *= 2; return s; };
+const seedPos = size => { let p = [1]; while (p.length < size) { const m = p.length * 2 + 1; p = p.flatMap(x => [x, m - x]); } return p; };
+const av = i => `<span class="av" style="--c:${COL[i % COL.length]}">${[...'🔥⚡🦁🎯💨🐺🌸🏓🦋🐻🚀'][i % 11]}</span>`;
+// строим дерево: 1-й раунд + свободные проходы; сыграна часть 1-го раунда
+function build(n) {
+  const size = nextPow2(n), slots = seedPos(size).map(k => (k <= n ? k - 1 : null)), R = Math.log2(size), rounds = [];
+  let prev = null;
+  for (let r = 0; r < R; r++) {
+    const cnt = size / 2 ** (r + 1), row = [];
+    for (let i = 0; i < cnt; i++) {
+      const a = r === 0 ? slots[2 * i] : prev[2 * i].w, b = r === 0 ? slots[2 * i + 1] : prev[2 * i + 1].w;
+      const bye = r === 0 && (a === null || b === null);
+      const c = { a, b, bye, w: bye ? (a ?? b) : undefined, sc: null };
+      if (!bye && r === 0 && a !== null && b !== null && i % 3 === 0) { c.w = a; c.sc = [3, 1]; }   // часть первого раунда сыграна
+      row.push(c);
+    }
+    rounds.push(row); prev = row;
+  }
+  return rounds;
+}
+const RN = (r, R) => ({ 1: 'Финал', 2: '1/2', 3: '1/4', 4: '1/8', 5: '1/16' })[R - r] || `Раунд ${r + 1}`;
+const line = (id, c, side) => id === null || id === undefined ? `<div class="t">${c.bye ? '' : 'ждём победителя'}</div>`
+  : `<div class="${c.w === undefined ? '' : c.w === id ? 'w' : 'l'}">${av(id)}<span class="nk">${NAMES[id]}</span><span class="sc">${c.sc ? (c.w === id ? c.sc[0] : c.sc[1]) : ''}</span></div>`;
+const cell = (c, now) => `<div class="m ${now ? 'now' : ''}">${line(c.a, c)}${line(c.b, c)}</div>`;
+// первый несыгранный матч с обоими игроками — «следующие»
+const isNext = (rounds) => { for (const row of rounds) for (const c of row) if (!c.bye && c.a != null && c.b != null && c.w === undefined) return c; return null; };
+function A(n) {
+  const rounds = build(n), R = rounds.length, nx = isNext(rounds);
+  // раунд без «проходов»: в 1-м раунде показываем только настоящие матчи
+  const view = rounds.map((row, r) => row.map(c => (r === 0 && c.bye ? null : c)));
+  const half = (side) => view.slice(0, R - 1).map((row, r) => { const h = row.length / 2; return { r, cells: side ? row.slice(h) : row.slice(0, h) }; });
+  const L = half(0), Rr = half(1).reverse();
+  const rows = Math.max(...L.map(x => x.cells.filter(Boolean).length), 1);
+  const fs = Math.max(.75, Math.min(1.25, 9 / rows)), py = Math.max(.12, Math.min(.4, 3 / rows));
+  const colH = x => `<div class="col"><h5>${RN(x.r, R)}</h5>${x.cells.filter(Boolean).map(c => cell(c, c === nx)).join('')}</div>`;
+  const fin = rounds[R - 1][0];
+  const cols = L.length + Rr.length + 1;
+  return `<div class="tv"><div class="top"><span class="lg"></span><div><b>Коворкинг «IT Park» KZN</b><small>Кубок кубков · олимпийская система · ${n} игроков</small></div><span class="tag">ПЕРЕРЫВ</span></div>
+    <div class="mir" style="grid-template-columns:repeat(${L.length},minmax(0,1fr)) minmax(0,1.15fr) repeat(${Rr.length},minmax(0,1fr));--fs:${fs.toFixed(2)}cqw;--py:${py.toFixed(2)}cqw">
+      ${L.map(colH).join('')}<div class="mid"><h5>Финал</h5>${cell(fin)}<div class="cup"><i>🏆</i><b>?</b><span>чемпион</span></div></div>${Rr.map(colH).join('')}</div>
+    <div class="foot"><span>Следом за столом: <b style="color:#fff">${nx ? NAMES[nx.a] + ' — ' + NAMES[nx.b] : '—'}</b></span><span>PONGHUB</span></div></div>`;
+}
+function B(n) {
+  const rounds = build(n), R = rounds.length, nx = isNext(rounds);
+  const ri = rounds.findIndex(row => row.some(c => !c.bye && c.w === undefined)), row = rounds[ri].filter(c => !c.bye);
+  const per = 8, pages = Math.ceil(row.length / per);
+  const path = rounds.map((_, r) => `<span class="${r < ri ? 'done' : r === ri ? 'on' : ''}">${RN(r, R)}</span>`).join('<i>›</i>');
+  return `<div class="tv"><div class="top"><span class="lg"></span><div><b>Коворкинг «IT Park» KZN</b><small>Кубок кубков · олимпийская система · ${n} игроков</small></div><span class="tag">ПЕРЕРЫВ</span></div>
+    <div class="cur"><div class="big"><h4>${RN(ri, R)} финала <small>сыграно ${row.filter(c => c.w !== undefined).length} из ${row.length}${pages > 1 ? ` · страница 1 из ${pages}` : ''}</small></h4>
+      <div class="grid">${row.slice(0, per).map(c => cell(c, c === nx)).join('')}</div>${pages > 1 ? `<div class="dots">${Array.from({ length: pages }, (_, k) => `<i class="${k ? '' : 'on'}"></i>`).join('')}</div>` : ''}</div>
+      <div class="side"><div class="card"><h5>Путь до финала</h5><div class="path">${path}</div></div>
+        <div class="card nx"><small>Следом за этим столом</small><b>${nx ? NAMES[nx.a] : '—'}</b><em>—</em><b>${nx ? NAMES[nx.b] : ''}</b></div>
+        <div class="card"><h5>Без игры во 2-й раунд</h5><div style="font:700 1.1cqw var(--d);line-height:1.5">${rounds[0].filter(c => c.bye).map(c => NAMES[c.a ?? c.b]).join(', ') || '—'}</div></div></div></div>
+    <div class="foot"><span>Рейтинг клуба · бегущая строка</span><span>PONGHUB</span></div></div>`;
+}
+let N = 10;
+function draw() { document.querySelectorAll('[data-n]').forEach(b => b.classList.toggle('on', +b.dataset.n === N)); document.getElementById('a').innerHTML = A(N); document.getElementById('b').innerHTML = B(N); }
+document.querySelector('.bar').onclick = e => { const b = e.target.closest('[data-n]'); if (b) { N = +b.dataset.n; draw(); } };
+draw();
+</script></body></html>
