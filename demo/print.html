@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="robots" content="noindex">
+<title>Печать А4 — макет</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<style>
+/* Макет печати А4 для коворкинга: рекламный плакат (QR → регистрация и заявка в клуб) и листы для столов (QR → игра за столом).
+   Листы нарисованы в пропорциях А4 (210×297 мм) и уменьшены. QR-коды — пример, в приложении будут настоящие ссылки клуба. */
+:root { --d: "Barlow Condensed", sans-serif; --f: Inter, system-ui, sans-serif; --red: #e63946; --blue: #1f5fc4; --gold: #ffd75e; --ink: #10203d; --muted: #6b7a90; --wood: #c98a4b; }
+* { box-sizing: border-box; }
+body { margin: 0; font-family: var(--f); background: #e9eef6; color: var(--ink); }
+.wrap { max-width: 1400px; margin: 0 auto; padding: 16px 16px 60px; }
+h1 { font: 800 34px var(--d); text-transform: uppercase; margin: 6px 0; }
+h2 { font: 800 28px var(--d); text-transform: uppercase; margin: 38px 0 6px; }
+.lead { font-size: 15px; line-height: 1.45; color: #3a4a62; margin: 0 0 16px; max-width: 920px; }
+.row { display: flex; gap: 26px; flex-wrap: wrap; align-items: flex-start; }
+.cap { text-align: center; font: 800 16px var(--f); margin: 0 0 8px; } .cap small { display: block; font-weight: 500; color: var(--muted); font-size: 13px; margin-top: 2px; }
+.col { width: 400px; max-width: 100%; }
+.note { margin-top: 10px; font-size: 13px; line-height: 1.45; color: #3a4a62; } .note b { color: var(--ink); }
+
+/* лист А4: все размеры в cqw — 1cqw = 1/100 ширины листа (2,1 мм на печати) */
+.a4 { width: 100%; aspect-ratio: 210 / 297; container-type: inline-size; position: relative; overflow: hidden; background: #fff; box-shadow: 0 18px 40px rgba(16,32,61,.25); border-radius: 3px; }
+.a4 .in { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.qr { background: #fff; display: grid; place-items: center; }
+.qr svg { width: 100%; height: 100%; display: block; }
+.logo { display: flex; align-items: center; gap: 2.4cqw; font: 800 6cqw/1 var(--d); letter-spacing: .04em; }
+.logo img { width: 9cqw; height: 9cqw; border-radius: 2cqw; }
+
+/* ── Плакат A: «Синий стол» ── */
+.pa { background: linear-gradient(165deg, #3b7fd4, #1f5fc4 50%, #0e3b8c); color: #fff; padding: 7cqw 7cqw 7.5cqw; }
+.pa::before { content: ''; position: absolute; top: 0; bottom: 0; left: 50%; border-left: .7cqw solid rgba(255,255,255,.22); }
+.pa::after { content: ''; position: absolute; inset: 2.6cqw; border: .9cqw solid rgba(255,255,255,.9); pointer-events: none; }
+.pa > * { position: relative; z-index: 1; }
+.pa .club { margin-top: 4cqw; font: 700 3.6cqw var(--f); opacity: .9; text-align: center; }
+.pa h3 { margin: 1.5cqw 0 0; text-align: center; font: 800 11cqw/0.95 var(--d); text-transform: uppercase; }
+.pa h3 em { font-style: normal; color: var(--gold); }
+.pa .qrbox { margin: 4.5cqw auto 0; width: 46cqw; padding: 3cqw; background: #fff; border-radius: 4cqw; box-shadow: 0 2cqw 0 rgba(0,0,0,.18); }
+.pa .qrbox .qr { aspect-ratio: 1; }
+.pa .scan { margin: 2.6cqw auto 4cqw; padding: 1.4cqw 4cqw; border-radius: 99px; background: var(--gold); color: #2a1d00; font: 800 3.6cqw var(--f); }
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2.4cqw; margin-top: auto; }
+.steps div { border-radius: 3cqw; padding: 2.6cqw 2cqw; text-align: center; font: 600 2.6cqw/1.25 var(--f); }
+.steps i { display: grid; place-items: center; width: 7cqw; height: 7cqw; margin: 0 auto 1.4cqw; border-radius: 50%; font: 800 4cqw var(--d); font-style: normal; }
+.pa .steps div { background: rgba(0,0,0,.22); } .pa .steps i { background: #fff; color: var(--blue); }
+.pa .foot { margin-top: 4cqw; display: flex; justify-content: space-between; align-items: center; font: 700 2.8cqw var(--f); opacity: .95; }
+
+/* ── Плакат B: «Светлый» ── */
+.pb { background: #fff; color: var(--ink); }
+.pb .band { background: var(--red); color: #fff; padding: 6cqw 7cqw 4.5cqw; }
+.pb .band .club { font: 700 3.2cqw var(--f); opacity: .9; margin-top: 4cqw; }
+.pb .band h3 { margin: 1cqw 0 0; font: 800 10cqw/0.92 var(--d); text-transform: uppercase; }
+.pb .body { padding: 4cqw 7cqw 4cqw; display: flex; flex-direction: column; flex: 1; }
+.feat { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2cqw; }
+.feat > div { background: #f2f5fa; border-radius: 3cqw; padding: 2.4cqw 1cqw; font: 500 2.1cqw/1.25 var(--f); color: #3a4a62; text-align: center; }
+.feat span { display: block; font-size: 5.6cqw; line-height: 1; margin-bottom: 1.2cqw; }
+.feat b { display: block; font: 800 3.4cqw/1.1 var(--d); text-transform: uppercase; color: var(--ink); margin-bottom: .6cqw; }
+.pb .bottom { margin-top: auto; padding-top: 4cqw; display: grid; grid-template-columns: 40cqw 1fr; gap: 5cqw; align-items: center; }
+.pb .qrbox { padding: 2.2cqw; border: .9cqw solid var(--ink); border-radius: 4cqw; } .pb .qrbox .qr { aspect-ratio: 1; }
+.pb .call { font: 800 6.2cqw/0.95 var(--d); text-transform: uppercase; }
+.pb .call small { display: block; margin-top: 2cqw; font: 500 2.7cqw/1.35 var(--f); text-transform: none; color: #3a4a62; }
+.pb .arrow { font-size: 8cqw; color: var(--red); line-height: 1; margin-bottom: 1cqw; }
+.pb .foot { margin-top: 3cqw; padding-top: 2.4cqw; border-top: .4cqw solid #e1e7f0; display: flex; justify-content: space-between; align-items: center; font: 700 2.6cqw var(--f); color: var(--muted); }
+.pb .foot .logo { font-size: 4.6cqw; color: var(--ink); } .pb .foot .logo img { width: 6.5cqw; height: 6.5cqw; }
+
+/* ── Плакат C: «Тёмный спорт» ── */
+.pc { background: #0f1420; color: #fff; padding: 6cqw 7cqw 5cqw; }
+.pc .ball { position: absolute; width: 78cqw; height: 78cqw; right: -26cqw; top: -20cqw; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #ffb35c, #f07b16 60%, #b44f00); opacity: .95; }
+.pc .ball::after { content: ''; position: absolute; inset: 0; border-radius: 50%; box-shadow: inset -3cqw -4cqw 8cqw rgba(0,0,0,.35); }
+.pc > *:not(.ball) { position: relative; }
+.pc .club { margin-top: 4cqw; font: 700 3.4cqw var(--f); color: var(--gold); }
+.pc h3 { margin: 1.4cqw 0 0; font: 800 11cqw/0.88 var(--d); text-transform: uppercase; max-width: 70cqw; }
+.pc .sub { margin-top: 2.4cqw; font: 500 3cqw/1.35 var(--f); color: #c9d3e6; max-width: 66cqw; }
+.board { margin-top: 3.4cqw; background: #1a2232; border-radius: 3.6cqw; padding: 2.6cqw 3.6cqw; width: 64cqw; }
+.board div { display: flex; align-items: center; gap: 2.6cqw; padding: 1.1cqw 0; border-bottom: .3cqw solid #2a3448; font: 700 3cqw var(--f); }
+.board div:last-child { border-bottom: 0; }
+.board i { width: 5cqw; font: 800 4.2cqw var(--d); font-style: normal; text-align: center; }
+.board span { flex: 1; color: #8e9bb3; font-weight: 600; } .board b { font: 800 4cqw var(--d); color: var(--gold); }
+.board .you span { color: #fff; } .board .you { color: #7dffc4; }
+.pc .bottom { margin-top: auto; padding-top: 4cqw; display: flex; align-items: center; gap: 5cqw; }
+.pc .qrbox { width: 33cqw; flex: none; padding: 2.4cqw; background: var(--gold); border-radius: 4cqw; } .pc .qrbox .qr { aspect-ratio: 1; border-radius: 1.5cqw; padding: 1cqw; }
+.pc .call { font: 800 6cqw/0.95 var(--d); text-transform: uppercase; }
+.pc .call small { display: block; margin-top: 2cqw; font: 500 2.6cqw/1.4 var(--f); text-transform: none; color: #c9d3e6; }
+.pc .foot { margin-top: 3cqw; display: flex; justify-content: space-between; align-items: center; font: 700 2.6cqw var(--f); color: #8e9bb3; }
+.pc .foot .logo { font-size: 4.6cqw; color: #fff; } .pc .foot .logo img { width: 6.5cqw; height: 6.5cqw; }
+
+/* ── Стол A: «Лист на стол» ── */
+.ta { background: linear-gradient(165deg, #3b7fd4, #1f5fc4 50%, #0e3b8c); color: #fff; padding: 7cqw; text-align: center; }
+.ta::after { content: ''; position: absolute; inset: 2.6cqw; border: .9cqw solid rgba(255,255,255,.9); pointer-events: none; }
+.ta > * { position: relative; }
+.ta .club { font: 700 3.4cqw var(--f); opacity: .9; margin-top: 4cqw; }
+.ta .num { font: 800 20cqw/0.9 var(--d); text-transform: uppercase; margin-top: 1cqw; }
+.ta .num small { display: block; font-size: 6cqw; letter-spacing: .2em; color: var(--gold); }
+.ta .qrbox { margin: 3cqw auto 0; width: 48cqw; padding: 3cqw; background: #fff; border-radius: 4cqw; box-shadow: 0 2cqw 0 rgba(0,0,0,.18); } .ta .qrbox .qr { aspect-ratio: 1; }
+.ta .scan { margin: 2.6cqw auto 4cqw; padding: 1.4cqw 4cqw; border-radius: 99px; background: var(--gold); color: #2a1d00; font: 800 3.8cqw var(--f); display: inline-block; }
+.flow { margin-top: auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.8cqw; }
+.flow div { background: rgba(0,0,0,.22); border-radius: 3cqw; padding: 2.4cqw 1.4cqw; font: 600 2.3cqw/1.25 var(--f); }
+.flow span { display: block; font-size: 5cqw; margin-bottom: 1cqw; }
+
+/* ── Стол B: «Домик» (сложить пополам, стоит на столе, видно с двух сторон) ── */
+.tb { background: #fff; }
+.tb .half { position: absolute; left: 0; right: 0; height: 50%; display: grid; grid-template-columns: 40cqw 1fr; gap: 5cqw; align-items: center; padding: 0 7cqw; background: linear-gradient(165deg, #3b7fd4, #1f5fc4 50%, #0e3b8c); color: #fff; }
+.tb .half.top { top: 0; transform: rotate(180deg); }
+.tb .half.bot { bottom: 0; }
+.tb .half .qrbox { padding: 2.2cqw; background: #fff; border-radius: 3.6cqw; } .tb .half .qrbox .qr { aspect-ratio: 1; }
+.tb .t1 { font: 700 3cqw var(--f); color: var(--gold); }
+.tb .t2 { font: 800 11cqw/0.9 var(--d); text-transform: uppercase; margin: 1cqw 0 2cqw; }
+.tb .t3 { font: 800 5.4cqw/0.95 var(--d); text-transform: uppercase; }
+.tb .t4 { margin-top: 2cqw; font: 500 2.5cqw/1.35 var(--f); opacity: .9; }
+.tb .fold { position: absolute; left: 0; right: 0; top: 50%; border-top: .5cqw dashed #fff; z-index: 2; }
+.tb .fold span { position: absolute; right: 3cqw; top: -2.6cqw; background: #fff; color: var(--muted); font: 700 2.2cqw var(--f); padding: .4cqw 1.6cqw; border-radius: 99px; }
+
+/* ── Стол C: «4 наклейки на листе» ── */
+.tc { background: #fff; padding: 4cqw; }
+.tc .grid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 4cqw; height: 100%; }
+.tc .st { border: .4cqw dashed #b8c3d3; border-radius: 3cqw; padding: 1.6cqw; }
+.tc .st > div { height: 100%; border-radius: 2.4cqw; background: linear-gradient(160deg, #2f74d6, #1f5fc4 45%, #0e3b8c); color: #fff; text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.2cqw; padding: 2cqw; }
+.tc .st b { font: 800 7cqw/1 var(--d); text-transform: uppercase; }
+.tc .st span { font: 700 2.2cqw var(--f); opacity: .95; }
+.tc .st .qrbox { width: 26cqw; padding: 1.4cqw; background: #fff; border-radius: 2cqw; } .tc .st .qrbox .qr { aspect-ratio: 1; }
+.tc .st em { padding: .6cqw 2.4cqw; border-radius: 99px; background: var(--gold); color: #2a1d00; font: 800 2.2cqw var(--f); font-style: normal; }
+.tc .cut { position: absolute; top: 1.2cqw; left: 50%; transform: translateX(-50%); font: 600 1.8cqw var(--f); color: var(--muted); }
+
+/* телефон: что увидит человек после сканирования */
+.ph { width: 250px; border-radius: 30px; padding: 9px; background: var(--ink); box-shadow: 0 18px 36px rgba(16,32,61,.3); flex: none; }
+.sc { height: 500px; border-radius: 22px; overflow: hidden; background: #f3f6fb; padding: 12px; display: flex; flex-direction: column; gap: 9px; font-size: 12px; }
+.sc .hd { background: linear-gradient(165deg, #3b7fd4, #1f5fc4); color: #fff; border-radius: 14px; padding: 12px; text-align: center; }
+.sc .hd b { display: block; font: 800 20px/1.05 var(--d); text-transform: uppercase; margin-top: 4px; }
+.sc .fld { background: #fff; border: 1.5px solid #dbe2ec; border-radius: 10px; padding: 9px 10px; color: var(--muted); }
+.sc .btn { text-align: center; padding: 11px; border-radius: 12px; background: var(--red); color: #fff; font: 800 13px var(--f); }
+.sc .btn.tg { background: #2aa3e0; }
+.sc .ok { background: #e8f8ef; border: 1.5px solid #9fdcb9; border-radius: 12px; padding: 10px; color: #135c34; font-weight: 600; line-height: 1.35; }
+.sc .muted { color: var(--muted); text-align: center; }
+.flowrow { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.flowrow > .arr { font-size: 28px; color: var(--muted); }
+</style></head>
+<body><div class="wrap">
+
+<h1>Печать А4 для коворкинга</h1>
+<p class="lead">Два вида листов: <b>рекламный плакат</b> — человек наводит камеру и сразу попадает на регистрацию с заявкой в клуб «Coworking IT Park КЗН»; и <b>лист для стола</b> — наводит камеру и сразу оказывается в «Игре за столом»: выбирает соперника, формат и начинает матч. Выберите по одному варианту в каждом разделе (или скажите, что поменять). QR-коды здесь — пример: в приложении они будут вести на ваш клуб.</p>
+
+<h2>1. Рекламный плакат А4</h2>
+<p class="lead">Вешается на стену, у кофе-поинта, в лифте. Печать в цвет на обычном офисном принтере, без полей обрезки.</p>
+<div class="row">
+  <div class="col"><p class="cap">Вариант A — «Синий стол»<small>в цветах приложения, как теннисный стол</small></p>
+    <div class="a4"><div class="in pa">
+      <div class="logo"><img src="../icons/hub.svg" alt="">PONGHUB</div>
+      <div class="club">Coworking IT Park КЗН</div>
+      <h3>Играешь<br>в <em>пинг-понг?</em></h3>
+      <div class="qrbox"><div class="qr" data-qr="join"></div></div>
+      <div class="scan">📷 Наведи камеру телефона</div>
+      <div class="steps"><div><i>1</i>Наведи камеру на QR-код</div><div><i>2</i>Создай аккаунт за минуту</div><div><i>3</i>Заявка в клуб уйдёт сама</div></div>
+      <div class="foot"><span>🏆 Рейтинг · ⚔️ Вызовы · 🗓 Турниры</span><span>Бесплатно</span></div>
+    </div></div>
+    <p class="note"><b>Плюсы:</b> сразу узнаётся как наше приложение, крупный QR видно издалека. Много синего — расходует цветной тонер.</p></div>
+
+  <div class="col"><p class="cap">Вариант B — «Светлый»<small>белый фон, красная шапка, что даёт клуб</small></p>
+    <div class="a4"><div class="in pb">
+      <div class="band"><div class="logo"><img src="../icons/hub.svg" alt="">PONGHUB</div><div class="club">Coworking IT Park КЗН · клуб настольного тенниса</div><h3>Вызови коллегу<br>на матч</h3></div>
+      <div class="body">
+        <div class="feat">
+          <div><span>🏆</span><b>Рейтинг</b>лиги от бронзы до алмаза</div>
+          <div><span>⚔️</span><b>Вызовы</b>на матч любому игроку</div>
+          <div><span>🗓</span><b>Турниры</b>кубки и сезоны</div>
+          <div><span>📊</span><b>Статистика</b>форма, серии, значки</div>
+        </div>
+        <div class="bottom"><div class="qrbox"><div class="qr" data-qr="join"></div></div>
+          <div><div class="arrow">←</div><div class="call">Наведи камеру — и ты в клубе<small>Аккаунт за минуту (можно через Telegram) — заявка в клуб уйдёт сама.</small></div></div></div>
+        <div class="foot"><div class="logo"><img src="../icons/hub.svg" alt="">PONGHUB</div><span>Бесплатно · iPhone и Android</span></div>
+      </div>
+    </div></div>
+    <p class="note"><b>Плюсы:</b> экономно печатается, читается даже в ч/б, объясняет, зачем вступать. Строже и «офиснее».</p></div>
+
+  <div class="col"><p class="cap">Вариант C — «Тёмный спорт»<small>азарт: кто лучший в IT Park</small></p>
+    <div class="a4"><div class="in pc">
+      <div class="ball"></div>
+      <div class="logo"><img src="../icons/hub.svg" alt="">PONGHUB</div>
+      <div class="club">Coworking IT Park КЗН</div>
+      <h3>Кто лучший<br>в&nbsp;IT&nbsp;Park?</h3>
+      <div class="sub">Рейтинг клуба по настольному теннису. Сыграй — и узнай своё место.</div>
+      <div class="board"><div><i>1</i><span>Место свободно</span><b>?</b></div><div><i>2</i><span>Место свободно</span><b>?</b></div><div class="you"><i>…</i><span>Здесь будешь ты</span><b>→</b></div></div>
+      <div class="bottom"><div class="qrbox"><div class="qr" data-qr="join"></div></div>
+        <div class="call">Наведи камеру<br>и вступай<small>Аккаунт за минуту — заявка в клуб уйдёт сама.</small></div></div>
+      <div class="foot"><div class="logo"><img src="../icons/hub.svg" alt="">PONGHUB</div><span>Рейтинг · Вызовы · Турниры</span></div>
+    </div></div>
+    <p class="note"><b>Плюсы:</b> самый заметный на стене, цепляет соревновательностью. Тёмный фон — больше всего тонера, лучше печатать в типографии.</p></div>
+</div>
+
+<h2>Что увидит человек после сканирования плаката</h2>
+<p class="lead">Без поиска клуба и кодов: ссылка в QR уже знает клуб. После регистрации заявка отправляется сама, владелец получает уведомление и принимает её.</p>
+<div class="flowrow">
+  <div class="ph"><div class="sc">
+    <div class="hd">🏓 Вас приглашают в клуб<b>Coworking IT Park КЗН</b></div>
+    <div class="btn tg">✈️ Через Telegram — в одно касание</div>
+    <div class="muted">или</div>
+    <div class="fld">Ник в клубе</div><div class="fld">Email</div><div class="fld">Пароль</div>
+    <div class="btn">Создать аккаунт и вступить</div>
+    <div class="muted">Уже есть аккаунт? Войти</div>
+  </div></div>
+  <span class="arr">→</span>
+  <div class="ph"><div class="sc">
+    <div class="hd">✅ Заявка отправлена<b>Coworking IT Park КЗН</b></div>
+    <div class="ok">Владелец клуба получил уведомление. Как только он примет заявку — откроются рейтинг, вызовы и турниры. Мы пришлём push.</div>
+    <div class="btn">🔔 Включить уведомления</div>
+    <div class="muted">Пока можно посмотреть клуб на карте и правила рейтинга</div>
+  </div></div>
+</div>
+
+<h2>2. Лист для стола А4</h2>
+<p class="lead">QR ведёт сразу в «Игру за столом» нужного стола: соперник → формат (до 1/2/3 побед) → «Начать», счёт идёт на табло. Если человек ещё не в клубе — сначала регистрация с заявкой, потом сразу игра.</p>
+<div class="row">
+  <div class="col"><p class="cap">Вариант A — «Лист на стол»<small>один стол — один лист, в рамку или на стену у стола</small></p>
+    <div class="a4"><div class="in ta">
+      <div class="logo" style="justify-content:center"><img src="../icons/hub.svg" alt="">PONGHUB</div>
+      <div class="club">Coworking IT Park КЗН</div>
+      <div class="num"><small>Стол</small>1</div>
+      <div class="qrbox"><div class="qr" data-qr="table"></div></div>
+      <div><span class="scan">📷 Наведи камеру — и играй</span></div>
+      <div class="flow"><div><span>📷</span>Наведи камеру</div><div><span>👤</span>Выбери соперника</div><div><span>🎯</span>Формат: до 1, 2 или 3 побед</div><div><span>📺</span>Счёт — на табло</div></div>
+    </div></div>
+    <p class="note"><b>Плюсы:</b> огромный номер стола и QR — сканируется с 1–1,5 м. Нужно место на стене или подставка-рамка.</p></div>
+
+  <div class="col"><p class="cap">Вариант B — «Домик»<small>сложить пополам — стоит на краю стола, видно с двух сторон</small></p>
+    <div class="a4"><div class="in tb">
+      <div class="half top"><div class="qrbox"><div class="qr" data-qr="table"></div></div><div><div class="t1">Coworking IT Park КЗН</div><div class="t2">Стол 1</div><div class="t3">Наведи камеру —<br>сыграй матч</div><div class="t4">Соперник, формат, счёт на табло — всё в телефоне.</div></div></div>
+      <div class="fold"><span>сгиб</span></div>
+      <div class="half bot"><div class="qrbox"><div class="qr" data-qr="table"></div></div><div><div class="t1">Coworking IT Park КЗН</div><div class="t2">Стол 1</div><div class="t3">Наведи камеру —<br>сыграй матч</div><div class="t4">Соперник, формат, счёт на табло — всё в телефоне.</div></div></div>
+    </div></div>
+    <p class="note"><b>Плюсы:</b> ставится на стол или у сетки без скотча, видно игрокам с обеих сторон. Лучше печатать на плотной бумаге (160–200 г/м²).</p></div>
+
+  <div class="col"><p class="cap">Вариант C — «4 наклейки на листе»<small>вырезать по пунктиру и наклеить на торцы столов</small></p>
+    <div class="a4"><div class="in tc">
+      <div class="cut">✂ вырезать по пунктиру</div>
+      <div class="grid">
+        <div class="st"><div><b>Стол 1</b><span>Coworking IT Park КЗН</span><div class="qrbox"><div class="qr" data-qr="table"></div></div><em>Наведи камеру — играй</em></div></div>
+        <div class="st"><div><b>Стол 2</b><span>Coworking IT Park КЗН</span><div class="qrbox"><div class="qr" data-qr="table2"></div></div><em>Наведи камеру — играй</em></div></div>
+        <div class="st"><div><b>Стол 3</b><span>Coworking IT Park КЗН</span><div class="qrbox"><div class="qr" data-qr="table3"></div></div><em>Наведи камеру — играй</em></div></div>
+        <div class="st"><div><b>Стол 4</b><span>Coworking IT Park КЗН</span><div class="qrbox"><div class="qr" data-qr="table4"></div></div><em>Наведи камеру — играй</em></div></div>
+      </div>
+    </div></div>
+    <p class="note"><b>Плюсы:</b> один лист на 4 стола, можно на самоклеящуюся бумагу. QR меньше — сканировать нужно ближе (30–50 см).</p></div>
+</div>
+
+<h2>Что увидит человек после сканирования стола</h2>
+<div class="flowrow">
+  <div class="ph"><div class="sc">
+    <div class="hd">🏓 Стол 1<b>С кем играешь?</b></div>
+    <div class="fld" style="display:flex;justify-content:space-between"><span>🔍 Найти игрока</span></div>
+    <div class="fld" style="color:var(--ink)">😎 Rustam · 70.3</div>
+    <div class="fld" style="color:var(--ink)">🌀 Topspin · 61.1</div>
+    <div class="fld" style="color:var(--ink)">🔥 Smash · 46.6</div>
+    <div class="muted">Формат</div>
+    <div style="display:flex;gap:6px"><div class="fld" style="flex:1;text-align:center">до 1</div><div class="fld" style="flex:1;text-align:center;border-color:var(--red);color:var(--red);font-weight:700">до 2</div><div class="fld" style="flex:1;text-align:center">до 3</div></div>
+    <div class="btn">▶ Начать матч</div>
+  </div></div>
+  <span class="arr">→</span>
+  <div class="ph"><div class="sc">
+    <div class="hd">Стол 1 · идёт матч<b>Rustam 1:0 Topspin</b></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:1">
+      <div class="btn" style="display:grid;place-items:center;font-size:40px;font-family:var(--d)">7</div>
+      <div class="btn" style="display:grid;place-items:center;font-size:40px;font-family:var(--d);background:var(--blue)">5</div></div>
+    <div class="muted">Нажимайте на свою сторону за каждое очко — счёт сразу на табло</div>
+  </div></div>
+</div>
+
+</div>
+<script>
+// пример ссылок: в приложении будут настоящие адреса клуба и столов
+const LINKS = {
+  join: 'https://ponghub-club.vercel.app/#/join/ITPARK',
+  table: 'https://ponghub-club.vercel.app/#/play/itpark/1',
+  table2: 'https://ponghub-club.vercel.app/#/play/itpark/2',
+  table3: 'https://ponghub-club.vercel.app/#/play/itpark/3',
+  table4: 'https://ponghub-club.vercel.app/#/play/itpark/4',
+};
+document.querySelectorAll('[data-qr]').forEach(el => {
+  try { const q = qrcode(0, 'M'); q.addData(LINKS[el.dataset.qr]); q.make(); el.innerHTML = q.createSvgTag({ cellSize: 4, margin: 0, scalable: true }); }
+  catch { el.textContent = 'QR'; }
+});
+</script>
+</body></html>
