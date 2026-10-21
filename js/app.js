@@ -2773,16 +2773,16 @@ function posterSheet() {
   return `<div class="prn-a4"><div class="prn-in prn-poster">
     <div class="prn-logo"><img src="${logo()}" alt="">PONGHUB</div>
     <div class="prn-club">${esc(S.club.name)}</div>
-    <h3>Играешь<br>в <em>пинг-понг?</em></h3>
+    <h3><span class="prn-fit">Играешь</span><span class="prn-fit">в <em>пинг-понг?</em></span></h3>
     <div class="prn-qrbox"><div class="prn-qr" data-prn="join"></div></div>
     <div class="prn-scan">📷 Наведи камеру телефона</div>
     <div class="prn-steps"><div><i>1</i>Наведи камеру на QR-код</div><div><i>2</i>Создай аккаунт за минуту</div><div><i>3</i>Заявка в клуб уйдёт сама</div></div>
-    <div class="prn-foot">🏆 Рейтинг · ⚔️ Вызовы · 🗓 Турниры</div>
   </div></div>`;
 }
 function tentSheet(n) {
-  const half = pos => `<div class="prn-half ${pos}"><div class="prn-qrbox"><div class="prn-qr" data-prn="table" data-n="${n}"></div></div>
-    <div><div class="prn-t1">${esc(S.club.name)}</div><div class="prn-t2">Стол ${n}</div><div class="prn-t3">Наведи камеру —<br>сыграй матч</div><div class="prn-t4">Соперник, формат, счёт на табло — всё в телефоне.</div></div></div>`;
+  const half = pos => `<div class="prn-half ${pos}"><div class="prn-logo"><img src="${logo()}" alt="">PONGHUB</div>
+    <div class="prn-row"><div class="prn-qrbox"><div class="prn-qr" data-prn="table" data-n="${n}"></div></div>
+    <div class="prn-txt"><div class="prn-t1">${esc(S.club.name)}</div><div class="prn-t2 prn-fit">Стол ${n}</div><div class="prn-t3"><span class="prn-fit">Наведи камеру —</span><span class="prn-fit">сыграй матч</span></div><div class="prn-t4">Соперник, формат, счёт на табло — всё в телефоне.</div></div></div></div>`;
   return `<div class="prn-a4"><div class="prn-in prn-tent">${half('prn-up')}<div class="prn-fold"><span>сгиб</span></div>${half('prn-down')}</div></div>`;
 }
 function viewPrint() {
@@ -2806,9 +2806,27 @@ async function fillPrintQr(root) {
   await Promise.all([...root.querySelectorAll('[data-prn]')].map(el =>
     drawQr(el, el.dataset.prn === 'join' ? inviteLink(code) : tableLink(el.dataset.n, code), 4)));
 }
+// если на телефоне увеличен шрифт, надписи уменьшаются, пока не влезут: строка — по ширине, плакат — по высоте (за счёт QR)
+function fitPrint(root) {
+  for (const el of root.querySelectorAll('.prn-fit')) {
+    el.style.fontSize = '';
+    // размер в долях ширины листа (cqw) — тогда на принтере будет так же, как на экране
+    const sheet = el.closest('.prn-a4').clientWidth, base = parseFloat(getComputedStyle(el).fontSize);
+    let k = 1;
+    while (el.scrollWidth > el.clientWidth + 1 && k > 0.5) { k -= 0.04; el.style.fontSize = `${base * k / sheet * 100}cqw`; }
+  }
+  for (const sh of root.querySelectorAll('.prn-poster')) {
+    const box = sh.querySelector('.prn-qrbox');
+    box.style.width = '';
+    let w = 44;
+    while (sh.scrollHeight > sh.clientHeight + 1 && w > 26) { w -= 2; box.style.width = `${w}cqw`; }
+  }
+}
 async function renderPrint() {
   const host = document.querySelector('.page');
   if (!host || !isAdmin()) return;
+  await document.fonts?.ready;
+  fitPrint(host);
   try { await fillPrintQr(host); } catch (e) { toast(e.message, 'err'); }
 }
 async function printSheets(what) {
@@ -2817,6 +2835,10 @@ async function printSheets(what) {
   el.innerHTML = what === 'poster' ? posterSheet() : Array.from({ length: tablesN() }, (_, k) => tentSheet(k + 1)).join('');
   await fillPrintQr(el);
   await document.fonts?.ready;
+  // на экране область печати скрыта — на миг выводим её за край экрана, чтобы измерить и подогнать надписи
+  el.style.cssText = 'display:block;position:fixed;left:-10000px;top:0;width:400px';
+  fitPrint(el);
+  el.style.cssText = '';
   await new Promise(res => setTimeout(res, 300));
   window.print();
 }
