@@ -475,7 +475,8 @@ function viewHome() {
       <div class="big-num">${fmtR(r)}</div><small>${st.matches ? `${pos}-е место из ${total}` : 'ещё нет матчей'} · <span title="за 30 дней">${delta(d30)}</span></small></div></a>
     ${showRk ? '<a href="#/racket" class="hm-frame bt-rk" id="hm-rk" aria-label="Моя ракетка"></a>' : `<div class="bt-spark">${sparkline(hist.slice(-20))}</div>`}
   </section>`;
-  const coinTile = coins ? `<a href="${feature('shop') ? '#/shop' : '#/predict'}" class="bt bt-coin ${S.shop ? 'half' : ''}"><h4>🪙 Пинг-коины</h4><b>${fmtC(S.coins)}<i>PC</i></b><span class="bt-go">${feature('shop') ? 'Магазин' : 'Прогнозы'} →</span></a>` : '';
+  const coinTile = !coins ? '' : S.shop ? `<a href="#/shop" class="bt bt-coin half"><h4>🪙 Пинг-коины</h4><b>${fmtC(S.coins)}<i>PC</i></b><span class="bt-go">Магазин →</span></a>`
+    : `<a href="${feature('shop') ? '#/shop' : '#/predict'}" class="bt bt-coin bt-row"><h4>🪙 Пинг-коины</h4><b>${fmtC(S.coins)}<i>PC</i></b><span class="bt-go">${feature('shop') ? 'Магазин' : 'Прогнозы'} →</span></a>`;
   const bonusTile = S.shop ? `<a href="#/shop?tab=bonus" class="bt bt-bonus half ${bonus ? '' : 'done'}"><h4>🔥 Бонус дня</h4><b>${bonus ? '+' + STREAK[S.shop.streak.day - 1] : '✓'}<i>${bonus ? 'PC' : 'получен'}</i></b><span class="bt-go">${bonus ? 'Забрать' : 'Завтра ещё'} →</span></a>` : '';
   const W = feature('shop') && S.tasks;
   const tDone = W ? W.tasks.filter(t => t.have >= t.goal).length : 0;
@@ -634,7 +635,7 @@ function viewPlayer(r) {
     <div><b class="down">${st.losses}</b><small>поражений</small></div>
     <div><b>${pct(st.winRate)}</b><small>% побед</small></div>
     <div><b>${st.setsW}:${st.setsL}</b><small>партии</small></div>
-    <div><b>${st.streakType === 'W' ? '🔥' + st.streak : st.streak ? '−' + st.streak : 0}</b><small>серия</small></div>
+    <div><b>${st.streakType === 'W' ? '🔥' + st.streak : 0}</b><small>серия побед</small></div>
     <div><b>${st.bestStreak}</b><small>лучшая серия</small></div>
     <div><b>${st.tournamentsPlayed}</b><small>турниров</small></div>
   </section>
@@ -1851,31 +1852,42 @@ function viewMe() {
   try { theme = localStorage.getItem('ponghub_theme') || 'light'; } catch { /* */ }
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  // разделы по смыслу: я и моя игра → мои вещи → управление клубом (владелец) → клубы → аккаунт → настройки
+  const sub = t => `<small class="muted menu-sub">${t}</small>`;
+  const group = (title, items) => items.join('') ? `<section class="card menu"><div class="menu-t">${title}</div>${items.join('')}</section>` : '';
+  const pc = pendingCounts().total;
   return `<div class="page-h"><h1>Профиль</h1></div>
-  <a href="#/player/${me.id}" class="card me-card">${ava(me, 'md')}<div><b>${esc(me.nickname)}</b> ${roleBadge(me)}<div class="muted small">${esc(me.full_name || '')}</div></div><span>→</span></a>
-  ${isAdmin() ? `<a href="#/admin" class="card menu-item">🛠️ <span>Управление клубом</span>${pendingCounts().total ? `<i class="dot inline">${pendingCounts().total}</i>` : ''}<span>→</span></a>` : ''}
-  <a href="#/rating" class="card menu-item">🏆 <span>Рейтинг<small class="muted" style="display:block;font-weight:500">${myPos ? `вы ${myPos}-й из ${S.rank.length} · ` : ''}одиночный и парный, сезоны</small></span><span>→</span></a>
-  <a href="#/matches" class="card menu-item">📋 <span>Матчи<small class="muted" style="display:block;font-weight:500">все игры клуба, ваши результаты, личные встречи</small></span><span>→</span></a>
-  <section class="card menu">
-    ${isAdmin() ? '<a class="menu-item" href="#/invite">✉️ <span>Пригласить в клуб</span></a><a class="menu-item" href="#/print">🖨 <span>Печать: плакат и домики на столы</span></a><a class="menu-item" href="#/clubedit">🏠 <span>Клуб: название, адрес, карта</span></a>' : ''}
-    ${feature('shop') ? '<a class="menu-item" href="#/shop">🛍️ <span>Магазин</span><small class="muted">' + fmtC(S.coins) + ' PC</small></a><a class="menu-item" href="#/racket">🏓 <span>Моя ракетка</span></a>' : ''}
-    ${feature('avatar') ? '<a class="menu-item" href="#/avatar">🧍 <span>Мой игрок</span></a>' : ''}
-    <a class="menu-item" href="#/clubs">🏠 <span>Мои клубы</span><small class="muted">${(S.ctx?.clubs || []).filter(c => c.my_status === 'active').length}</small></a>
-    <a class="menu-item" href="#/map">🗺 <span>Клубы на карте</span></a>
-    ${isFounder() ? '<a class="menu-item" href="#/founder">🛡 <span>Платформа PongHub</span></a>' : ''}
-    ${!isAdmin() ? '<button class="menu-item danger-text" data-act="leave-club">🚪 <span>Покинуть клуб</span></button>' : ''}
-  </section>
-  <section class="card menu">
-    <button class="menu-item" data-act="edit-profile">✏️ <span>Редактировать профиль</span></button>
-    ${S.ctx?.me?.telegram_id ? `<button class="menu-item" data-act="tg-unlink">${TG_ICON} <span>Telegram привязан${S.ctx.me.telegram_username ? ' · @' + esc(S.ctx.me.telegram_username) : ''}</span><small class="muted">отвязать</small></button>`
-      : `<button class="menu-item" data-act="tg-link">${TG_ICON} <span>Привязать Telegram</span><small class="muted">вход в одно касание</small></button>`}
-    ${predOn() ? '<a class="menu-item" href="#/predict">🎯 <span>Прогнозы</span></a>' : ''}
-    <a class="menu-item" href="#/help">❓ <span>Как пользоваться</span></a>
-    ${isAdmin() ? '<a class="menu-item" href="#/rules">📐 <span>Как считается рейтинг</span></a>' : ''}
-    <a class="menu-item" href="#/calendar">📅 <span>Календарь игр</span></a>
-    <a class="menu-item" href="#/h2h/${me.id}">⚔️ <span>Личные встречи</span></a>
-    ${S.store.mode === 'supabase' ? '<button class="menu-item" data-act="change-pass">🔑 <span>Сменить пароль</span></button>' : ''}
-  </section>
+  <a href="#/player/${me.id}" class="card me-card">${ava(me, 'md')}<div><b>${esc(me.nickname)}</b> ${roleBadge(me)}<div class="muted small">${esc(me.full_name || '')} · моя статистика</div></div><span>→</span></a>
+  ${group('Моя игра', [
+    `<a class="menu-item" href="#/rating">🏆 <span>Рейтинг${sub(`${myPos ? `вы ${myPos}-й из ${S.rank.length} · ` : ''}одиночный, парный, сезоны`)}</span><span>→</span></a>`,
+    '<a class="menu-item" href="#/matches">📋 <span>Матчи' + sub('все игры, ваши результаты') + '</span><span>→</span></a>',
+    `<a class="menu-item" href="#/h2h/${me.id}">⚔️ <span>Личные встречи</span><span>→</span></a>`,
+    '<a class="menu-item" href="#/calendar">📅 <span>Календарь игр</span><span>→</span></a>',
+    predOn() ? '<a class="menu-item" href="#/predict">🎯 <span>Прогнозы</span><span>→</span></a>' : '',
+  ])}
+  ${group('Мои вещи', [
+    feature('shop') ? `<a class="menu-item" href="#/shop">🛍️ <span>Магазин</span><small class="muted">${fmtC(S.coins)} PC</small></a><a class="menu-item" href="#/racket">🏓 <span>Моя ракетка</span><span>→</span></a>` : '',
+    feature('avatar') ? '<a class="menu-item" href="#/avatar">🧍 <span>Мой игрок</span><span>→</span></a>' : '',
+  ])}
+  ${isAdmin() ? group('Управление клубом', [
+    `<a class="menu-item" href="#/admin">🛠️ <span>Заявки, игроки, матчи, табло${sub('настройки рейтинга и данные клуба')}</span>${pc ? `<i class="dot inline">${pc}</i>` : '<span>→</span>'}</a>`,
+    '<a class="menu-item" href="#/invite">✉️ <span>Пригласить в клуб</span><span>→</span></a>',
+    '<a class="menu-item" href="#/print">🖨 <span>Печать: плакат и домики на столы</span><span>→</span></a>',
+    '<a class="menu-item" href="#/clubedit">🏠 <span>Клуб: название, адрес, карта</span><span>→</span></a>',
+    '<a class="menu-item" href="#/rules">📐 <span>Как считается рейтинг</span><span>→</span></a>',
+  ]) : ''}
+  ${group('Клубы', [
+    `<a class="menu-item" href="#/clubs">🏠 <span>Мои клубы</span><small class="muted">${(S.ctx?.clubs || []).filter(c => c.my_status === 'active').length}</small></a>`,
+    '<a class="menu-item" href="#/map">🗺 <span>Клубы на карте</span><span>→</span></a>',
+    isFounder() ? '<a class="menu-item" href="#/founder">🛡 <span>Платформа PongHub</span><span>→</span></a>' : '',
+  ])}
+  ${group('Аккаунт', [
+    '<button class="menu-item" data-act="edit-profile">✏️ <span>Редактировать профиль</span></button>',
+    S.ctx?.me?.telegram_id ? `<button class="menu-item" data-act="tg-unlink">${TG_ICON} <span>Telegram привязан${S.ctx.me.telegram_username ? ' · @' + esc(S.ctx.me.telegram_username) : ''}</span><small class="muted">отвязать</small></button>`
+      : `<button class="menu-item" data-act="tg-link">${TG_ICON} <span>Привязать Telegram</span><small class="muted">вход в одно касание</small></button>`,
+    S.store.mode === 'supabase' ? '<button class="menu-item" data-act="change-pass">🔑 <span>Сменить пароль</span></button>' : '',
+    '<a class="menu-item" href="#/help">❓ <span>Как пользоваться</span><span>→</span></a>',
+  ])}
   <section class="card"><div class="card-h"><h3>Оформление</h3></div>
     <div class="seg">${[['dark', '🌙 Тёмная'], ['light', '☀️ Светлая'], ['auto', '⚙️ Авто']].map(([k, l]) => `<button class="${theme === k ? 'on' : ''}" data-act="theme" data-v="${k}">${l}</button>`).join('')}</div>
   </section>
@@ -1887,6 +1899,7 @@ function viewMe() {
   ${S.store.mode === 'demo' ? `<section class="card"><div class="card-h"><h3>Демо-режим</h3></div>
     <p class="muted small">Сейчас вы вошли как демо-пользователь. Данные хранятся только в этом браузере.</p>
     <div class="row-btns"><button class="btn" data-act="logout">Сменить роль</button><button class="btn ghost" data-act="demo-reset">Сбросить демо-данные</button></div></section>` : ''}
+  ${!isAdmin() ? '<button class="btn ghost full danger-text" data-act="leave-club">🚪 Покинуть клуб</button>' : ''}
   <button class="btn ghost full danger-text" data-act="logout">Выйти из аккаунта</button>
   <p class="muted small center ver">PongHub · v2.0</p>`;
 }

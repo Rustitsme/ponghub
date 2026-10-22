@@ -1379,3 +1379,19 @@ body.av-big { overflow: hidden; }
 .pz-chips { display: flex; flex-wrap: wrap; gap: 6px; } .pz-chips .chip { cursor: pointer; font: 600 13px var(--font); color: var(--text); }
 .prn-prize { color: #ffd75e; }
 [data-form=t-announce] [hidden] { display: none !important; }
+/* Профиль: подписи групп и подсказки под пунктами */
+.menu-t { padding: 12px 0 2px; font: 800 13px var(--display); text-transform: uppercase; letter-spacing: .7px; color: var(--muted); }
+.menu-sub { display: block; font-weight: 500; font-size: 12px; margin-top: 1px; }
+.menu .menu-item > span:last-child:not(:first-of-type) { color: var(--muted); }
+/* пинг-коины и бонус — содержимое по центру; без магазина коины — узкой полосой */
+.bt-coin, .bt-bonus { text-align: center; }
+.bt-row { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 10px 14px; }
+.bt-row h4 { margin: 0; } .bt-row > b { font-size: 24px; }
+.bt-row .bt-go { margin: 0; padding: 6px 12px; border-radius: 999px; background: color-mix(in srgb, var(--red) 12%, transparent); }
+/* кнопки в плитках: «Магазин» / «Прогнозы» — красная, «Забрать» — белая на жёлтом */
+.bt-coin .bt-go, .bt-bonus .bt-go { display: inline-block; margin-top: 10px; padding: 7px 16px; border-radius: 999px; font: 800 13px var(--font); }
+.bt-coin .bt-go { background: var(--red); color: #fff; box-shadow: 0 3px 8px rgba(230, 57, 70, .3); }
+.bt-row .bt-go { margin: 0; }
+.bt-bonus .bt-go { background: #fff; color: var(--red); box-shadow: 0 3px 8px rgba(180, 86, 10, .25); }
+.bt-bonus.done .bt-go { background: none; box-shadow: none; padding: 0; color: var(--muted); font-weight: 600; }
+.bt-coin:active .bt-go, .bt-bonus:active .bt-go { transform: scale(.96); }
