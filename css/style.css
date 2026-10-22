@@ -1379,3 +1379,7 @@ body.av-big { overflow: hidden; }
 .pz-chips { display: flex; flex-wrap: wrap; gap: 6px; } .pz-chips .chip { cursor: pointer; font: 600 13px var(--font); color: var(--text); }
 .prn-prize { color: #ffd75e; }
 [data-form=t-announce] [hidden] { display: none !important; }
+/* Профиль: подписи групп и подсказки под пунктами */
+.menu-t { padding: 12px 0 2px; font: 800 13px var(--display); text-transform: uppercase; letter-spacing: .7px; color: var(--muted); }
+.menu-sub { display: block; font-weight: 500; font-size: 12px; margin-top: 1px; }
+.menu .menu-item > span:last-child:not(:first-of-type) { color: var(--muted); }

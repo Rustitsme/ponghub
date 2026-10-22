@@ -515,6 +515,11 @@ export async function tvIntro(root, { A, B, grip, cue = () => {} }) {
   const hy = P => { const v = new THREE.Vector3(); (P.bones.Head || P.scene).getWorldPosition(v); return v.y + .08; };
   let t = 0;
   const W = { pos: new THREE.Vector3(0, 1.05, 6.6), look: new THREE.Vector3(0, .95, 0) };
+  // сценарий по очереди: общий план → крупно первый (машет, карточка) → крупно второй (машет, карточка) → общий план, хлопают
+  const FLY = 1.2, HOLD = 3.2;
+  const A0 = 4.4, A1 = A0 + FLY, A2 = A1 + HOLD;   // камера едет к первому, он в кадре, уезжаем
+  const B1 = A2 + FLY, B2 = B1 + HOLD;              // ко второму, он в кадре
+  const BACK = B2 + FLY, END = BACK + 1.7;
   const walk = (P, x0, x1, t0, dur, face) => {
     const k = ease((t - t0) / dur); if (t < t0) return; P.holder.visible = true;
     P.holder.position.x = x0 + (x1 - x0) * Math.min(1, (t - t0) / dur);
@@ -528,10 +533,10 @@ export async function tvIntro(root, { A, B, grip, cue = () => {} }) {
     const fA = { pos: new THREE.Vector3(XA, hy(PA) - .1, 2.6), look: new THREE.Vector3(XA, hy(PA) - .22, 0) };
     const fB = { pos: new THREE.Vector3(XB, hy(PB) - .1, 2.6), look: new THREE.Vector3(XB, hy(PB) - .22, 0) };
     let from = W, to = W, k = 0;
-    if (t < 4.6) { from = { pos: new THREE.Vector3(0, 1.3, 8.5), look: W.look }; k = ease((t - .5) / 3.5); }
-    else if (t < 7.2) { from = W; to = fA; k = ease((t - 4.6) / 1.1); if (t > 4.4) PA.holder.rotation.y += (0 - PA.holder.rotation.y) * .1; }
-    else if (t < 9.8) { from = fA; to = fB; k = ease((t - 7.2) / 1.2); if (t > 7.0) PB.holder.rotation.y += (0 - PB.holder.rotation.y) * .1; }
-    else { from = fB; to = W; k = ease((t - 9.8) / 1.2); PA.holder.rotation.y += (.15 - PA.holder.rotation.y) * .06; PB.holder.rotation.y += (-.15 - PB.holder.rotation.y) * .06; }
+    if (t < A0) { from = { pos: new THREE.Vector3(0, 1.3, 8.5), look: W.look }; k = ease((t - .5) / 3.5); }
+    else if (t < A2) { from = W; to = fA; k = ease((t - A0) / FLY); PA.holder.rotation.y += (0 - PA.holder.rotation.y) * .1; }
+    else if (t < B2) { from = fA; to = fB; k = ease((t - A2) / FLY); PB.holder.rotation.y += (0 - PB.holder.rotation.y) * .1; }
+    else { from = fB; to = W; k = ease((t - B2) / FLY); PA.holder.rotation.y += (.15 - PA.holder.rotation.y) * .06; PB.holder.rotation.y += (-.15 - PB.holder.rotation.y) * .06; }
     S.cam.position.copy(lerp3(from.pos, to.pos, k)); S.cam.lookAt(lerp3(from.look, to.look, k));
     PA.lookAt = PB.lookAt = t > 4 ? S.cam.position : null;
   };
@@ -539,15 +544,14 @@ export async function tvIntro(root, { A, B, grip, cue = () => {} }) {
   const steps = [
     [.05, () => { names.classList.add('in'); cue('names'); }],
     [1.5, () => { names.style.opacity = 0; cue('walk'); }],
-    [4.9, () => PA.play('wave', true)],              // первый машет на своём крупном плане
-    [5.3, () => { cA.classList.add('on'); cue('cardA'); }],
-    [7.0, () => cA.classList.remove('on')],
-    [7.5, () => PB.play('wave', true)],              // второй — на своём
-    [7.9, () => { cB.classList.add('on'); cue('cardB'); }],
-    [9.6, () => cB.classList.remove('on')],
-    [10.6, () => { PA.play('clap', true); PB.play('clap', true); cue('go'); }],
+    // первый: камера доехала — машет всё время, пока на экране его карточка (рейтинг, лига, ракетка)
+    [A1 - .2, () => { PA.play('wave'); cA.classList.add('on'); cue('cardA'); }],
+    [A2 - .2, () => { cA.classList.remove('on'); PA.play('idle'); }],
+    // второй — только когда камера уже на нём
+    [B1 - .2, () => { PB.play('wave'); cB.classList.add('on'); cue('cardB'); }],
+    [B2 - .2, () => { cB.classList.remove('on'); PB.play('idle'); }],
+    [BACK, () => { PA.play('clap', true); PB.play('clap', true); cue('go'); }],
   ];
-  const END = 12.3;
   let done; const finished = new Promise(r => { done = r; });
   const move = S.frame;
   S.frame = dt => { move(dt); while (steps.length && t >= steps[0][0]) steps.shift()[1](); if (t >= END && done) { done(); done = null; } };
