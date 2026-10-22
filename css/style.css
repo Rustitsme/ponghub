@@ -1388,3 +1388,10 @@ body.av-big { overflow: hidden; }
 .bt-row { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 10px 14px; }
 .bt-row h4 { margin: 0; } .bt-row > b { font-size: 24px; }
 .bt-row .bt-go { margin: 0; padding: 6px 12px; border-radius: 999px; background: color-mix(in srgb, var(--red) 12%, transparent); }
+/* кнопки в плитках: «Магазин» / «Прогнозы» — красная, «Забрать» — белая на жёлтом */
+.bt-coin .bt-go, .bt-bonus .bt-go { display: inline-block; margin-top: 10px; padding: 7px 16px; border-radius: 999px; font: 800 13px var(--font); }
+.bt-coin .bt-go { background: var(--red); color: #fff; box-shadow: 0 3px 8px rgba(230, 57, 70, .3); }
+.bt-row .bt-go { margin: 0; }
+.bt-bonus .bt-go { background: #fff; color: #b4560a; box-shadow: 0 3px 8px rgba(180, 86, 10, .25); }
+.bt-bonus.done .bt-go { background: none; box-shadow: none; padding: 0; color: var(--muted); font-weight: 600; }
+.bt-coin:active .bt-go, .bt-bonus:active .bt-go { transform: scale(.96); }
