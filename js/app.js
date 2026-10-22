@@ -3537,8 +3537,12 @@ function openMatchForm(opts = {}) {
       if (m0) await S.store.update('matches', m0.id, row);
       else {
         const saved = await S.store.insert('matches', { ...row, submitted_by: S.me.id, ...testFlag() });
-        if (fx.challengeId) await S.store.update('challenges', fx.challengeId, { status: 'done', match_id: saved.id }).catch(() => {});
-        if (fx.liveId) { await S.store.update('live_matches', fx.liveId, { status: 'finished', match_id: saved.id }).catch(() => {}); delete S.liveLocal[fx.liveId]; }
+        // счёт внесён — идущая игра этих же игроков и принятый вызов закрываются (в базе это делает и триггер, миграция 33)
+        const same = x => { const a = [x.player1_id, x.player2_id, x.player3_id, x.player4_id].filter(Boolean).sort().join(), b = [row.player1_id, row.player2_id, row.player3_id, row.player4_id].filter(Boolean).sort().join(); return a === b; };
+        const liveId = fx.liveId || S.data.live.find(l => l.status === 'live' && !l.match_id && (l.tournament_id || null) === row.tournament_id && same(l))?.id;
+        const chId = fx.challengeId || (!row.tournament_id && !dbl ? S.data.challenges.find(c => c.status === 'accepted' && !c.match_id && same({ player1_id: c.from_id, player2_id: c.to_id }))?.id : null);
+        if (chId) await S.store.update('challenges', chId, { status: 'done', match_id: saved.id }).catch(() => {});
+        if (liveId) { await S.store.update('live_matches', liveId, { status: 'finished', match_id: saved.id }).catch(() => {}); delete S.liveLocal[liveId]; }
       }
       closeModal();
       toast(row.status === 'approved' ? 'Матч сохранён, рейтинг пересчитан' : 'Результат отправлен владельцу на подтверждение');
