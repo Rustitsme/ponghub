@@ -475,7 +475,8 @@ function viewHome() {
       <div class="big-num">${fmtR(r)}</div><small>${st.matches ? `${pos}-е место из ${total}` : 'ещё нет матчей'} · <span title="за 30 дней">${delta(d30)}</span></small></div></a>
     ${showRk ? '<a href="#/racket" class="hm-frame bt-rk" id="hm-rk" aria-label="Моя ракетка"></a>' : `<div class="bt-spark">${sparkline(hist.slice(-20))}</div>`}
   </section>`;
-  const coinTile = coins ? `<a href="${feature('shop') ? '#/shop' : '#/predict'}" class="bt bt-coin ${S.shop ? 'half' : ''}"><h4>🪙 Пинг-коины</h4><b>${fmtC(S.coins)}<i>PC</i></b><span class="bt-go">${feature('shop') ? 'Магазин' : 'Прогнозы'} →</span></a>` : '';
+  const coinTile = !coins ? '' : S.shop ? `<a href="#/shop" class="bt bt-coin half"><h4>🪙 Пинг-коины</h4><b>${fmtC(S.coins)}<i>PC</i></b><span class="bt-go">Магазин →</span></a>`
+    : `<a href="${feature('shop') ? '#/shop' : '#/predict'}" class="bt bt-coin bt-row"><h4>🪙 Пинг-коины</h4><b>${fmtC(S.coins)}<i>PC</i></b><span class="bt-go">${feature('shop') ? 'Магазин' : 'Прогнозы'} →</span></a>`;
   const bonusTile = S.shop ? `<a href="#/shop?tab=bonus" class="bt bt-bonus half ${bonus ? '' : 'done'}"><h4>🔥 Бонус дня</h4><b>${bonus ? '+' + STREAK[S.shop.streak.day - 1] : '✓'}<i>${bonus ? 'PC' : 'получен'}</i></b><span class="bt-go">${bonus ? 'Забрать' : 'Завтра ещё'} →</span></a>` : '';
   const W = feature('shop') && S.tasks;
   const tDone = W ? W.tasks.filter(t => t.have >= t.goal).length : 0;

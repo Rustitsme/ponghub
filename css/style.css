@@ -1383,3 +1383,8 @@ body.av-big { overflow: hidden; }
 .menu-t { padding: 12px 0 2px; font: 800 13px var(--display); text-transform: uppercase; letter-spacing: .7px; color: var(--muted); }
 .menu-sub { display: block; font-weight: 500; font-size: 12px; margin-top: 1px; }
 .menu .menu-item > span:last-child:not(:first-of-type) { color: var(--muted); }
+/* пинг-коины и бонус — содержимое по центру; без магазина коины — узкой полосой */
+.bt-coin, .bt-bonus { text-align: center; }
+.bt-row { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 10px 14px; }
+.bt-row h4 { margin: 0; } .bt-row > b { font-size: 24px; }
+.bt-row .bt-go { margin: 0; padding: 6px 12px; border-radius: 999px; background: color-mix(in srgb, var(--red) 12%, transparent); }
