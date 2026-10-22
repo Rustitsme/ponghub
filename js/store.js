@@ -346,7 +346,7 @@ class SupaStore {
   async inviteCode(cid) {
     const { data, error } = await this.sb.from('club_invites').select('code').eq('club_id', cid).maybeSingle();
     if (error) throw translateError(error);
-    return data?.code || null;
+    return data?.code || this.rpc('club_invite_code', { cid });   // участник клуба (не владелец) — через функцию
   }
   async rotateInvite(cid) { return this.rpc('rotate_invite', { cid }); }
   async founderStats() { return this.rpc('founder_stats'); }
@@ -543,7 +543,7 @@ class LocalStore {
       matches: this.db.matches.filter(m => m.club_id === cid && m.status === 'approved' && !m.is_test),
       tournaments: this.db.tournaments.filter(t => t.club_id === cid && !t.is_test).map(t => ({ id: t.id, name: t.name, date: t.date, status: t.status, results: t.results, created_at: t.created_at })) }));
   }
-  async inviteCode(cid) { this.needAdmin(cid); return this.db.invites[cid]; }
+  async inviteCode(cid) { if (!this.role(cid)) throw new Error('Пригласить может только участник клуба'); return this.db.invites[cid]; }
   async rotateInvite(cid) { this.needAdmin(cid); this.db.invites[cid] = this.code(8); this.save(); return this.db.invites[cid]; }
   unassigned() { return this.db.profiles.filter(p => !p.is_test && !['deleted', 'rejected'].includes(p.status) && !this.db.club_members.some(m => m.user_id === p.id && ['active', 'pending'].includes(m.status))); }
   async founderStats() {

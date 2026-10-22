@@ -962,27 +962,33 @@ function openAnnounceForm(t = null) {
   });
 }
 // QR турнира: SVG — вектор (любой размер без потери качества), PNG — 3000×3000
-async function tourQr(t) {
+async function makeQr(text) {
   await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js');
-  const code = S.printCode?.club === S.club.id ? S.printCode.code : (S.printCode = { club: S.club.id, code: await S.store.inviteCode(S.club.id) }).code;
-  const q = window.qrcode(0, 'Q'); q.addData(tourLink(t, code)); q.make();
+  const q = window.qrcode(0, 'Q'); q.addData(text); q.make();
   return q;
 }
-const qrFile = t => `qr-${(t.name || 'turnir').toLowerCase().replace(/[^a-zа-яё0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 40) || 'turnir'}`;
-async function downloadTourQr(t, kind) {
-  const q = await tourQr(t), n = q.getModuleCount(), m = 4, size = n + m * 2;
+async function tourQr(t) {
+  const code = S.printCode?.club === S.club.id ? S.printCode.code : (S.printCode = { club: S.club.id, code: await S.store.inviteCode(S.club.id) }).code;
+  return makeQr(tourLink(t, code));
+}
+const qrName = s => (s || 'ponghub').toLowerCase().replace(/[^a-zа-яё0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 40) || 'ponghub';
+const qrFile = t => `qr-${qrName(t.name || 'turnir')}`;
+async function downloadTourQr(t, kind) { return saveQr(await tourQr(t), qrFile(t), kind); }
+// QR файлом: SVG — вектор (любой размер без потери качества), PNG — 3000×3000
+async function saveQr(q, file, kind) {
+  const n = q.getModuleCount(), m = 4, size = n + m * 2;
   if (kind === 'svg') {
     let d = '';
     for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (q.isDark(y, x)) d += `M${x + m},${y + m}h1v1h-1z`;
     const svg = `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="1000" height="1000" shape-rendering="crispEdges"><rect width="${size}" height="${size}" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
-    return download(qrFile(t) + '.svg', svg, 'image/svg+xml');
+    return download(file + '.svg', svg, 'image/svg+xml');
   }
   const px = 3000, cell = Math.floor(px / size), off = Math.floor((px - cell * size) / 2) + m * cell;
   const c = document.createElement('canvas'); c.width = c.height = px;
   const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, px, px); x.fillStyle = '#000';
   for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) if (q.isDark(r, k)) x.fillRect(off + k * cell, off + r * cell, cell, cell);
   const blob = await new Promise(res => c.toBlob(res, 'image/png'));
-  download(qrFile(t) + '.png', blob, 'image/png');
+  download(file + '.png', blob, 'image/png');
 }
 async function renderTourQr() {
   const el = document.getElementById('t-qr'); if (!el) return;
@@ -1506,8 +1512,13 @@ function challengesBlock() {
       text = `Вы вызвали <b>${esc(other.nickname)}</b> · ждём ответа`;
       btns = `<button class="btn sm ghost" data-act="ch-cancel" data-id="${c.id}">Отменить</button>`;
     } else {
-      text = `Вызов принят: вы и <b>${esc(other.nickname)}</b> — к столу!`;
-      btns = `<button class="btn sm primary" data-act="ch-result" data-id="${c.id}">Внести результат</button><button class="btn sm ghost" data-act="ch-cancel" data-id="${c.id}">Отменить</button>`;
+      const live = S.data.live.find(l => l.challenge_id === c.id && l.status === 'live');
+      if (live) return `<div class="ch-row">${ava(other, 'md')}<div class="rn"><span>🔴 Идёт ваша игра с <b>${esc(other.nickname)}</b></span><small class="muted">Все видят её в «Лайве»</small></div>
+        <div class="ch-btns"><a class="btn sm primary" href="#/live/${live.id}">Открыть игру</a></div></div>`;
+      return `<div class="ch-row ch-go">${ava(other, 'md')}<div class="rn"><span>Вызов принят: вы и <b>${esc(other.nickname)}</b> — к столу!</span>${msg}</div>
+        <ol class="ch-steps"><li>Подойдите к столу и нажмите <b>«▶ Начать игру»</b></li><li>Выберите, до скольких побед и до скольких очков играете</li><li><b>«Вести счёт»</b> — счёт по ходу ведёт один из вас или третий человек; <b>«Счёт в конце»</b> — внесёте итог после игры</li></ol>
+        <small class="muted ch-why">Игра сразу появится у всех в «Лайве» — болельщики смогут сделать прогноз.</small>
+        <div class="ch-btns"><button class="btn primary" data-act="ch-start" data-id="${c.id}">▶ Начать игру</button><button class="btn sm ghost" data-act="ch-result" data-id="${c.id}">Уже сыграли — внести счёт</button><button class="btn sm ghost" data-act="ch-cancel" data-id="${c.id}">Отменить</button></div></div>`;
     }
     return `<div class="ch-row">${ava(other, 'md')}<div class="rn"><span>${text}</span>${msg}</div><div class="ch-btns">${btns}</div></div>`;
   };
@@ -1697,7 +1708,7 @@ function viewPlayers(r) {
     <input type="search" class="pl-search" data-input="pl-search" placeholder="Найти по нику или имени" autocomplete="off">
     <div class="seg">${[['rating', 'По рейтингу'], ['name', 'По имени'], ['recent', 'Кто играл']].map(([k, l]) => `<a href="${qs(k)}" class="${sort === k ? 'on' : ''}">${l}</a>`).join('')}</div>
     <section class="card pl-list">${list.map(row).join('') || '<div class="empty">В клубе пока никого нет</div>'}<div class="empty" id="pl-none" hidden>Никого не нашли</div></section>
-    ${isAdmin() ? '<a href="#/invite" class="btn ghost full">✉️ Пригласить в клуб</a>' : ''}`;
+    <a href="#/invite" class="btn ghost full">✉️ ${isAdmin() ? 'Пригласить в клуб' : 'Пригласить друга в клуб'}</a>`;
 }
 function filterPlayers(q) {
   q = q.trim().toLowerCase();
@@ -1985,6 +1996,7 @@ function viewMe() {
     '<a class="menu-item" href="#/rules">📐 <span>Как считается рейтинг</span><span>→</span></a>',
   ]) : ''}
   ${group('Клубы', [
+    isAdmin() ? '' : '<a class="menu-item" href="#/invite">✉️ <span>Пригласить друга в клуб</span><span>→</span></a>',
     `<a class="menu-item" href="#/clubs">🏠 <span>Мои клубы</span><small class="muted">${(S.ctx?.clubs || []).filter(c => c.my_status === 'active').length}</small></a>`,
     '<a class="menu-item" href="#/map">🗺 <span>Клубы на карте</span><span>→</span></a>',
     isFounder() ? '<a class="menu-item" href="#/founder">🛡 <span>Платформа PongHub</span><span>→</span></a>' : '',
@@ -2016,6 +2028,7 @@ function viewMe() {
 const ROLE_LABEL = { owner: '👑 владелец', helper: '✍️ помощник', player: 'игрок' };
 const clubPlace = c => [c.city, c.address].filter(Boolean).map(esc).join(' · ');
 const inviteLink = code => `${location.origin}${location.pathname}#/join/${code}`;
+const appLink = () => `${location.origin}${location.pathname}#/register`;
 const KAZAN = [55.7963, 49.1088];
 
 function loadScript(src) {
@@ -2235,11 +2248,14 @@ async function addrPick(i) {
 
 // ── приглашение ──
 function viewInvite(r) {
-  if (!isAdmin()) return '<div class="empty">Приглашать может владелец клуба</div>';
   const c = S.store.club || S.club;
+  if (!isAdmin()) return `<div class="page-h"><a href="#/me" class="back">← Профиль</a></div>
+    <div class="page-h"><h1>Пригласить друга</h1></div>
+    <p class="muted small">Друг наводит камеру на QR-код или открывает ссылку, регистрируется — и заявка в «${esc(c.name)}» уходит сама, никаких кодов. В клуб его примет владелец.</p>
+    <section class="card stack" id="invite-box" data-mode="player"><div class="muted small">Загружаю приглашение…</div></section>`;
   return `<div class="page-h"><a href="#/me" class="back">← Профиль</a></div>
     ${r.q.get('new') ? `<section class="hero table-card club-hero"><h2>Клуб создан 🎉</h2><p>${esc(c.name)}${c.city ? ' · ' + esc(c.city) : ''}</p></section>` : '<div class="page-h"><h1>Пригласить в клуб</h1></div>'}
-    <p class="muted small">По ссылке, коду или QR-коду человек попадает на страницу клуба и нажимает «Отправить заявку». В клуб он попадёт, только когда вы её примете — во вкладке «Заявки». Отправьте ссылку в рабочий чат, продиктуйте код или повесьте QR-код у стола.</p>
+    <p class="muted small">По ссылке или QR-коду «Вступить в клуб» человек регистрируется — и заявка в ваш клуб уходит сама, код вводить не нужно. В клуб он попадёт, когда вы её примете (вкладка «Заявки»). Код — для тех, кто уже скачал приложение.</p>
     <section class="card stack" id="invite-box"><div class="muted small">Загружаю приглашение…</div></section>
     <section class="card"><div class="card-h"><h3>ID клуба для поиска</h3><span class="badge">${esc(c.code)}</span></div>
       <p class="muted small">По этому ID клуб находят в поиске и подают заявку — её подтверждаете вы.</p></section>
@@ -2252,14 +2268,26 @@ async function renderInvite() {
   try {
     const code = await S.store.inviteCode(S.club.id);
     const link = inviteLink(code);
+    box.dataset.link = link;
+    if (box.dataset.mode === 'player') {
+      box.innerHTML = `<div class="center"><b>🏓 QR: вступить в «${esc(S.club.name)}»</b><div id="qr" class="qr-box qr-big"></div><small class="muted">Покажите экран другу — пусть наведёт камеру</small></div>
+        <div class="row-btns"><button class="btn primary" data-act="share-invite" data-link="${esc(link)}">📤 Отправить ссылку</button><button class="btn" data-act="copy" data-text="${esc(link)}">Скопировать</button><button class="btn" data-act="inv-qr" data-k="club" data-f="png">⬇️ QR картинкой</button></div>`;
+      return drawQr(document.getElementById('qr'), link, 6);
+    }
     box.innerHTML = `<div><b class="small">Ссылка-приглашение</b><div class="copy-row"><span class="mono">${esc(link)}</span></div>
         <div class="row-btns"><button class="btn primary" data-act="share-invite" data-link="${esc(link)}">Поделиться</button><button class="btn" data-act="copy" data-text="${esc(link)}">Скопировать</button></div></div>
       <div><b class="small">Код приглашения</b><div class="invite-code">${esc(code)}</div></div>
-      <div class="center"><b class="small">QR-код для стенда у стола</b><div id="qr" class="qr-box"></div>
-        <a class="btn" href="#/print">🖨 Плакат и домики для столов</a></div>
+      <div class="inv-qrs">
+        <div class="inv-qr"><b>🏓 Вступить в клуб</b><small class="muted">регистрация + заявка в «${esc(S.club.name)}»</small><div id="qr" class="qr-box"></div>
+          <div class="row-btns"><button class="btn sm" data-act="inv-qr" data-k="club" data-f="svg">⬇️ SVG</button><button class="btn sm" data-act="inv-qr" data-k="club" data-f="png">⬇️ PNG</button></div></div>
+        <div class="inv-qr"><b>📲 Только приложение</b><small class="muted">регистрация в PongHub, без клуба</small><div id="qr-app" class="qr-box"></div>
+          <div class="row-btns"><button class="btn sm" data-act="inv-qr" data-k="app" data-f="svg">⬇️ SVG</button><button class="btn sm" data-act="inv-qr" data-k="app" data-f="png">⬇️ PNG</button></div></div>
+      </div>
+      <a class="btn full" href="#/print">🖨 Плакат и домики для столов</a>
       <button class="btn ghost sm" data-act="rotate-invite">Сменить ссылку и код</button>
       <small class="muted">Если код попал не туда — смените его. Старые ссылка, код и QR перестанут работать, участники клуба останутся.</small>`;
     await drawQr(document.getElementById('qr'), link, 6);
+    await drawQr(document.getElementById('qr-app'), appLink(), 6);
   } catch (e) { box.innerHTML = `<div class="empty small">${esc(e.message)}</div>`; }
 }
 
@@ -2421,7 +2449,7 @@ function openClubMenu() {
   openModal(`<h3>Мои клубы</h3><div class="club-list">${active.map(clubRow).join('')}</div>
     ${pend.length ? `<p class="muted small">⏳ Ждут решения: ${pend.map(c => esc(c.name)).join(', ')}</p>` : ''}
     <div class="menu">
-      ${isAdmin() ? '<a class="menu-item" href="#/invite">✉️ <span>Пригласить в клуб</span></a>' : ''}
+      <a class="menu-item" href="#/invite">✉️ <span>${isAdmin() ? 'Пригласить в клуб' : 'Пригласить друга в клуб'}</span></a>
       <a class="menu-item" href="#/clubs">🔍 <span>Вступить или найти клуб</span></a>
       <a class="menu-item" href="#/newclub">＋ <span>Создать клуб</span></a>
       <a class="menu-item" href="#/map">🗺 <span>Клубы на карте</span></a>
@@ -2571,6 +2599,10 @@ const CLUB_ACT = {
     if (!(await confirmDialog('Сменить ссылку и код? Старые ссылка, код и QR перестанут работать — и на распечатанных плакатах и домиках тоже (их надо будет напечатать заново).', 'Сменить'))) return;
     await busy(el, async () => { await S.store.rotateInvite(S.club.id); S.printCode = null; await renderInvite(); toast('Новая ссылка готова'); });
   },
+  'inv-qr': el => busy(el, async () => {
+    const club = el.dataset.k === 'club', link = club ? document.getElementById('invite-box').dataset.link : appLink();
+    await saveQr(await makeQr(link), club ? `qr-vstupit-${qrName(S.club.name)}` : 'qr-ponghub', el.dataset.f);
+  }),
   'print-sheets': el => busy(el, () => printSheets(el.dataset.what)),
   'transfer-club': async el => {
     const to = document.getElementById('tr-to').value, name = document.getElementById('tr-name').value.trim();
@@ -3315,6 +3347,7 @@ function openMatchForm(opts = {}) {
     kind: m0?.kind || fx.kind || 'singles',
     p3: m0?.player3_id || fx.player3_id || '', p4: m0?.player4_id || fx.player4_id || '',
     rated: m0 ? m0.rated !== false : true,
+    start: !!opts.start,
   };
   const lockPlayers = !!(fx.player1_id || m0?.tournament_id);
   const canDoubles = !fx.player1_id && !m0?.tournament_id && !fx.tournament_id && !(m0 && m0.kind !== 'doubles');
@@ -3335,9 +3368,25 @@ function openMatchForm(opts = {}) {
     return `<b>${a}:${b}</b> ${win ? `— победа <b>${esc(win)}</b>` : `<span class="muted">(до ${need} ${plural(need, 'победы', 'побед', 'побед')})</span>`}`;
   };
 
+  const fmtRow = () => `<div class="fmt-row">
+        <div><small class="muted">Играем до</small><div class="seg sm">${[[1, '1'], [3, '2'], [5, '3'], [7, '4']].map(([v, l]) => `<button type="button" data-k="bestOf" data-v="${v}" class="${st.bestOf === v ? 'on' : ''}" ${lockFormat ? 'disabled' : ''}>${l}</button>`).join('')}</div><small class="muted">побед в партиях</small></div>
+        <div><small class="muted">Партия до</small><div class="seg sm">${[11, 21].map(v => `<button type="button" data-k="pointsTo" data-v="${v}" class="${st.pointsTo === v ? 'on' : ''}" ${lockFormat ? 'disabled' : ''}>${v}</button>`).join('')}<input type="number" class="pts-custom" min="5" max="50" value="${[11, 21].includes(st.pointsTo) ? '' : st.pointsTo}" placeholder="др." ${lockFormat ? 'disabled' : ''}></div><small class="muted">очков</small></div>
+      </div>`;
   const draw = sh => {
     const rows = Array.from({ length: st.bestOf }, (_, i) => st.sets[i] || ['', '']);
     st.sets = rows;
+    // вызов принят → «Начать игру»: игроки уже выбраны, остаётся формат и как вести счёт
+    if (st.start) return void (sh.querySelector('.mf-body').innerHTML = `
+      <h3>▶ Начать игру</h3>
+      <div class="ms-vs">${ava(P(st.p1), 'md')}<b>${esc(team(1))}</b><span>vs</span><b>${esc(team(2))}</b>${ava(P(st.p2), 'md')}</div>
+      <small class="tf-lbl">1. Формат</small>
+      ${fmtRow()}
+      <small class="tf-lbl">2. Как ведём счёт</small>
+      <button type="button" class="btn primary big full ms-opt" data-mf="live"><b>📱 Вести счёт по ходу</b><small>Очки отмечает один из вас или третий человек — все видят счёт вживую</small></button>
+      <button type="button" class="btn big full ms-opt" data-mf="live-noscore"><b>⏱ Счёт в конце</b><small>Играете спокойно, итог внесёте после игры</small></button>
+      <div class="mf-err"></div>
+      <p class="muted small center">Игра сразу появится у всех в «Лайве» — можно будет сделать прогноз.</p>
+      <button type="button" class="btn ghost sm full" data-mf="past">Уже сыграли? Внести результат</button>`);
     sh.querySelector('.mf-body').innerHTML = `
       <h3>${m0 ? 'Изменить матч' : editor ? 'Новый матч' : 'Результат матча'}</h3>
       ${tour ? `<div class="chip">🏆 ${esc(tour.name)}</div>` : ''}
@@ -3361,10 +3410,7 @@ function openMatchForm(opts = {}) {
       </div>`}
       ${editor && !lockFormat && st.kind === 'singles' ? `<div class="seg"><button type="button" data-k="type" data-v="free" class="${st.type === 'free' ? 'on' : ''}">Свободная игра</button><button type="button" data-k="type" data-v="tournament" class="${st.type === 'tournament' ? 'on' : ''}">Турнирный матч</button></div>
         ${st.type === 'tournament' ? '<p class="hint">Для турнира, созданного в приложении, счёт вносится на странице турнира. Здесь — разовый важный матч или матч турнира вне приложения: он просто весит в рейтинге больше.</p>' : ''}` : ''}
-      <div class="fmt-row">
-        <div><small class="muted">Играем до</small><div class="seg sm">${[[1, '1'], [3, '2'], [5, '3'], [7, '4']].map(([v, l]) => `<button type="button" data-k="bestOf" data-v="${v}" class="${st.bestOf === v ? 'on' : ''}" ${lockFormat ? 'disabled' : ''}>${l}</button>`).join('')}</div><small class="muted">побед в партиях</small></div>
-        <div><small class="muted">Партия до</small><div class="seg sm">${[11, 21].map(v => `<button type="button" data-k="pointsTo" data-v="${v}" class="${st.pointsTo === v ? 'on' : ''}" ${lockFormat ? 'disabled' : ''}>${v}</button>`).join('')}<input type="number" class="pts-custom" min="5" max="50" value="${[11, 21].includes(st.pointsTo) ? '' : st.pointsTo}" placeholder="др." ${lockFormat ? 'disabled' : ''}></div><small class="muted">очков</small></div>
-      </div>
+      ${fmtRow()}
       <label class="switch"><input type="checkbox" name="simple" ${st.simple ? 'checked' : ''}><i></i><span>Знаю только итоговый счёт по партиям</span></label>
       ${st.simple ? `<div class="sets-simple"><input type="number" name="s1" min="0" max="4" value="${st.s1}" placeholder="0"><span>:</span><input type="number" name="s2" min="0" max="4" value="${st.s2}" placeholder="0"></div>`
         : `<div class="sets-grid"><div class="sg-h"><span></span><span>${esc(team(1))}</span><span>${esc(team(2))}</span></div>
@@ -3389,6 +3435,7 @@ function openMatchForm(opts = {}) {
       if (act === 'save') saveMatch(e.target.closest('button'));
       if (act === 'live') startLive(e.target.closest('button'), true);
       if (act === 'live-noscore') startLive(e.target.closest('button'), false);
+      if (act === 'past') { st.start = false; draw(sh); }
       if (act === 'delete') {
         const reason = await askReason('Удалить матч?', 'Рейтинг будет пересчитан. Укажите причину.');
         if (reason) await busy(null, async () => { await S.store.deleteMatch(m0.id, reason); toast('Матч удалён'); await refresh(); });
@@ -3811,7 +3858,7 @@ const ACT = {
   'ch-accept': el => busy(el, async () => {
     const c = await S.store.update('challenges', el.dataset.id, { status: 'accepted', responded_at: new Date().toISOString() });
     if (predOn()) await S.store.rpc('create_pred_event', { src: 'challenge', src_id: c.id, chance: chanceFor({ player1_id: c.from_id, player2_id: c.to_id }) }).catch(() => {});
-    await refresh(); toast('Вызов принят — к столу! 🏓');
+    await refresh(); toast('Вызов принят! У стола нажмите «▶ Начать игру» 🏓');
   }),
   'ch-decline': el => busy(el, async () => { await S.store.update('challenges', el.dataset.id, { status: 'declined', responded_at: new Date().toISOString() }); await refresh(); }),
   'ch-cancel': el => busy(el, async () => { await S.store.update('challenges', el.dataset.id, { status: 'cancelled' }); await refresh(); }),
@@ -3819,6 +3866,11 @@ const ACT = {
     const c = S.data.challenges.find(x => x.id === el.dataset.id);
     const other = c.from_id === S.me.id ? c.to_id : c.from_id;
     openMatchForm({ fixed: { player1_id: S.me.id, player2_id: other, type: 'free', challengeId: c.id } });
+  },
+  'ch-start': el => {
+    const c = S.data.challenges.find(x => x.id === el.dataset.id);
+    const other = c.from_id === S.me.id ? c.to_id : c.from_id;
+    openMatchForm({ start: true, fixed: { player1_id: S.me.id, player2_id: other, type: 'free', challengeId: c.id } });
   },
   'new-ann': () => openAnnForm(),
   predict: el => openPredict(el.dataset.id),
