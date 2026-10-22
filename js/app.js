@@ -277,6 +277,8 @@ function shell(r, body) {
   const pc = pendingCounts();
   const tab = (name, label, ic, also = []) => `<a href="#/${name}" class="tab ${r.name === name || also.includes(r.name) ? 'on' : ''}">${icon(ic)}<span>${label}</span></a>`;
   const club = settings().clubName || 'PongHub';
+  const side = (name, label, ic, also = [], extra = '', cls = '') => `<a href="#/${name}" class="side-i ${cls} ${r.name === name || also.includes(r.name) ? 'on' : ''}" title="${label}"><span>${ic}</span><b>${label}</b>${extra}</a>`;
+  const n = pc.total + unreadCount();
   return `
   <header class="top">
     <button class="brand club-switch" data-act="club-menu" aria-label="Мои клубы"><img src="${logo()}" alt="" width="30" height="30"><span>${esc(club)}</span><i class="caret">▾</i></button>
@@ -287,7 +289,17 @@ function shell(r, body) {
     </div>
   </header>
   ${S.testMode ? `<div class="test-banner">🧪 <span><b>Тестовый режим.</b> Тестовых игроков и их матчи видите только вы.</span><a href="#/admin/players" class="link">Управлять</a></div>` : ''}
-  <main class="page">${body}</main>
+  <aside class="side">
+    <button class="brand club-switch" data-act="club-menu" aria-label="Мои клубы"><img src="${logo()}" alt="" width="34" height="34"><span>${esc(club)}</span><i class="caret">▾</i></button>
+    <button class="btn primary side-add" data-act="add-match">${icon('plus')} ${isAdmin() ? 'Внести матч' : 'Внести результат'}</button>
+    <nav class="side-nav">
+      ${side('home', 'Главная', '🏠')}${side('players', 'Игроки', '👥', ['player'])}${side('tournaments', 'Турниры', '🏆', ['tournament'])}
+      ${side('rating', 'Рейтинг', '📊', ['seasons'])}${side('matches', 'Матчи', '📋', ['h2h'])}${predOn() ? side('predict', 'Прогнозы', '🎯') : ''}${side('calendar', 'Календарь', '📅', [], '', 'ico')}
+      ${side('inbox', 'Уведомления', '🔔', [], n ? `<i class="dot inline">${n}</i>` : '', 'ico side-bell')}
+      <hr>${side('me', 'Профиль', '👤', [], '', 'ico')}${isAdmin() ? side('admin', 'Управление', '🛠️', ['rules', 'invite', 'print', 'clubedit'], pc.total ? `<i class="dot inline">${pc.total}</i>` : '', 'ico') : ''}
+    </nav>
+  </aside>
+  <main class="page pg-${esc(r.name)}">${body}</main>
   <nav class="tabs">
     ${tab('home', 'Главная', 'home')}
     ${tab('players', 'Игроки', 'users', ['player'])}
@@ -485,37 +497,46 @@ function viewHome() {
   const ssnTile = `<a href="#/seasons" class="bt bt-ssn ${W ? 'half' : ''}"><h4>⭐ Сезон</h4>
     ${pom ? `<b>${esc(P(pom.id).nickname)}</b><small>лидер · ${fmtD(pom.g)}</small>` : '<b>Борьба за титул</b>'}
     <small>${sp?.place ? `вы ${sp.place}-й · ` : ''}до конца ${left} ${plural(left, 'день', 'дня', 'дней')}</small></a>`;
+  const tourTiles = S.data.tournaments.filter(t => t.status === 'open' && !tReg(t).includes(me.id)).slice(0, 2).map(t => `<a href="#/tournament/${t.id}" class="bt bt-tour"><h4>🏆 Запись на турнир</h4><b>${esc(t.name)}</b><small>📅 ${esc(tWhen(t))}${t.place ? ' · 📍 ' + esc(t.place) : ''} · записались: ${tReg(t).length}</small><span class="bt-go">Записаться →</span></a>`).join('');
+  const activeTiles = active.map(t => `<a href="#/tournament/${t.id}" class="card live-t"><span class="live">● LIVE</span><div><b>${esc(t.name)}</b><div class="muted small">${FORMATS[t.format]} · ${t.participants.length} участников</div></div><span>→</span></a>`).join('');
+  const desk = matchMedia('(min-width: 1024px)').matches;
+  const topSec = `<section class="card">
+    <div class="card-h"><h3>Топ-5</h3><a href="#/rating" class="link">Весь рейтинг →</a></div>
+    ${S.rank.slice(0, 5).map((x, i) => rankRow(x, i)).join('') || '<div class="empty">Пока нет игроков</div>'}
+  </section>`;
+  const eventsSec = upcoming.length ? `<section class="card"><div class="card-h"><h3>Ближайшие события</h3><a href="#/calendar" class="link">Календарь →</a></div>${upcoming.map(eventRow).join('')}</section>` : '';
+  const matchesSec = `<section class="h-matches">
+    <div class="sec-h"><h3>${isAdmin() ? 'Последние матчи' : 'Мои последние матчи'}</h3><a href="#/matches" class="link">Все →</a></div>
+    ${recent.slice(0, desk ? 4 : 6).map(m => matchCard(m)).join('') || `<div class="card first-match"><div class="fm-ic">🏓</div><b>Здесь появятся ваши матчи</b>
+      <p class="muted small">Сыграйте первую игру и внесите счёт — сразу появится рейтинг, история и статистика. Рейтинг клуба и игроков уже можно посмотреть.</p>
+      <div class="row-btns"><a href="#/rating" class="btn ghost">Рейтинг клуба</a><button class="btn primary" data-act="add-match">Внести первый матч</button></div></div>`}
+  </section>`;
+  // компьютер: две колонки. Слева — «я», вызовы, (Кого вызвать), Топ-5, (события).
+  // Справа — 3D-игрок в полный рост (кому открыт) рядом со столбиком плиток, ниже (события) и история матчей
+  const opps = desk && !feature('avatar') ? suggestOpponents(3) : [];
+  const deskTile = !desk ? '' : feature('avatar')
+    ? `<a href="#/avatar" class="bt bt-pl"><div class="hm-frame" id="hm-pl" data-full="1"></div><span class="hm-tag">Мой игрок</span></a>`
+    : opps.length ? `<section class="bt bt-opp"><h4>⚔️ Кого вызвать</h4><p class="muted small">Соперники по силам — ближе всех к вам по рейтингу</p>
+      ${opps.map(({ p }) => `<div class="plx-row"><a href="#/player/${p.id}" class="pl-main">${ava(p, 'md')}<span class="rn"><b>${esc(p.nickname)}</b><small>${fmtR(ratingOf(p.id))} · шанс ${pct(expected(r, ratingOf(p.id), S.A.S.spread))}</small></span></a>${challengeBtn(p.id)}</div>`).join('')}
+      <a href="#/players" class="bt-go">Все игроки →</a></section>` : '';
   const taskTile = W ? `<a href="#/shop?tab=bonus" class="bt half"><h4>🎯 Задания</h4><b class="bt-n">${tDone}/${W.tasks.length}</b><div class="wt-bar"><i style="width:${tDone / W.tasks.length * 100}%"></i></div><small>${tReady ? `+${tReady} PC ждут` : 'неделя идёт'}</small></a>` : '';
 
   return `
   ${pc.total ? `<a href="#/admin" class="alert">🔔 Ждут вашего решения: ${pc.users ? `${pc.users} ${plural(pc.users, 'заявка', 'заявки', 'заявок')} на регистрацию` : ''}${pc.users && pc.matches ? ', ' : ''}${pc.matches ? `${pc.matches} ${plural(pc.matches, 'матч', 'матча', 'матчей')}` : ''} →</a>` : ''}
   ${mine.length ? `<div class="alert info">⏳ ${mine.length} ${plural(mine.length, 'ваш результат ждёт', 'ваших результата ждут', 'ваших результатов ждут')} подтверждения администратором</div>` : ''}
 
-  <div class="bento">
-    ${meTile}${coinTile}${bonusTile}
-    ${S.data.tournaments.filter(t => t.status === 'open' && !tReg(t).includes(me.id)).slice(0, 2).map(t => `<a href="#/tournament/${t.id}" class="bt bt-tour"><h4>🏆 Запись на турнир</h4><b>${esc(t.name)}</b><small>📅 ${esc(tWhen(t))}${t.place ? ' · 📍 ' + esc(t.place) : ''} · записались: ${tReg(t).length}</small><span class="bt-go">Записаться →</span></a>`).join('')}
-    ${liveBlock()}
-    ${active.map(t => `<a href="#/tournament/${t.id}" class="card live-t"><span class="live">● LIVE</span><div><b>${esc(t.name)}</b><div class="muted small">${FORMATS[t.format]} · ${t.participants.length} участников</div></div><span>→</span></a>`).join('')}
-    ${predHomeBlock()}
-    ${challengesBlock()}
-    ${idleNudge()}
-    ${ssnTile}${taskTile}
-    ${weekCard()}
-  </div>
+  ${desk ? (() => {
+    const pl = feature('avatar');
+    // с игроком: рядом с ним — коины, бонус и «сейчас играют»; ниже во всю ширину — турниры, прогнозы, сезон, задания, итоги недели
+    const stack = pl ? `<div class="bento h-stack">${coinTile}${bonusTile}${liveBlock()}</div>`
+      : `<div class="bento h-stack">${coinTile}${bonusTile}${tourTiles}${liveBlock()}${activeTiles}${predHomeBlock()}${ssnTile}${taskTile}</div>`;
+    const below = pl ? `<div class="bento">${tourTiles}${activeTiles}${predHomeBlock()}${ssnTile}${taskTile}${weekCard()}</div>` : '';
+    return `<div class="bento-2"><div class="h-col">${meTile}${challengesBlock()}${idleNudge()}${pl ? '' : deskTile}${topSec}${pl ? eventsSec : weekCard()}</div>
+      <div class="h-col">${pl ? `<div class="h-plrow">${deskTile}${stack}</div>${below}` : stack}${pl ? '' : eventsSec}${matchesSec}</div></div>`;
+  })()
+  : `<div class="bento">${meTile}${coinTile}${bonusTile}${tourTiles}${liveBlock()}${activeTiles}${predHomeBlock()}${challengesBlock()}${idleNudge()}${ssnTile}${taskTile}${weekCard()}</div>`}
 
-  <section class="card">
-    <div class="card-h"><h3>Топ-5</h3><a href="#/rating" class="link">Весь рейтинг →</a></div>
-    ${S.rank.slice(0, 5).map((x, i) => rankRow(x, i)).join('') || '<div class="empty">Пока нет игроков</div>'}
-  </section>
-
-  ${upcoming.length ? `<section class="card"><div class="card-h"><h3>Ближайшие события</h3><a href="#/calendar" class="link">Календарь →</a></div>${upcoming.map(eventRow).join('')}</section>` : ''}
-
-  <section>
-    <div class="sec-h"><h3>${isAdmin() ? 'Последние матчи' : 'Мои последние матчи'}</h3><a href="#/matches" class="link">Все →</a></div>
-    ${recent.map(m => matchCard(m)).join('') || `<div class="card first-match"><div class="fm-ic">🏓</div><b>Здесь появятся ваши матчи</b>
-      <p class="muted small">Сыграйте первую игру и внесите счёт — сразу появится рейтинг, история и статистика. Рейтинг клуба и игроков уже можно посмотреть.</p>
-      <div class="row-btns"><a href="#/rating" class="btn ghost">Рейтинг клуба</a><button class="btn primary" data-act="add-match">Внести первый матч</button></div></div>`}
-  </section>`;
+  ${desk ? '' : topSec + eventsSec + matchesSec}`;
 }
 
 function rankRow(x, i) {
@@ -2954,7 +2975,7 @@ async function mountHome3D() {
     if (pl && pl.isConnected) {
       const { mountAvatar } = await import('./player3d.js');
       if (!pl.isConnected) return;
-      const ctl = await mountAvatar(pl, { gender: S.ctx.me.avatar3d || 'boy', face: S.ctx.me.face || null, loadout: S.shop?.loadout || S.ctx.me.loadout || {}, grip: S.ctx.platform?.grip || {}, bust: true });
+      const ctl = await mountAvatar(pl, { gender: S.ctx.me.avatar3d || 'boy', face: S.ctx.me.face || null, loadout: S.shop?.loadout || S.ctx.me.loadout || {}, grip: S.ctx.platform?.grip || {}, bust: !pl.dataset.full });
       ctl.resize();
     }
   } catch { /* без 3D главная работает как обычно */ }
@@ -4227,6 +4248,8 @@ async function boot() {
     if (S.user) { await reload(); if (!$modal.classList.contains('open')) render(); }
   });
   addEventListener('hashchange', () => { closeModal(); render(); });
+  // окно растянули до компьютерной ширины или сузили до телефонной — перерисовываем раскладку
+  matchMedia('(min-width: 1024px)').addEventListener?.('change', () => { if (!$modal.classList.contains('open')) render(); });
   render();
   document.getElementById('splash')?.remove();
   setTimeout(startupModals, 800);

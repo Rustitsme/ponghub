@@ -1409,3 +1409,60 @@ body.av-big { overflow: hidden; }
 .tp-club { border: 2px solid color-mix(in srgb, var(--wood) 55%, var(--line)); background: linear-gradient(160deg, var(--surface), color-mix(in srgb, var(--wood-l) 18%, var(--surface))); }
 .tp-perk { display: flex; gap: 12px; align-items: center; padding: 8px 0; }
 .tp-perk > span { font-size: 24px; width: 32px; text-align: center; } .tp-perk b { display: block; font-size: 14px; } .tp-perk small { color: var(--muted); font-size: 12px; }
+
+/* ═════════ Компьютер: широкий экран ═════════ */
+.side { display: none; }
+@media (min-width: 1024px) {
+  :root { --side-w: 248px; }
+  .tabs, .ios-hint { display: none !important; }
+  .page { padding-bottom: 48px; }
+  .side { display: flex; flex-direction: column; gap: 14px; position: fixed; z-index: 11; top: 0; bottom: 0; left: 0; width: var(--side-w); padding: 18px 14px; background: var(--surface); border-right: 1px solid var(--line); overflow-y: auto; }
+  .side .brand { font-size: 18px; text-align: left; line-height: 1.1; }
+  .side-add { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 11px; }
+  .side-add .ic { width: 18px; height: 18px; }
+  .side-nav { display: flex; flex-direction: column; gap: 2px; }
+  .side-nav hr { margin: 8px 0; }
+  .side-i { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; font-weight: 600; color: var(--text); }
+  .side-i span { width: 22px; text-align: center; } .side-i b { font-weight: 600; flex: 1; } .side-i .dot { margin: 0; }
+  .side-i:hover { background: var(--bg2); }
+  .side-i.on { background: color-mix(in srgb, var(--red) 12%, transparent); color: var(--red); }
+  .top { margin-left: var(--side-w); }
+  .top .club-switch { visibility: hidden; }
+  .page, .test-banner { margin-left: var(--side-w); }
+  .page { max-width: 1160px; padding: 24px 32px 48px; margin-right: auto; margin-left: max(var(--side-w), calc(var(--side-w) + (100vw - var(--side-w) - 1160px) / 2)); }
+
+  /* главная: плитки в 4 колонки, дальше — две колонки */
+  .pg-home { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  .pg-home > * { margin: 0 !important; } .pg-home > .bento-2, .pg-home > .alert { grid-column: 1 / -1; }
+  .bento-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  .pg-home .bento { gap: 14px; }
+  .h-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; } .h-col > * { margin: 0 !important; }
+  .h-stack > * { grid-column: span 2 !important; }   /* справа — по одной плитке в ряд */
+  .h-plrow { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: stretch; }
+  .h-plrow .h-stack { display: flex; flex-direction: column; }
+  .h-plrow .h-stack > * { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+  .h-plrow .h-stack > .bt > b, .h-plrow .h-stack > .bt .bt-go { align-self: center; }
+  .h-matches > .sec-h { margin-top: 0; }
+  .pg-home .bento > .bt-me { grid-template-columns: minmax(0, 1fr) 150px; padding: 20px; }
+  .pg-home .bt-me .big-num { font-size: 60px; } .pg-home .bt-me .ava.md { width: 72px; height: 72px; font-size: 36px; } .pg-home .bt-rk { height: 150px; }
+  /* игроки и турниры — сеткой */
+  .pl-list { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; }
+  .pl-list .plx-row:nth-last-of-type(2) { border-bottom: 0; }
+  .pg-tournaments { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+  .pg-tournaments > * { margin: 0 !important; } .pg-tournaments > .page-h, .pg-tournaments > .sec-h, .pg-tournaments > .empty { grid-column: 1 / -1; }
+  .pg-tournaments > .sec-h { margin-top: 10px !important; }
+  /* профиль игрока и меню профиля — в две колонки */
+  .pg-player, .pg-me { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  .pg-player > *, .pg-me > * { margin: 0 !important; }
+  .pg-player > .hero, .pg-player > .stat-grid, .pg-player > section:last-child, .pg-me > .page-h, .pg-me > .me-card { grid-column: 1 / -1; }
+  .pg-player .stat-grid { grid-template-columns: repeat(8, 1fr); }
+  .pg-me > .btn, .pg-me > .ver { grid-column: 1 / -1; }
+}
+@media (min-width: 1024px) { .side-bell { display: none; } }
+@media (min-width: 1024px) {
+  /* главная на компьютере: 3D-игрок или «Кого вызвать» — справа, на две строки */
+  .bt-pl { display: flex; padding: 6px; background: linear-gradient(160deg, #2f74d6, #1f5fc4 55%, #0e3b8c); border: 0; }
+  .bt-pl .hm-frame { flex: 1; min-height: 340px; border-radius: 14px; background: radial-gradient(90% 75% at 50% 35%, #f3f5f9 0%, #e3e8f0 60%, #cfd7e3 100%); }
+  .bt-opp .plx-row:last-of-type { border-bottom: 0; }
+  .bt-opp > .muted { margin: -2px 0 6px; }
+}
