@@ -1478,3 +1478,12 @@ body.av-big { overflow: hidden; }
 /* 3D-игрок и ракетка вертятся мышью: ссылку вокруг не «перетаскиваем» */
 .bt-pl, .hm-rk, .hm-card { -webkit-user-drag: none; user-select: none; }
 .mcard[hidden] { display: none !important; }
+@media (min-width: 1024px) {
+  /* табло на компьютере: крупная аватарка и ник — верх по высоте ракетки, без пустоты */
+  .h-hero .hm-top .hero-top { gap: 18px; align-items: center; }
+  .h-hero .hm-top .ava.lg { width: 128px; height: 128px; font-size: 64px; border-width: 4px; }
+  .h-hero .hello { font-size: 16px; }
+  .h-hero .hero-nick { font-size: 40px; }
+  .h-hero .hm-place { margin-top: 12px; font-size: 18px; }
+  .h-hero .hm-top { min-height: 200px; }
+}
