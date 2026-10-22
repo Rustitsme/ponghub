@@ -1344,7 +1344,17 @@ body.av-big { overflow: hidden; }
 .bt-me { display: grid; grid-template-columns: minmax(0, 1fr) 104px; gap: 10px; align-items: center; background: var(--table); color: #fff; border: 3px solid var(--line-strong); text-shadow: 0 1px 2px rgba(10, 50, 100, .25); }
 .bt-me-main { display: flex; align-items: center; gap: 12px; min-width: 0; color: inherit; }
 .bt-me-id { min-width: 0; } .bt-me-id .badges { display: flex; flex-wrap: wrap; gap: 4px; } .bt-me-id .league, .bt-me-id .role-badge { margin: 0; }
-.bt-me .big-num { font-size: 40px; margin-top: 4px; }
+.bt-me .big-num { font-size: 40px; margin-top: 2px; }
+/* плитка «я»: сверху «Привет, ник» (длинный ник уменьшается), аватар крупнее, лига и роль — мелко справа от рейтинга */
+.bt-me-main > .ava.lg { width: 66px; height: 66px; font-size: 34px; }
+.bt-me { grid-template-columns: minmax(0, 1fr) 92px; } .bt-me .bt-rk { height: 96px; }
+.bt-me-main { gap: 10px; }
+.role-ic { font-size: 13px; line-height: 1; }
+.bt-hi { font: 600 14px/1.2 var(--font); white-space: nowrap; overflow: hidden; opacity: .95; }
+.bt-hi b { font: 800 1.45em/1 var(--display); text-transform: uppercase; letter-spacing: .3px; }
+.bt-me-num { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.bt-me-num .badges { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+.bt-me-num .league, .bt-me-num .role-badge { font-size: 9px; padding: 2px 7px; margin: 0; letter-spacing: .4px; white-space: nowrap; }
 .bt-me small { display: block; font-size: 12px; opacity: .9; } .bt-me .delta.up { color: #7dffc4; }
 .bt-rk { height: 104px; border-radius: 16px; border: 3px solid #fff; background: radial-gradient(90% 75% at 50% 35%, #f3f5f9 0%, #e3e8f0 60%, #cfd7e3 100%); }
 .bt-spark { display: grid; place-items: center; }
@@ -1487,3 +1497,4 @@ body.av-big { overflow: hidden; }
   .h-hero .hm-place { margin-top: 12px; font-size: 18px; }
   .h-hero .hm-top { min-height: 200px; }
 }
+.bt-hi.hi2 { white-space: normal; } .bt-hi.hi2 b { display: block; white-space: nowrap; }

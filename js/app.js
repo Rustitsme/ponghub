@@ -39,6 +39,7 @@ function ava(p, cls = '') {
   return `<span class="ava ${cls}" style="--c:${esc(p.color || '#e63946')}">${inner}</span>`;
 }
 function leagueBadge(r) { const l = leagueOf(r); return `<span class="league ${l.cls}">${l.name}</span>`; }
+const roleIcon = p => { const t = p.role === 'admin' ? ['👑', 'Владелец'] : p.role === 'editor' ? ['✍️', 'Помощник'] : null; const st = p.is_founder ? '⭐' : ''; return t || st ? `<span class="role-ic" title="${t ? t[1] : 'Создатель PongHub'}">${t ? t[0] : ''}${st}</span>` : ''; };
 // ⭐ — создатель PongHub (рядом с короной владельца, без лишних подписей)
 function roleBadge(p) {
   const star = p.is_founder ? '<span class="creator-star" title="Создатель PongHub">⭐</span>' : '';
@@ -496,8 +497,9 @@ function viewHome() {
     <div class="row-btns hero-links"><a href="#/player/${me.id}" class="btn ghost-light">Статистика и анализ →</a></div>
   </section>`;
   const meTile = `<section class="bt bt-me">
-    <a href="#/player/${me.id}" class="bt-me-main">${ava(me, 'md')}<div class="bt-me-id"><div class="badges">${leagueBadge(r)}${roleBadge(me)}</div>
-      <div class="big-num">${fmtR(r)}</div><small>${st.matches ? `${pos}-е место из ${total}` : 'ещё нет матчей'} · <span title="за 30 дней">${delta(d30)}</span></small></div></a>
+    <a href="#/player/${me.id}" class="bt-me-main">${ava(me, 'lg')}<div class="bt-me-id"><div class="bt-hi">Привет, <b class="bt-nick">${esc(me.nickname)}</b></div>
+      <div class="bt-me-num"><div class="big-num">${fmtR(r)}</div><div class="badges">${leagueBadge(r)}${roleIcon(me)}</div></div>
+      <small>${st.matches ? `${pos}-е место из ${total}` : 'ещё нет матчей'} · <span title="за 30 дней">${delta(d30)}</span></small></div></a>
     ${showRk ? '<a href="#/racket" class="hm-frame bt-rk" id="hm-rk" aria-label="Моя ракетка"></a>' : `<div class="bt-spark">${sparkline(hist.slice(-20))}</div>`}
   </section>`;
   const coinTile = !coins ? '' : S.shop ? `<a href="#/shop" class="bt bt-coin half"><h4>🪙 Пинг-коины</h4><b>${fmtC(S.coins)}<i>PC</i></b><span class="bt-go">Магазин →</span></a>`
@@ -4206,6 +4208,16 @@ function fitNicks() {
       el.classList.add('wrap');
       while (el.scrollHeight > el.clientHeight + 1 && size > 12) { size -= 1; el.style.fontSize = size + 'px'; }
     }
+  });
+  // «Привет, ник» в плитке: уменьшаем; совсем длинный ник — на свою строку под «Привет,» и тоже по ширине
+  document.querySelectorAll('.bt-hi').forEach(el => {
+    el.style.fontSize = ''; el.classList.remove('hi2'); const nb = el.querySelector('b'); if (nb) nb.style.fontSize = '';
+    let size = parseFloat(getComputedStyle(el).fontSize);
+    while (el.scrollWidth > el.clientWidth + 1 && size > 12) { size -= .5; el.style.fontSize = size + 'px'; }
+    if (el.scrollWidth <= el.clientWidth + 1) return;
+    el.classList.add('hi2'); el.style.fontSize = '';
+    const b = el.querySelector('b'); b.style.fontSize = ''; size = parseFloat(getComputedStyle(b).fontSize);
+    while (b.scrollWidth > el.clientWidth + 1 && size > 9) { size -= .5; b.style.fontSize = size + 'px'; }
   });
   document.querySelectorAll('.hero-nick').forEach(el => {
     el.style.fontSize = ''; el.classList.remove('wrap');
