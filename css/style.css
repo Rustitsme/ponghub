@@ -1392,6 +1392,6 @@ body.av-big { overflow: hidden; }
 .bt-coin .bt-go, .bt-bonus .bt-go { display: inline-block; margin-top: 10px; padding: 7px 16px; border-radius: 999px; font: 800 13px var(--font); }
 .bt-coin .bt-go { background: var(--red); color: #fff; box-shadow: 0 3px 8px rgba(230, 57, 70, .3); }
 .bt-row .bt-go { margin: 0; }
-.bt-bonus .bt-go { background: #fff; color: #b4560a; box-shadow: 0 3px 8px rgba(180, 86, 10, .25); }
+.bt-bonus .bt-go { background: #fff; color: var(--red); box-shadow: 0 3px 8px rgba(180, 86, 10, .25); }
 .bt-bonus.done .bt-go { background: none; box-shadow: none; padding: 0; color: var(--muted); font-weight: 600; }
 .bt-coin:active .bt-go, .bt-bonus:active .bt-go { transform: scale(.96); }
