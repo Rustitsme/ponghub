@@ -1374,3 +1374,8 @@ body.av-big { overflow: hidden; }
 .prn-tour .prn-qrbox { margin-top: 3.5cqw; }
 .t-hero .badge.ok { background: #fff; color: #12804d; }
 .t-qr-btns { justify-content: center; }
+.t-prize { margin: 10px 0 0; font-size: 14px; } .t-prize b { font-weight: 800; }
+.pz-box { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.pz-chips { display: flex; flex-wrap: wrap; gap: 6px; } .pz-chips .chip { cursor: pointer; font: 600 13px var(--font); color: var(--text); }
+.prn-prize { color: #ffd75e; }
+[data-form=t-announce] [hidden] { display: none !important; }

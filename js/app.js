@@ -844,7 +844,9 @@ function viewTournament(r) {
 // Владелец объявляет турнир (дата, время, место), участники клуба сами записываются;
 // QR турнира ведёт прямо сюда (новичок — регистрация и заявка в клуб). Старт — из записавшихся.
 const tReg = t => t.registered || [];
+const tMonthOnly = t => t.config?.dateMode === 'month' && !!t.date;
 const tWhen = t => {
+  if (tMonthOnly(t)) return `${monthName(t.date.slice(0, 7))} · дата уточняется`;
   const at = t.starts_at ? new Date(t.starts_at) : t.date ? new Date(t.date + 'T00:00') : null;
   if (!at) return 'дата уточняется';
   return at.toLocaleString('ru-RU', { weekday: 'short', day: 'numeric', month: 'long', ...(t.starts_at ? { hour: '2-digit', minute: '2-digit' } : {}) });
@@ -861,6 +863,7 @@ function viewTournamentOpen(t) {
     <div class="t-title"><h1>${esc(t.name)}</h1><span class="badge ok">запись открыта</span></div>
     <div class="t-when"><span>📅 ${esc(tWhen(t))}</span>${t.place ? `<span>📍 ${esc(t.place)}</span>` : ''}</div>
     <div class="chips"><span class="chip">${FORMATS[t.format].split(' (')[0]}</span><span class="chip">до ${winsNeeded(t.best_of)} ${plural(winsNeeded(t.best_of), 'победы', 'побед', 'побед')} в партиях</span><span class="chip">партия до ${t.points_to}</span></div>
+    ${t.config?.prizes ? `<p class="t-prize">🎁 <b>Призы:</b> ${esc(t.config.prizes)}</p>` : ''}
     ${t.config?.note ? `<p class="bio">${esc(t.config.note)}</p>` : ''}
   </section>
   <section class="card t-sign ${on ? 'on' : ''}">
@@ -885,16 +888,39 @@ function viewTournamentOpen(t) {
 // форма «Объявить турнир заранее» (и правка объявленного)
 function openAnnounceForm(t = null) {
   const at = t?.starts_at ? toLocalInput(t.starts_at) : (() => { const d = new Date(Date.now() + 7 * DAY); d.setHours(19, 0, 0, 0); return toLocalInput(d); })();
+  const month = t && tMonthOnly(t) ? t.date.slice(0, 7) : at.slice(0, 7);
+  const byMonth = !!(t && tMonthOnly(t)), prizes = t?.config?.prizes || '';
   openModal(`<form data-form="t-announce" class="stack" ${t ? `data-t="${t.id}"` : ''}>
     <h3>${t ? 'Изменить турнир' : '📅 Объявить турнир заранее'}</h3>
     <p class="muted small">Игроки увидят дату и место и смогут записаться сами. Сетку составите в день турнира — из записавшихся.</p>
     <label>Название<input name="name" required maxlength="60" value="${esc(t?.name || '')}" placeholder="Например: Кубок IT Park"></label>
-    <div class="two"><label>Дата и время<input type="datetime-local" name="starts_at" required value="${at}"></label><label>Место<input name="place" maxlength="60" value="${esc(t?.place || '')}" placeholder="Например: 3 этаж, у окна"></label></div>
+    <div class="tf-sec"><small class="tf-lbl">Когда</small>
+      <div class="tf-seg2"><label><input type="radio" name="dmode" value="exact" ${byMonth ? '' : 'checked'}><span>📅 Точная дата</span></label><label><input type="radio" name="dmode" value="month" ${byMonth ? 'checked' : ''}><span>🗓 Только месяц</span></label></div>
+      <label class="dm-exact" ${byMonth ? 'hidden' : ''}>Дата и время<input type="datetime-local" name="starts_at" value="${at}"></label>
+      <label class="dm-month" ${byMonth ? '' : 'hidden'}>Месяц и год<input type="month" name="month" value="${month}"></label>
+      <p class="hint dm-month" ${byMonth ? '' : 'hidden'}>Игроки увидят «${esc(monthName(month))} · дата уточняется». Точную дату добавите позже — «Изменить» на странице турнира.</p></div>
+    <label>Место<input name="place" maxlength="60" value="${esc(t?.place || '')}" placeholder="Например: 3 этаж, у окна"></label>
     <div class="tf-sec"><small class="tf-lbl">Вид турнира</small><div class="tf-fmt">${[['ko', '🏆', 'Олимпийская', 'на вылет'], ['groups', '🗂', 'Группы', '+ плей-офф'], ['rr', '🔄', 'Круг', 'все со всеми']].map(([k, ic, v, d]) => `<label><input type="radio" name="format" value="${k}" ${(t?.format || 'ko') === k ? 'checked' : ''}><span><i>${ic}</i><b>${v}</b><small>${d}</small></span></label>`).join('')}</div></div>
     <div class="two"><label>До скольких побед<select name="best_of">${[[3, 'до 2 побед'], [5, 'до 3 побед'], [7, 'до 4 побед']].map(([v, l]) => `<option value="${v}" ${(t?.best_of || 5) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       <label>Партия до<select name="points_to">${[11, 21].map(v => `<option ${(t?.points_to || 11) === v ? 'selected' : ''}>${v}</option>`).join('')}</select></label></div>
-    <label>Описание (необязательно)<textarea name="note" maxlength="300" rows="2" placeholder="Взнос, призы, что взять с собой">${esc(t?.config?.note || '')}</textarea></label>
-    <button class="btn primary full">${t ? 'Сохранить' : '📣 Открыть запись'}</button></form>`);
+    <div class="tf-sec"><small class="tf-lbl">Призы</small>
+      <div class="tf-seg2"><label><input type="radio" name="pmode" value="none" ${prizes ? '' : 'checked'}><span>Без призов</span></label><label><input type="radio" name="pmode" value="yes" ${prizes ? 'checked' : ''}><span>🎁 Есть призы</span></label></div>
+      <div class="pz-box" ${prizes ? '' : 'hidden'}><textarea name="prizes" maxlength="200" rows="2" placeholder="Например: 1 место — кубок и 1000 PC, 2–3 место — медали">${esc(prizes)}</textarea>
+        <div class="pz-chips">${['🏆 Кубок', '🥇 Медали', '🪙 Пинг-коины', '🎁 Подарки', '📜 Грамоты'].map(x => `<button type="button" class="chip" data-pz="${x}">${x}</button>`).join('')}</div></div>
+      <p class="hint pz-none" ${prizes ? 'hidden' : ''}>Про призы нигде не будет написано.</p></div>
+    <label>Описание (необязательно)<textarea name="note" maxlength="300" rows="2" placeholder="Взнос, что взять с собой">${esc(t?.config?.note || '')}</textarea></label>
+    <button class="btn primary full">${t ? 'Сохранить' : '📣 Открыть запись'}</button></form>`, sh => {
+    const f = sh.querySelector('form');
+    const sync = () => {
+      const m = f.dmode.value === 'month', p = f.pmode.value === 'yes';
+      sh.querySelectorAll('.dm-exact').forEach(x => { x.hidden = m; }); sh.querySelectorAll('.dm-month').forEach(x => { x.hidden = !m; });
+      sh.querySelector('.dm-month.hint').textContent = `Игроки увидят «${monthName(f.month.value || month)} · дата уточняется». Точную дату добавите позже — «Изменить» на странице турнира.`;
+      sh.querySelector('.pz-box').hidden = !p; sh.querySelector('.pz-none').hidden = p;
+    };
+    f.addEventListener('change', sync);
+    // быстрые варианты призов дописываются в поле
+    sh.querySelectorAll('[data-pz]').forEach(b => b.onclick = () => { const v = f.prizes.value.trim(); f.prizes.value = v ? `${v}, ${b.dataset.pz}` : b.dataset.pz; f.prizes.focus(); });
+  });
 }
 // QR турнира: SVG — вектор (любой размер без потери качества), PNG — 3000×3000
 async function tourQr(t) {
@@ -930,7 +956,7 @@ function tourSheet(t) {
     <div class="prn-logo"><img src="${logo()}" alt="">PONGHUB</div>
     <div class="prn-club">${esc(S.club.name)}</div>
     <h3><span class="prn-fit"><em>Турнир</em></span><span class="prn-fit">${esc(t.name)}</span></h3>
-    <div class="prn-when"><span class="prn-fit">📅 ${esc(tWhen(t))}</span>${t.place ? `<span class="prn-fit">📍 ${esc(t.place)}</span>` : ''}</div>
+    <div class="prn-when"><span class="prn-fit">📅 ${esc(tWhen(t))}</span>${t.place ? `<span class="prn-fit">📍 ${esc(t.place)}</span>` : ''}${t.config?.prizes ? `<span class="prn-fit prn-prize">🎁 ${esc(t.config.prizes)}</span>` : ''}</div>
     <div class="prn-qrbox"><div class="prn-qr" data-prn="tour" data-t="${t.id}"></div></div>
     <div class="prn-scan">📷 Наведи камеру — и запишись</div>
     <div class="prn-steps"><div><i>1</i>Наведи камеру на QR-код</div><div><i>2</i>Нажми «Записаться»</div><div><i>3</i>Приходи играть!</div></div>
@@ -960,7 +986,7 @@ function upcomingItems() {
 function eventRow(it) {
   if (it.kind === 'tour') {
     const t = it.tour, d = new Date(it.t);
-    return `<div class="ev"><div class="ev-date"><b>${d.getDate()}</b><small>${d.toLocaleDateString('ru-RU', { month: 'short' })}</small></div>
+    return `<div class="ev"><div class="ev-date"><b>${tMonthOnly(t) ? '?' : d.getDate()}</b><small>${d.toLocaleDateString('ru-RU', { month: 'short' })}</small></div>
       <a href="#/tournament/${t.id}" class="ev-body"><b>🏆 ${esc(t.name)}</b><small class="muted">${esc(tWhen(t))}${t.place ? ' · ' + esc(t.place) : ''}</small>
         <div class="ev-people">${tReg(t).slice(0, 8).map(id => ava(P(id), 'xs')).join('')}<small class="muted">записались: ${tReg(t).length}</small></div></a>
       <div class="ev-act">${signupBtn(t, 'sm')}</div></div>`;
@@ -3837,19 +3863,27 @@ const FORMS = {
     const row = { name: fd.get('name').trim(), date: fd.get('date') || null, place: (fd.get('place') || '').trim(), format,
       best_of: +fd.get('best_of'), points_to: +fd.get('points_to'), status: 'active', participants: sorted, results: null };
     const pre = f.dataset.t && tById(f.dataset.t);
-    const t = pre ? (await S.store.update('tournaments', pre.id, { ...row, config: { ...config, note: pre.config?.note } }), pre)
+    const t = pre ? (await S.store.update('tournaments', pre.id, { ...row, config: { ...config, note: pre.config?.note, prizes: pre.config?.prizes } }), pre)
       : await S.store.insert('tournaments', { ...row, config, created_by: S.me.id, ...testFlag() });
     closeModal(); await refresh(); go(`#/tournament/${t.id}`); toast(pre ? 'Турнир начался! 🏓' : 'Турнир создан!');
   },
   't-announce': async (f, fd) => {
-    const at = new Date(fd.get('starts_at'));
-    if (isNaN(at)) throw new Error('Укажите дату и время');
-    const row = { name: fd.get('name').trim(), starts_at: at.toISOString(), date: toLocalInput(at).slice(0, 10), place: fd.get('place').trim(), format: fd.get('format'),
-      best_of: +fd.get('best_of'), points_to: +fd.get('points_to') };
-    const note = fd.get('note').trim() || null;
+    const byMonth = fd.get('dmode') === 'month';
+    let when;
+    if (byMonth) {
+      const m = fd.get('month');
+      if (!/^\d{4}-\d{2}$/.test(m || '')) throw new Error('Выберите месяц и год');
+      when = { starts_at: null, date: `${m}-01` };
+    } else {
+      const at = new Date(fd.get('starts_at'));
+      if (isNaN(at)) throw new Error('Укажите дату и время');
+      when = { starts_at: at.toISOString(), date: toLocalInput(at).slice(0, 10) };
+    }
+    const row = { name: fd.get('name').trim(), ...when, place: fd.get('place').trim(), format: fd.get('format'), best_of: +fd.get('best_of'), points_to: +fd.get('points_to') };
+    const extra = { note: fd.get('note').trim() || null, prizes: fd.get('pmode') === 'yes' ? fd.get('prizes').trim() || null : null, dateMode: byMonth ? 'month' : 'exact' };
     const old = f.dataset.t && tById(f.dataset.t);
-    const t = old ? (await S.store.update('tournaments', old.id, { ...row, config: { ...old.config, note } }), old)
-      : await S.store.insert('tournaments', { ...row, status: 'open', participants: [], registered: [], config: { note }, results: null, created_by: S.me.id, ...testFlag() });
+    const t = old ? (await S.store.update('tournaments', old.id, { ...row, config: { ...old.config, ...extra } }), old)
+      : await S.store.insert('tournaments', { ...row, status: 'open', participants: [], registered: [], config: extra, results: null, created_by: S.me.id, ...testFlag() });
     closeModal(); await refresh(); go(`#/tournament/${t.id}`); toast(old ? 'Сохранено' : 'Запись на турнир открыта 📣');
   },
   ann: async (f, fd) => {
