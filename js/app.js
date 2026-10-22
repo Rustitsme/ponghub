@@ -321,7 +321,7 @@ function authView(r) {
       <label>Email<input name="email" type="email" required autocomplete="email"></label>
       <label>Пароль<input name="password" type="password" required minlength="6" autocomplete="new-password"></label>
       <button class="btn primary big">Зарегистрироваться</button>
-      <p class="muted small center">${lsGet('ponghub_join') ? 'После регистрации заявка в клуб, куда вас пригласили, отправится сама.' : 'После регистрации вы сможете вступить в клуб по приглашению, найти клуб или создать свой.'}</p>
+      <p class="muted small center">${lsGet('ponghub_join') ? 'После регистрации заявка в клуб, куда вас пригласили, отправится сама.' : lsGet('ponghub_after')?.includes('/tournament/') ? 'После регистрации сразу откроется турнир — останется нажать «Записаться».' : 'После регистрации вы сможете вступить в клуб по приглашению, найти клуб или создать свой.'}</p>
       <a href="#/login" class="link center">Уже есть аккаунт? Войти</a>
     </form>`;
   else if (mode === 'forgot') form = `
@@ -799,9 +799,7 @@ function viewTournament(r) {
   // QR турнира: клуб из ссылки, в котором вас нет — страница клуба, заявка уходит сама
   if (cid && S.club?.id !== cid) {
     if ((S.ctx?.clubs || []).some(c => c.id === cid && c.my_status === 'active')) { setTimeout(() => switchClub(cid).then(() => location.replace(`#/tournament/${r.args[0]}`)), 0); return '<div class="empty"><span class="spin"></span></div>'; }
-    const code = r.q.get('code');
-    setTimeout(() => location.replace(`#/club/${cid}?auto=1&tour=1${code ? '&code=' + encodeURIComponent(code) : ''}`), 0);
-    return '<div class="empty"><span class="spin"></span></div>';
+    return viewTournamentPublic(r);
   }
   const t = tById(r.args[0]);
   if (!t) return '<div class="empty">Турнир не найден</div>';
@@ -872,9 +870,10 @@ function viewTournamentOpen(t) {
     ${signupBtn(t, 'full')}
   </section>
   <div class="sec-h"><h3>Записались · ${reg.length}</h3></div>
+  ${can && (t.pending_reg || []).length ? `<a href="#/admin/reqs" class="alert info">⏳ Записались по QR и ждут вступления в клуб (${t.pending_reg.length}): ${t.pending_reg.map(id => esc(P(id).nickname)).join(', ')}. Примите заявку — и игрок сразу в списке участников →</a>` : ''}
   ${reg.length ? `<div class="chips people">${reg.map(id => `<a href="#/player/${id}" class="chip">${ava(P(id), 'xs')} ${esc(P(id).nickname)}</a>`).join('')}</div>` : '<div class="empty small">Пока никто не записался — будьте первым!</div>'}
   ${can ? `<section class="card"><div class="card-h"><h3>📲 QR-код турнира</h3></div>
-    <p class="muted small">Ведёт прямо на этот турнир: игрок наводит камеру и записывается. Новичок сначала регистрируется — заявка в клуб уходит сама, после вашего «Принять» он записывается тем же QR.</p>
+    <p class="muted small">Ведёт прямо на этот турнир: игрок наводит камеру и записывается. Новичок регистрируется и записывается сразу — заявка в клуб уходит сама, а после вашего «Принять» он автоматически в списке участников.</p>
     <div class="t-qr" id="t-qr" data-t="${t.id}"></div>
  <div class="row-btns t-qr-btns"><button class="btn" data-act="t-qr-svg" data-t="${t.id}">⬇️ SVG (для дизайна)</button><button class="btn" data-act="t-qr-png" data-t="${t.id}">⬇️ PNG 3000×3000</button></div>
     <button class="btn primary full" data-act="t-poster" data-t="${t.id}">🖨 Плакат турнира А4</button>
@@ -975,6 +974,58 @@ async function printTour(t) {
   el.style.cssText = '';
   await new Promise(res => setTimeout(res, 300));
   window.print();
+}
+
+// ───────────── Турнир по QR для того, кто ещё не в клубе ─────────────
+// Одно сканирование: видит турнир → «Записаться» (заявка в клуб уходит сама) → после одобрения он сразу в списке участников.
+function viewTournamentPublic(r) {
+  return `<div id="tp-box" data-t="${esc(r.args[0])}" data-code="${esc(r.q.get('code') || '')}"><div class="empty"><span class="spin"></span></div></div>`;
+}
+const tpPerks = t => [
+  ['🏆', 'Личный рейтинг и лиги', 'от бронзы до алмаза — каждый матч на счету'],
+  ['🗓', 'Все турниры клуба', 'текущие и будущие — запись в одно касание'],
+  ['👑', 'Стань лидером коворкинга', 'сезоны каждый месяц и звание чемпиона'],
+  ['⚔️', 'Вызовы на матч', 'зови коллег сыграть — им придёт уведомление'],
+  ...(t.club.pred ? [['🎯', 'Прогнозы на матчи', 'ставь пинг-коины на победы и поражения игроков']] : []),
+  // задания и бонус дня — пока только у тестировщиков; в рассказе появятся, когда Магазин откроют всем
+  ...((S.ctx?.platform?.features?.shop ?? 'all') === 'all' ? [['🎁', 'Задания и бонус дня', 'выполняй — получай пинг-коины']] : []),
+];
+async function renderTournamentPublic() {
+  const box = document.getElementById('tp-box'); if (!box) return;
+  let t;
+  try { t = await S.store.rpc('tournament_public', { tid: box.dataset.t, p_code: box.dataset.code || null }); }
+  catch (e) { box.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  if (!box.isConnected) return;
+  S.tp = t;
+  const signed = t.me_registered || t.me_pending, open = t.status === 'open';
+  const push = await pushState();
+  const step = (n, done, title, body) => `<div class="tp-step ${done ? 'done' : ''}"><i>${done ? '✓' : n}</i><div><b>${title}</b>${body}</div></div>`;
+  const install = isStandalone() ? '' : S.installEvt ? '<button class="btn sm primary" data-act="install">Установить</button>'
+    : isIOS() ? '<small>В Safari: «Поделиться» ⬆︎ → «На экран „Домой“». Затем откройте PongHub с иконки и войдите.</small>' : '<small>Меню браузера ⋮ → «Установить приложение».</small>';
+  const pushBody = push === 'on' ? '<small>Включены — расскажем о турнире и новостях клуба.</small>'
+    : push === 'ios-install' ? '<small>На iPhone — после установки: откройте PongHub с иконки и включите в Профиле.</small>'
+    : push === 'denied' ? '<small>Запрещены в настройках телефона — разрешите их для PongHub.</small>'
+    : push === 'off' ? '<button class="btn sm primary" data-act="tp-push">🔔 Включить</button>' : '<small>Недоступны в этом браузере.</small>';
+  box.innerHTML = `<section class="hero table-card t-hero">
+      <div class="muted small">${esc(t.club.name)}</div>
+      <div class="t-title"><h1>${esc(t.name)}</h1><span class="badge ok">${open ? 'запись открыта' : t.status === 'active' ? 'идёт' : 'завершён'}</span></div>
+      <div class="t-when"><span>📅 ${esc(tWhen(t))}</span>${t.place ? `<span>📍 ${esc(t.place)}</span>` : ''}</div>
+      <div class="chips"><span class="chip">${FORMATS[t.format].split(' (')[0]}</span><span class="chip">до ${winsNeeded(t.best_of)} ${plural(winsNeeded(t.best_of), 'победы', 'побед', 'побед')}</span><span class="chip">записались: ${t.registered_count}</span></div>
+      ${t.config?.prizes ? `<p class="t-prize">🎁 <b>Призы:</b> ${esc(t.config.prizes)}</p>` : ''}
+      ${t.config?.note ? `<p class="bio">${esc(t.config.note)}</p>` : ''}
+    </section>
+    ${!open ? '<div class="card empty">Запись на этот турнир закрыта. Вступайте в клуб — не пропустите следующий!</div>'
+    : signed ? `<section class="card t-sign on"><div><b>${t.me_registered ? 'Вы в списке участников 🎉' : 'Вы записаны! 🎉'}</b>
+        <small class="muted">${t.me_registered ? 'Сетку составят в день турнира по рейтингу.' : 'Заявка в клуб отправлена — как только владелец её примет, вы автоматически окажетесь в списке участников. Сканировать QR ещё раз не нужно.'}</small></div>
+        <button class="btn ghost sm" data-act="tp-join" data-on="0">Отменить запись</button></section>`
+    : `<section class="card t-sign"><div><b>Хотите сыграть?</b><small class="muted">Одно нажатие — и вы записаны.${t.my_status === 'active' ? '' : ' Заявка в клуб уйдёт вместе с записью.'}</small></div>
+        <button class="btn primary big full" data-act="tp-join" data-on="1">✍️ Записаться на турнир</button></section>`}
+    ${signed ? `<section class="card tp-steps"><div class="card-h"><h3>Чтобы ничего не пропустить</h3></div>
+      ${step(1, isStandalone(), 'Добавьте PongHub на экран «Домой»', install)}
+      ${step(2, push === 'on', 'Включите уведомления', pushBody)}</section>` : ''}
+    ${t.my_status === 'active' ? '' : `<section class="card tp-club"><div class="card-h"><h3>Добро пожаловать в «${esc(t.club.name)}»</h3></div>
+      <p class="muted small">${t.my_status === 'pending' ? 'Заявка в клуб отправлена. После одобрения вам откроется:' : 'Вступив в клуб, вы получите:'}</p>
+      ${tpPerks(t).map(([ic, b, s]) => `<div class="tp-perk"><span>${ic}</span><div><b>${b}</b><small>${s}</small></div></div>`).join('')}</section>`}`;
 }
 
 // ───────────── Календарь ─────────────
@@ -3759,6 +3810,14 @@ const ACT = {
   't-now': () => openTournamentForm(),
   't-edit': el => openAnnounceForm(tById(el.dataset.t)),
   't-start': el => openTournamentForm(tById(el.dataset.t)),
+  'tp-join': el => busy(el, async () => {
+    const box = document.getElementById('tp-box'), on = el.dataset.on === '1';
+    await S.store.rpc('tournament_join', { tid: box.dataset.t, p_code: box.dataset.code || null, p_on: on });
+    S.ctx = await S.store.loadContext();
+    toast(on ? 'Вы записаны на турнир ✍️' : 'Запись отменена');
+    await renderTournamentPublic();
+  }),
+  'tp-push': el => busy(el, async () => { await enablePush(); toast('Уведомления включены 🔔'); await renderTournamentPublic(); }),
   't-signup': el => busy(el, async () => { await S.store.tournamentSignup(el.dataset.t, el.dataset.on === '1'); await refresh(); toast(el.dataset.on === '1' ? 'Вы записаны на турнир ✍️' : 'Запись отменена'); }),
   't-qr-svg': el => busy(el, () => downloadTourQr(tById(el.dataset.t), 'svg')),
   't-qr-png': el => busy(el, () => downloadTourQr(tById(el.dataset.t), 'png')),
@@ -4114,6 +4173,7 @@ function afterRender(r) {
   if (r.name === 'home') mountHome3D();
   if (r.name === 'print' || r.name === 'tables') renderPrint();
   if (r.name === 'tournament' && isAdmin()) renderTourQr();
+  if (r.name === 'tournament') renderTournamentPublic();
   if (document.getElementById('dir-box')) renderDirectory(document.querySelector('[data-input=dir-search]')?.value || '');
   if (document.getElementById('pick-map')) mountPickMap();
   if (r.name === 'invite') renderInvite();

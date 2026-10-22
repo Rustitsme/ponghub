@@ -1400,3 +1400,12 @@ body.av-big { overflow: hidden; }
 .pu-stats { grid-template-columns: repeat(3, 1fr); }
 .pu-list { max-height: 55vh; overflow-y: auto; }
 .pu-h { display: flex; align-items: center; gap: 12px; color: inherit; padding-right: 44px; }
+/* турнир по QR для новичка */
+.tp-step { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--line); }
+.tp-step:first-of-type { border-top: 0; }
+.tp-step > i { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font: 800 14px var(--font); font-style: normal; background: var(--red); color: #fff; }
+.tp-step.done > i { background: var(--up); }
+.tp-step b { display: block; margin-bottom: 4px; } .tp-step small { display: block; color: var(--muted); font-size: 12.5px; }
+.tp-club { border: 2px solid color-mix(in srgb, var(--wood) 55%, var(--line)); background: linear-gradient(160deg, var(--surface), color-mix(in srgb, var(--wood-l) 18%, var(--surface))); }
+.tp-perk { display: flex; gap: 12px; align-items: center; padding: 8px 0; }
+.tp-perk > span { font-size: 24px; width: 32px; text-align: center; } .tp-perk b { display: block; font-size: 14px; } .tp-perk small { color: var(--muted); font-size: 12px; }

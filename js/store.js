@@ -773,6 +773,21 @@ class LocalStore {
       if (a.on_) t.push({ feature: a.fname, user_id: a.uid }); this.save(); return t.filter(x => x.feature === a.fname).length;
     }
     if (name === 'founder_set_grip') { this.needFounder(); this.db.platform.grip = a.p; this.save(); return a.p; }
+    if (name === 'tournament_public' || name === 'tournament_join') {
+      const t = this.db.tournaments.find(x => x.id === a.tid), me = this.db.session;
+      if (!t) throw new Error('Турнир не найден');
+      const st = () => this.db.club_members.find(m => m.club_id === t.club_id && m.user_id === me)?.status || null;
+      if (name === 'tournament_join') {
+        if (t.status !== 'open') throw new Error('Запись на этот турнир закрыта');
+        t.registered = (t.registered || []).filter(x => x !== me); t.pending_reg = (t.pending_reg || []).filter(x => x !== me);
+        if (a.p_on) { if (st() === 'active') t.registered.push(me); else { await this.requestJoin(t.club_id, a.p_code); t.pending_reg.push(me); } }
+        this.save();
+      }
+      const c = this.db.clubs.find(x => x.id === t.club_id);
+      return { id: t.id, name: t.name, status: t.status, starts_at: t.starts_at || null, date: t.date, place: t.place, format: t.format, best_of: t.best_of, points_to: t.points_to, config: t.config || {},
+        registered_count: (t.registered || []).length, me_registered: (t.registered || []).includes(me), me_pending: (t.pending_reg || []).includes(me),
+        club: { id: c.id, name: c.name, pred: (c.settings || {}).predEnabled !== false }, my_status: st() };
+    }
     if (name === 'player_predictions') {
       const evs = new Map((this.db.pred_events || []).filter(e => e.club_id === this.cid).map(e => [e.id, e]));
       return (this.db.predictions || []).filter(p => p.user_id === a.uid && evs.has(p.event_id))
