@@ -1436,6 +1436,13 @@ body.av-big { overflow: hidden; }
   .pg-home > * { margin: 0 !important; } .pg-home > .bento-2, .pg-home > .alert { grid-column: 1 / -1; }
   .bento-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
   .pg-home .bento { gap: 14px; }
+  .h-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; } .h-col > * { margin: 0 !important; }
+  .h-stack > * { grid-column: span 2 !important; }   /* справа — по одной плитке в ряд */
+  .h-plrow { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: stretch; }
+  .h-plrow .h-stack { display: flex; flex-direction: column; }
+  .h-plrow .h-stack > * { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+  .h-plrow .h-stack > .bt > b, .h-plrow .h-stack > .bt .bt-go { align-self: center; }
+  .h-matches > .sec-h { margin-top: 0; }
   .pg-home .bento > .bt-me { grid-template-columns: minmax(0, 1fr) 150px; padding: 20px; }
   .pg-home .bt-me .big-num { font-size: 60px; } .pg-home .bt-me .ava.md { width: 72px; height: 72px; font-size: 36px; } .pg-home .bt-rk { height: 150px; }
   /* игроки и турниры — сеткой */
