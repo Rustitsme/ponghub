@@ -962,27 +962,33 @@ function openAnnounceForm(t = null) {
   });
 }
 // QR турнира: SVG — вектор (любой размер без потери качества), PNG — 3000×3000
-async function tourQr(t) {
+async function makeQr(text) {
   await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js');
-  const code = S.printCode?.club === S.club.id ? S.printCode.code : (S.printCode = { club: S.club.id, code: await S.store.inviteCode(S.club.id) }).code;
-  const q = window.qrcode(0, 'Q'); q.addData(tourLink(t, code)); q.make();
+  const q = window.qrcode(0, 'Q'); q.addData(text); q.make();
   return q;
 }
-const qrFile = t => `qr-${(t.name || 'turnir').toLowerCase().replace(/[^a-zа-яё0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 40) || 'turnir'}`;
-async function downloadTourQr(t, kind) {
-  const q = await tourQr(t), n = q.getModuleCount(), m = 4, size = n + m * 2;
+async function tourQr(t) {
+  const code = S.printCode?.club === S.club.id ? S.printCode.code : (S.printCode = { club: S.club.id, code: await S.store.inviteCode(S.club.id) }).code;
+  return makeQr(tourLink(t, code));
+}
+const qrName = s => (s || 'ponghub').toLowerCase().replace(/[^a-zа-яё0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 40) || 'ponghub';
+const qrFile = t => `qr-${qrName(t.name || 'turnir')}`;
+async function downloadTourQr(t, kind) { return saveQr(await tourQr(t), qrFile(t), kind); }
+// QR файлом: SVG — вектор (любой размер без потери качества), PNG — 3000×3000
+async function saveQr(q, file, kind) {
+  const n = q.getModuleCount(), m = 4, size = n + m * 2;
   if (kind === 'svg') {
     let d = '';
     for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (q.isDark(y, x)) d += `M${x + m},${y + m}h1v1h-1z`;
     const svg = `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="1000" height="1000" shape-rendering="crispEdges"><rect width="${size}" height="${size}" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
-    return download(qrFile(t) + '.svg', svg, 'image/svg+xml');
+    return download(file + '.svg', svg, 'image/svg+xml');
   }
   const px = 3000, cell = Math.floor(px / size), off = Math.floor((px - cell * size) / 2) + m * cell;
   const c = document.createElement('canvas'); c.width = c.height = px;
   const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, px, px); x.fillStyle = '#000';
   for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) if (q.isDark(r, k)) x.fillRect(off + k * cell, off + r * cell, cell, cell);
   const blob = await new Promise(res => c.toBlob(res, 'image/png'));
-  download(qrFile(t) + '.png', blob, 'image/png');
+  download(file + '.png', blob, 'image/png');
 }
 async function renderTourQr() {
   const el = document.getElementById('t-qr'); if (!el) return;
@@ -1697,7 +1703,7 @@ function viewPlayers(r) {
     <input type="search" class="pl-search" data-input="pl-search" placeholder="Найти по нику или имени" autocomplete="off">
     <div class="seg">${[['rating', 'По рейтингу'], ['name', 'По имени'], ['recent', 'Кто играл']].map(([k, l]) => `<a href="${qs(k)}" class="${sort === k ? 'on' : ''}">${l}</a>`).join('')}</div>
     <section class="card pl-list">${list.map(row).join('') || '<div class="empty">В клубе пока никого нет</div>'}<div class="empty" id="pl-none" hidden>Никого не нашли</div></section>
-    ${isAdmin() ? '<a href="#/invite" class="btn ghost full">✉️ Пригласить в клуб</a>' : ''}`;
+    <a href="#/invite" class="btn ghost full">✉️ ${isAdmin() ? 'Пригласить в клуб' : 'Пригласить друга в клуб'}</a>`;
 }
 function filterPlayers(q) {
   q = q.trim().toLowerCase();
@@ -1985,6 +1991,7 @@ function viewMe() {
     '<a class="menu-item" href="#/rules">📐 <span>Как считается рейтинг</span><span>→</span></a>',
   ]) : ''}
   ${group('Клубы', [
+    isAdmin() ? '' : '<a class="menu-item" href="#/invite">✉️ <span>Пригласить друга в клуб</span><span>→</span></a>',
     `<a class="menu-item" href="#/clubs">🏠 <span>Мои клубы</span><small class="muted">${(S.ctx?.clubs || []).filter(c => c.my_status === 'active').length}</small></a>`,
     '<a class="menu-item" href="#/map">🗺 <span>Клубы на карте</span><span>→</span></a>',
     isFounder() ? '<a class="menu-item" href="#/founder">🛡 <span>Платформа PongHub</span><span>→</span></a>' : '',
@@ -2016,6 +2023,7 @@ function viewMe() {
 const ROLE_LABEL = { owner: '👑 владелец', helper: '✍️ помощник', player: 'игрок' };
 const clubPlace = c => [c.city, c.address].filter(Boolean).map(esc).join(' · ');
 const inviteLink = code => `${location.origin}${location.pathname}#/join/${code}`;
+const appLink = () => `${location.origin}${location.pathname}#/register`;
 const KAZAN = [55.7963, 49.1088];
 
 function loadScript(src) {
@@ -2235,11 +2243,14 @@ async function addrPick(i) {
 
 // ── приглашение ──
 function viewInvite(r) {
-  if (!isAdmin()) return '<div class="empty">Приглашать может владелец клуба</div>';
   const c = S.store.club || S.club;
+  if (!isAdmin()) return `<div class="page-h"><a href="#/me" class="back">← Профиль</a></div>
+    <div class="page-h"><h1>Пригласить друга</h1></div>
+    <p class="muted small">Друг наводит камеру на QR-код или открывает ссылку, регистрируется — и заявка в «${esc(c.name)}» уходит сама, никаких кодов. В клуб его примет владелец.</p>
+    <section class="card stack" id="invite-box" data-mode="player"><div class="muted small">Загружаю приглашение…</div></section>`;
   return `<div class="page-h"><a href="#/me" class="back">← Профиль</a></div>
     ${r.q.get('new') ? `<section class="hero table-card club-hero"><h2>Клуб создан 🎉</h2><p>${esc(c.name)}${c.city ? ' · ' + esc(c.city) : ''}</p></section>` : '<div class="page-h"><h1>Пригласить в клуб</h1></div>'}
-    <p class="muted small">По ссылке, коду или QR-коду человек попадает на страницу клуба и нажимает «Отправить заявку». В клуб он попадёт, только когда вы её примете — во вкладке «Заявки». Отправьте ссылку в рабочий чат, продиктуйте код или повесьте QR-код у стола.</p>
+    <p class="muted small">По ссылке или QR-коду «Вступить в клуб» человек регистрируется — и заявка в ваш клуб уходит сама, код вводить не нужно. В клуб он попадёт, когда вы её примете (вкладка «Заявки»). Код — для тех, кто уже скачал приложение.</p>
     <section class="card stack" id="invite-box"><div class="muted small">Загружаю приглашение…</div></section>
     <section class="card"><div class="card-h"><h3>ID клуба для поиска</h3><span class="badge">${esc(c.code)}</span></div>
       <p class="muted small">По этому ID клуб находят в поиске и подают заявку — её подтверждаете вы.</p></section>
@@ -2252,14 +2263,26 @@ async function renderInvite() {
   try {
     const code = await S.store.inviteCode(S.club.id);
     const link = inviteLink(code);
+    box.dataset.link = link;
+    if (box.dataset.mode === 'player') {
+      box.innerHTML = `<div class="center"><b>🏓 QR: вступить в «${esc(S.club.name)}»</b><div id="qr" class="qr-box qr-big"></div><small class="muted">Покажите экран другу — пусть наведёт камеру</small></div>
+        <div class="row-btns"><button class="btn primary" data-act="share-invite" data-link="${esc(link)}">📤 Отправить ссылку</button><button class="btn" data-act="copy" data-text="${esc(link)}">Скопировать</button><button class="btn" data-act="inv-qr" data-k="club" data-f="png">⬇️ QR картинкой</button></div>`;
+      return drawQr(document.getElementById('qr'), link, 6);
+    }
     box.innerHTML = `<div><b class="small">Ссылка-приглашение</b><div class="copy-row"><span class="mono">${esc(link)}</span></div>
         <div class="row-btns"><button class="btn primary" data-act="share-invite" data-link="${esc(link)}">Поделиться</button><button class="btn" data-act="copy" data-text="${esc(link)}">Скопировать</button></div></div>
       <div><b class="small">Код приглашения</b><div class="invite-code">${esc(code)}</div></div>
-      <div class="center"><b class="small">QR-код для стенда у стола</b><div id="qr" class="qr-box"></div>
-        <a class="btn" href="#/print">🖨 Плакат и домики для столов</a></div>
+      <div class="inv-qrs">
+        <div class="inv-qr"><b>🏓 Вступить в клуб</b><small class="muted">регистрация + заявка в «${esc(S.club.name)}»</small><div id="qr" class="qr-box"></div>
+          <div class="row-btns"><button class="btn sm" data-act="inv-qr" data-k="club" data-f="svg">⬇️ SVG</button><button class="btn sm" data-act="inv-qr" data-k="club" data-f="png">⬇️ PNG</button></div></div>
+        <div class="inv-qr"><b>📲 Только приложение</b><small class="muted">регистрация в PongHub, без клуба</small><div id="qr-app" class="qr-box"></div>
+          <div class="row-btns"><button class="btn sm" data-act="inv-qr" data-k="app" data-f="svg">⬇️ SVG</button><button class="btn sm" data-act="inv-qr" data-k="app" data-f="png">⬇️ PNG</button></div></div>
+      </div>
+      <a class="btn full" href="#/print">🖨 Плакат и домики для столов</a>
       <button class="btn ghost sm" data-act="rotate-invite">Сменить ссылку и код</button>
       <small class="muted">Если код попал не туда — смените его. Старые ссылка, код и QR перестанут работать, участники клуба останутся.</small>`;
     await drawQr(document.getElementById('qr'), link, 6);
+    await drawQr(document.getElementById('qr-app'), appLink(), 6);
   } catch (e) { box.innerHTML = `<div class="empty small">${esc(e.message)}</div>`; }
 }
 
@@ -2421,7 +2444,7 @@ function openClubMenu() {
   openModal(`<h3>Мои клубы</h3><div class="club-list">${active.map(clubRow).join('')}</div>
     ${pend.length ? `<p class="muted small">⏳ Ждут решения: ${pend.map(c => esc(c.name)).join(', ')}</p>` : ''}
     <div class="menu">
-      ${isAdmin() ? '<a class="menu-item" href="#/invite">✉️ <span>Пригласить в клуб</span></a>' : ''}
+      <a class="menu-item" href="#/invite">✉️ <span>${isAdmin() ? 'Пригласить в клуб' : 'Пригласить друга в клуб'}</span></a>
       <a class="menu-item" href="#/clubs">🔍 <span>Вступить или найти клуб</span></a>
       <a class="menu-item" href="#/newclub">＋ <span>Создать клуб</span></a>
       <a class="menu-item" href="#/map">🗺 <span>Клубы на карте</span></a>
@@ -2571,6 +2594,10 @@ const CLUB_ACT = {
     if (!(await confirmDialog('Сменить ссылку и код? Старые ссылка, код и QR перестанут работать — и на распечатанных плакатах и домиках тоже (их надо будет напечатать заново).', 'Сменить'))) return;
     await busy(el, async () => { await S.store.rotateInvite(S.club.id); S.printCode = null; await renderInvite(); toast('Новая ссылка готова'); });
   },
+  'inv-qr': el => busy(el, async () => {
+    const club = el.dataset.k === 'club', link = club ? document.getElementById('invite-box').dataset.link : appLink();
+    await saveQr(await makeQr(link), club ? `qr-vstupit-${qrName(S.club.name)}` : 'qr-ponghub', el.dataset.f);
+  }),
   'print-sheets': el => busy(el, () => printSheets(el.dataset.what)),
   'transfer-club': async el => {
     const to = document.getElementById('tr-to').value, name = document.getElementById('tr-name').value.trim();

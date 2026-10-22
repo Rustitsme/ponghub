@@ -1498,3 +1498,12 @@ body.av-big { overflow: hidden; }
   .h-hero .hm-top { min-height: 200px; }
 }
 .bt-hi.hi2 { white-space: normal; } .bt-hi.hi2 b { display: block; white-space: nowrap; }
+/* приглашение: два QR рядом */
+.inv-qrs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.inv-qr { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; padding: 12px 8px; border-radius: 14px; background: var(--bg2); }
+.inv-qr .qr-box { width: 100%; max-width: 160px; height: auto; aspect-ratio: 1; margin: 6px 0; padding: 6px; }
+.inv-qr .row-btns { justify-content: center; flex-wrap: nowrap; gap: 6px; margin-top: auto; }
+.inv-qr .row-btns .btn { padding-inline: 10px; }
+#invite-box[data-mode=player] .row-btns { justify-content: center; }
+@media (max-width: 360px) { .inv-qrs { grid-template-columns: 1fr; } }
+.qr-box.qr-big { width: 240px; height: 240px; }
