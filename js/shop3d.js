@@ -597,7 +597,9 @@ export function mountViewer(el, cfg, opts = {}) {
   if (opts.zoom) v.zoom = opts.zoom;
   if (opts.apply) { v.anim = { slot: opts.apply, t: 0 }; v.target.y = opts.apply === 'bh' ? Math.PI + .35 : opts.apply === 'grip' ? .6 : .35; v.target.x = opts.apply === 'grip' ? .35 : -.18; }
   let last = null;
-  el.onpointerdown = e => { if (e.target.closest('button')) return; v.dragging = true; last = [e.clientX, e.clientY]; el.setPointerCapture(e.pointerId); };
+  el.onpointerdown = e => { if (e.target.closest('button')) return; e.preventDefault(); v.dragging = true; last = [e.clientX, e.clientY]; el.setPointerCapture(e.pointerId); };
+  // ракетка внутри ссылки: мышью — вертим, а не «перетаскиваем ссылку»
+  el.ondragstart = e => e.preventDefault();
   el.onpointermove = e => { if (!v.dragging) return; v.target.y += (e.clientX - last[0]) * .012; v.target.x = Math.max(-v.tilt, Math.min(v.tilt, v.target.x + (e.clientY - last[1]) * .008)); last = [e.clientX, e.clientY]; v.idleAt = Date.now(); };
   el.onpointerup = el.onpointercancel = () => { v.dragging = false; v.idleAt = Date.now(); };
   el.onwheel = opts.fit ? null : e => { e.preventDefault(); v.zoom = Math.max(.7, Math.min(2.2, v.zoom * (e.deltaY < 0 ? 1.08 : .92))); };

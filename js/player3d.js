@@ -402,7 +402,10 @@ export async function mountAvatar(el, opts = {}) {
       if (V.bust) V.cur.lookW = 1;
       stepPlayer(V.cur, V.bust ? 0 : dt);
       if (V.bust) { if (!V.drag && performance.now() - V.idle > 2500) V.target += (0 - V.target) * .04; }
-      else if (!TUNE_ON && !V.drag && performance.now() - V.idle > 3000) V.target += .0035;
+      else if (!TUNE_ON && !V.drag && performance.now() - V.idle > 3000) {
+        // still: стоит на месте; повернули мышкой — через пару секунд сам возвращается лицом
+        if (V.still) { const front = Math.round((V.target - .25) / (Math.PI * 2)) * Math.PI * 2 + .25; V.target += (front - V.target) * .04; } else V.target += .0035;
+      }
       V.ry += (V.target - V.ry) * .1; V.zoom += (V.tz - V.zoom) * .1; V.fy += (V.tfy - V.fy) * .1;
       V.cur.holder.rotation.y = V.ry;
       const d = 5.1 / V.zoom; V.cam.position.set(0, V.fy + .22 / V.zoom, d); V.cam.lookAt(0, V.fy, 0);
@@ -424,8 +427,11 @@ export async function mountAvatar(el, opts = {}) {
   V.bust = !!opts.bust; V.cur.lookAt = V.bust ? V.cam.position : null;
   if (V.bust) { V.target = V.ry = 0; V.tz = V.zoom = 2.8; V.tfy = V.fy = headY(V.cur) - .1; V.cur.mixer.setTime(0); if (V.cur.rk) V.cur.rk.visible = false; }
   if (!V.bust) { V.tz = 1; V.tfy = .84; } if (TUNE_ON) { V.idle = Infinity; V.target = V.ry = -0.6; }
+  V.still = !!opts.still; if (V.still) V.target = V.ry = .25;
   let last = null;
-  el.onpointerdown = e => { if (e.target.closest('button,input,a')) return; V.drag = true; last = e.clientX; el.setPointerCapture(e.pointerId); };
+  // кнопки внутри рамки не крутят игрока; ссылка вокруг рамки (плитка «Мой игрок») — не мешает
+  el.onpointerdown = e => { const c = e.target.closest('button,input,a'); if (c && el.contains(c)) return; e.preventDefault(); V.drag = true; last = e.clientX; el.setPointerCapture(e.pointerId); };
+  el.ondragstart = e => e.preventDefault();
   el.onpointermove = e => { if (!V.drag) return; V.target += (e.clientX - last) * .012; last = e.clientX; V.idle = performance.now(); };
   el.onpointerup = el.onpointercancel = () => { V.drag = false; V.idle = performance.now(); };
   el.onwheel = TUNE_ON ? e => { e.preventDefault(); V.tune.dist = Math.max(.25, Math.min(1.6, V.tune.dist * (e.deltaY < 0 ? .92 : 1.08))); } : null;

@@ -188,7 +188,7 @@ const NEWS = {
 };
 function showNews() {
   // создатель может посмотреть памятку, открыв приложение с ?news в адресе
-  const preview = isFounder() && /news/.test(location.search);
+  const preview = isFounder() && /news/.test(location.search) && !lsGet('ponghub_news_preview_done');
   if (S.newsShown || !S.me || (isFounder() && !preview)) return;
   const uid = S.me.id, key = 'ponghub_news_' + uid, seen = preview ? [] : (lsGet(key) || '').split(',').filter(Boolean);
   const fresh = (preview ? Object.keys(NEWS) : (S.ctx?.myFeatures || [])).filter(f => NEWS[f] && !seen.includes(f));
@@ -201,6 +201,7 @@ function showNews() {
     <div class="nw-where">📍 Всё находится в разделе <b>«Профиль»</b> — внизу экрана справа.</div>
     <div class="row-btns"><button class="btn primary full" id="nw-go">Открыть профиль</button></div></div>`, sh => {
     lsSet(key, [...seen, ...fresh].join(','));
+    if (preview) lsSet('ponghub_news_preview_done', '1');
     const pic = sh.querySelector('#nw-pic');
     // та же 3D-картинка, что в профиле, — только само основание-подарок, без накладок
     if (pic) { pic.textContent = '🏓'; loadThree().then(() => { const url = racketShot({ blade: STARTER }); if (url) pic.innerHTML = `<img src="${url}" alt="Основание">`; }).catch(() => {}); }
@@ -295,6 +296,7 @@ function shell(r, body) {
     <nav class="side-nav">
       ${side('home', 'Главная', '🏠')}${side('players', 'Игроки', '👥', ['player'])}${side('tournaments', 'Турниры', '🏆', ['tournament'])}
       ${side('rating', 'Рейтинг', '📊', ['seasons'])}${side('matches', 'Матчи', '📋', ['h2h'])}${predOn() ? side('predict', 'Прогнозы', '🎯') : ''}${side('calendar', 'Календарь', '📅', [], '', 'ico')}
+      ${feature('shop') || feature('avatar') ? '<hr>' : ''}${feature('shop') ? side('shop', 'Магазин', '🛍️') + side('racket', 'Моя ракетка', '🏓') : ''}${feature('avatar') ? side('avatar', 'Мой игрок', '🧍') : ''}
       ${side('inbox', 'Уведомления', '🔔', [], n ? `<i class="dot inline">${n}</i>` : '', 'ico side-bell')}
       <hr>${side('me', 'Профиль', '👤', [], '', 'ico')}${isAdmin() ? side('admin', 'Управление', '🛠️', ['rules', 'invite', 'print', 'clubedit'], pc.total ? `<i class="dot inline">${pc.total}</i>` : '', 'ico') : ''}
     </nav>
@@ -482,6 +484,17 @@ function viewHome() {
   const showRk = feature('shop') && S.shop;
   const bonus = S.shop && !S.shop.streak.claimed;
   const coins = S.coins != null && (feature('shop') || predOn());
+  const nl = nextLeague(r);
+  const bigHero = `<section class="hero table-card hm h-hero">
+    <div class="hm-top"><div><div class="hero-top">${ava(me, 'lg')}<div class="hero-id"><div class="hello">Привет,</div><div class="hero-nick">${esc(me.nickname)}</div><div class="badges">${leagueBadge(r)}${roleBadge(me)}</div></div></div>
+      <div class="hm-place">${st.matches ? pos : '—'} <small>место из ${total}</small></div></div>
+      ${showRk ? '<a href="#/racket" class="hm-frame hm-rk" id="hm-rk" aria-label="Моя ракетка"></a>' : ''}</div>
+    <div class="hero-mid"><div><div class="big-num">${fmtR(r)}</div><div class="muted small">рейтинг · ${delta(d30)} за 30 дней</div></div>${sparkline(hist.slice(-20))}</div>
+    <div class="hero-stats"><div><b>${st.wins}</b><small>побед</small></div><div><b>${st.losses}</b><small>поражений</small></div>
+      <div><b>${pct(st.winRate)}</b><small>% побед</small></div><div><b>${st.streakType === 'W' ? '🔥' + st.streak : 0}</b><small>серия побед</small></div></div>
+    ${nl ? `<div class="next-league"><span>До лиги «${nl.name}»: ${fmtR(nl.min - r)}</span><div class="bar thin"><i style="width:${Math.max(4, Math.min(100, 100 - (nl.min - r) * 5))}%"></i></div></div>` : ''}
+    <div class="row-btns hero-links"><a href="#/player/${me.id}" class="btn ghost-light">Статистика и анализ →</a></div>
+  </section>`;
   const meTile = `<section class="bt bt-me">
     <a href="#/player/${me.id}" class="bt-me-main">${ava(me, 'md')}<div class="bt-me-id"><div class="badges">${leagueBadge(r)}${roleBadge(me)}</div>
       <div class="big-num">${fmtR(r)}</div><small>${st.matches ? `${pos}-е место из ${total}` : 'ещё нет матчей'} · <span title="за 30 дней">${delta(d30)}</span></small></div></a>
@@ -507,7 +520,7 @@ function viewHome() {
   const eventsSec = upcoming.length ? `<section class="card"><div class="card-h"><h3>Ближайшие события</h3><a href="#/calendar" class="link">Календарь →</a></div>${upcoming.map(eventRow).join('')}</section>` : '';
   const matchesSec = `<section class="h-matches">
     <div class="sec-h"><h3>${isAdmin() ? 'Последние матчи' : 'Мои последние матчи'}</h3><a href="#/matches" class="link">Все →</a></div>
-    ${recent.slice(0, desk ? 4 : 6).map(m => matchCard(m)).join('') || `<div class="card first-match"><div class="fm-ic">🏓</div><b>Здесь появятся ваши матчи</b>
+    ${recent.map(m => matchCard(m)).join('') || `<div class="card first-match"><div class="fm-ic">🏓</div><b>Здесь появятся ваши матчи</b>
       <p class="muted small">Сыграйте первую игру и внесите счёт — сразу появится рейтинг, история и статистика. Рейтинг клуба и игроков уже можно посмотреть.</p>
       <div class="row-btns"><a href="#/rating" class="btn ghost">Рейтинг клуба</a><button class="btn primary" data-act="add-match">Внести первый матч</button></div></div>`}
   </section>`;
@@ -528,11 +541,14 @@ function viewHome() {
   ${desk ? (() => {
     const pl = feature('avatar');
     // с игроком: рядом с ним — коины, бонус и «сейчас играют»; ниже во всю ширину — турниры, прогнозы, сезон, задания, итоги недели
+    const mv = h => (h ? `<div class="mv">${h}</div>` : '');
     const stack = pl ? `<div class="bento h-stack">${coinTile}${bonusTile}${liveBlock()}</div>`
-      : `<div class="bento h-stack">${coinTile}${bonusTile}${tourTiles}${liveBlock()}${activeTiles}${predHomeBlock()}${ssnTile}${taskTile}</div>`;
-    const below = pl ? `<div class="bento">${tourTiles}${activeTiles}${predHomeBlock()}${ssnTile}${taskTile}${weekCard()}</div>` : '';
-    return `<div class="bento-2"><div class="h-col">${meTile}${challengesBlock()}${idleNudge()}${pl ? '' : deskTile}${topSec}${pl ? eventsSec : weekCard()}</div>
-      <div class="h-col">${pl ? `<div class="h-plrow">${deskTile}${stack}</div>${below}` : stack}${pl ? '' : eventsSec}${matchesSec}</div></div>`;
+      : `<div class="bento h-stack">${coinTile}${bonusTile}${liveBlock()}</div>`;
+    // остальное — отдельными блоками, чтобы раскладывать по колонкам
+    const ssnRow = ssnTile + taskTile ? `<div class="bento">${ssnTile}${taskTile}</div>` : '';
+    const below = `${tourTiles ? `<div class="bento">${tourTiles}</div>` : ''}${activeTiles}${mv(predHomeBlock())}${mv(ssnRow)}${pl ? mv(weekCard()) : ''}`;
+    return `<div class="bento-2"><div class="h-col">${bigHero}${challengesBlock()}${idleNudge()}${pl ? '' : deskTile}${mv(topSec)}${pl ? mv(eventsSec) : mv(weekCard())}</div>
+      <div class="h-col">${pl ? `<div class="h-plrow">${deskTile}${stack}</div>` : stack}${below}${pl ? '' : mv(eventsSec)}${mv(matchesSec)}</div></div>`;
   })()
   : `<div class="bento">${meTile}${coinTile}${bonusTile}${tourTiles}${liveBlock()}${activeTiles}${predHomeBlock()}${challengesBlock()}${idleNudge()}${ssnTile}${taskTile}${weekCard()}</div>`}
 
@@ -2959,6 +2975,27 @@ function mountPlayerRackets() {
 }
 
 // ракетка и игрок на главной: ракетка крутится в рамке, игрок по грудь смотрит в камеру
+// компьютер: колонки главной разной высоты — переносим нижние блоки (Топ-5, события, итоги, матчи) в более короткую
+function balanceHome() {
+  const cols = document.querySelectorAll('.bento-2 > .h-col');
+  if (cols.length !== 2) return;
+  const gap = 16, H = () => [cols[0].offsetHeight, cols[1].offsetHeight];
+  for (let n = 0; n < 8; n++) {
+    const [h0, h1] = H(), [a, b] = h0 >= h1 ? cols : [cols[1], cols[0]], diff = Math.abs(h0 - h1);
+    // из более длинной колонки — блок, который лучше всего сократит разницу
+    const best = [...a.querySelectorAll(':scope > .mv')].filter(el => el.offsetHeight + gap < diff).sort((x, y) => y.offsetHeight - x.offsetHeight)[0];
+    if (!best) break;
+    b.appendChild(best);
+  }
+  // всё ещё длиннее — укорачиваем историю матчей (не меньше трёх; остальные — по кнопке «Все →»)
+  const ms = document.querySelector('.h-matches');
+  for (let n = 0; ms && n < 10; n++) {
+    const [h0, h1] = H(), longer = h0 >= h1 ? cols[0] : cols[1], cards = ms.querySelectorAll(':scope > .mcard:not([hidden])');
+    const last = cards[cards.length - 1];
+    if (!longer.contains(ms) || cards.length <= 3 || !last || Math.abs(h0 - h1) < last.offsetHeight + 12) break;
+    last.hidden = true;
+  }
+}
 async function mountHome3D() {
   const rk = document.getElementById('hm-rk'), pl = document.getElementById('hm-pl');
   if (!rk && !pl) return;
@@ -2975,7 +3012,7 @@ async function mountHome3D() {
     if (pl && pl.isConnected) {
       const { mountAvatar } = await import('./player3d.js');
       if (!pl.isConnected) return;
-      const ctl = await mountAvatar(pl, { gender: S.ctx.me.avatar3d || 'boy', face: S.ctx.me.face || null, loadout: S.shop?.loadout || S.ctx.me.loadout || {}, grip: S.ctx.platform?.grip || {}, bust: !pl.dataset.full });
+      const ctl = await mountAvatar(pl, { gender: S.ctx.me.avatar3d || 'boy', face: S.ctx.me.face || null, loadout: S.shop?.loadout || S.ctx.me.loadout || {}, grip: S.ctx.platform?.grip || {}, bust: !pl.dataset.full, still: !!pl.dataset.full });
       ctl.resize();
     }
   } catch { /* без 3D главная работает как обычно */ }
@@ -4191,7 +4228,7 @@ function afterRender(r) {
   if (r.name === 'racket') { if (!S.shop && feature('shop')) ensureShop().then(render).catch(e => toast(e.message, 'err')); else mountRacket(); }
   if (r.name === 'player' && feature('shop')) { ensureThree(); mountPlayerRackets(); }
   if (r.name === 'avatar' && feature('avatar')) mountAvatarView(r);
-  if (r.name === 'home') mountHome3D();
+  if (r.name === 'home') { mountHome3D(); requestAnimationFrame(balanceHome); }
   if (r.name === 'print' || r.name === 'tables') renderPrint();
   if (r.name === 'tournament' && isAdmin()) renderTourQr();
   if (r.name === 'tournament') renderTournamentPublic();
