@@ -1512,8 +1512,13 @@ function challengesBlock() {
       text = `Вы вызвали <b>${esc(other.nickname)}</b> · ждём ответа`;
       btns = `<button class="btn sm ghost" data-act="ch-cancel" data-id="${c.id}">Отменить</button>`;
     } else {
-      text = `Вызов принят: вы и <b>${esc(other.nickname)}</b> — к столу!`;
-      btns = `<button class="btn sm primary" data-act="ch-result" data-id="${c.id}">Внести результат</button><button class="btn sm ghost" data-act="ch-cancel" data-id="${c.id}">Отменить</button>`;
+      const live = S.data.live.find(l => l.challenge_id === c.id && l.status === 'live');
+      if (live) return `<div class="ch-row">${ava(other, 'md')}<div class="rn"><span>🔴 Идёт ваша игра с <b>${esc(other.nickname)}</b></span><small class="muted">Все видят её в «Лайве»</small></div>
+        <div class="ch-btns"><a class="btn sm primary" href="#/live/${live.id}">Открыть игру</a></div></div>`;
+      return `<div class="ch-row ch-go">${ava(other, 'md')}<div class="rn"><span>Вызов принят: вы и <b>${esc(other.nickname)}</b> — к столу!</span>${msg}</div>
+        <ol class="ch-steps"><li>Подойдите к столу и нажмите <b>«▶ Начать игру»</b></li><li>Выберите, до скольких побед и до скольких очков играете</li><li><b>«Вести счёт»</b> — счёт по ходу ведёт один из вас или третий человек; <b>«Счёт в конце»</b> — внесёте итог после игры</li></ol>
+        <small class="muted ch-why">Игра сразу появится у всех в «Лайве» — болельщики смогут сделать прогноз.</small>
+        <div class="ch-btns"><button class="btn primary" data-act="ch-start" data-id="${c.id}">▶ Начать игру</button><button class="btn sm ghost" data-act="ch-result" data-id="${c.id}">Уже сыграли — внести счёт</button><button class="btn sm ghost" data-act="ch-cancel" data-id="${c.id}">Отменить</button></div></div>`;
     }
     return `<div class="ch-row">${ava(other, 'md')}<div class="rn"><span>${text}</span>${msg}</div><div class="ch-btns">${btns}</div></div>`;
   };
@@ -3342,6 +3347,7 @@ function openMatchForm(opts = {}) {
     kind: m0?.kind || fx.kind || 'singles',
     p3: m0?.player3_id || fx.player3_id || '', p4: m0?.player4_id || fx.player4_id || '',
     rated: m0 ? m0.rated !== false : true,
+    start: !!opts.start,
   };
   const lockPlayers = !!(fx.player1_id || m0?.tournament_id);
   const canDoubles = !fx.player1_id && !m0?.tournament_id && !fx.tournament_id && !(m0 && m0.kind !== 'doubles');
@@ -3362,9 +3368,25 @@ function openMatchForm(opts = {}) {
     return `<b>${a}:${b}</b> ${win ? `— победа <b>${esc(win)}</b>` : `<span class="muted">(до ${need} ${plural(need, 'победы', 'побед', 'побед')})</span>`}`;
   };
 
+  const fmtRow = () => `<div class="fmt-row">
+        <div><small class="muted">Играем до</small><div class="seg sm">${[[1, '1'], [3, '2'], [5, '3'], [7, '4']].map(([v, l]) => `<button type="button" data-k="bestOf" data-v="${v}" class="${st.bestOf === v ? 'on' : ''}" ${lockFormat ? 'disabled' : ''}>${l}</button>`).join('')}</div><small class="muted">побед в партиях</small></div>
+        <div><small class="muted">Партия до</small><div class="seg sm">${[11, 21].map(v => `<button type="button" data-k="pointsTo" data-v="${v}" class="${st.pointsTo === v ? 'on' : ''}" ${lockFormat ? 'disabled' : ''}>${v}</button>`).join('')}<input type="number" class="pts-custom" min="5" max="50" value="${[11, 21].includes(st.pointsTo) ? '' : st.pointsTo}" placeholder="др." ${lockFormat ? 'disabled' : ''}></div><small class="muted">очков</small></div>
+      </div>`;
   const draw = sh => {
     const rows = Array.from({ length: st.bestOf }, (_, i) => st.sets[i] || ['', '']);
     st.sets = rows;
+    // вызов принят → «Начать игру»: игроки уже выбраны, остаётся формат и как вести счёт
+    if (st.start) return void (sh.querySelector('.mf-body').innerHTML = `
+      <h3>▶ Начать игру</h3>
+      <div class="ms-vs">${ava(P(st.p1), 'md')}<b>${esc(team(1))}</b><span>vs</span><b>${esc(team(2))}</b>${ava(P(st.p2), 'md')}</div>
+      <small class="tf-lbl">1. Формат</small>
+      ${fmtRow()}
+      <small class="tf-lbl">2. Как ведём счёт</small>
+      <button type="button" class="btn primary big full ms-opt" data-mf="live"><b>📱 Вести счёт по ходу</b><small>Очки отмечает один из вас или третий человек — все видят счёт вживую</small></button>
+      <button type="button" class="btn big full ms-opt" data-mf="live-noscore"><b>⏱ Счёт в конце</b><small>Играете спокойно, итог внесёте после игры</small></button>
+      <div class="mf-err"></div>
+      <p class="muted small center">Игра сразу появится у всех в «Лайве» — можно будет сделать прогноз.</p>
+      <button type="button" class="btn ghost sm full" data-mf="past">Уже сыграли? Внести результат</button>`);
     sh.querySelector('.mf-body').innerHTML = `
       <h3>${m0 ? 'Изменить матч' : editor ? 'Новый матч' : 'Результат матча'}</h3>
       ${tour ? `<div class="chip">🏆 ${esc(tour.name)}</div>` : ''}
@@ -3388,10 +3410,7 @@ function openMatchForm(opts = {}) {
       </div>`}
       ${editor && !lockFormat && st.kind === 'singles' ? `<div class="seg"><button type="button" data-k="type" data-v="free" class="${st.type === 'free' ? 'on' : ''}">Свободная игра</button><button type="button" data-k="type" data-v="tournament" class="${st.type === 'tournament' ? 'on' : ''}">Турнирный матч</button></div>
         ${st.type === 'tournament' ? '<p class="hint">Для турнира, созданного в приложении, счёт вносится на странице турнира. Здесь — разовый важный матч или матч турнира вне приложения: он просто весит в рейтинге больше.</p>' : ''}` : ''}
-      <div class="fmt-row">
-        <div><small class="muted">Играем до</small><div class="seg sm">${[[1, '1'], [3, '2'], [5, '3'], [7, '4']].map(([v, l]) => `<button type="button" data-k="bestOf" data-v="${v}" class="${st.bestOf === v ? 'on' : ''}" ${lockFormat ? 'disabled' : ''}>${l}</button>`).join('')}</div><small class="muted">побед в партиях</small></div>
-        <div><small class="muted">Партия до</small><div class="seg sm">${[11, 21].map(v => `<button type="button" data-k="pointsTo" data-v="${v}" class="${st.pointsTo === v ? 'on' : ''}" ${lockFormat ? 'disabled' : ''}>${v}</button>`).join('')}<input type="number" class="pts-custom" min="5" max="50" value="${[11, 21].includes(st.pointsTo) ? '' : st.pointsTo}" placeholder="др." ${lockFormat ? 'disabled' : ''}></div><small class="muted">очков</small></div>
-      </div>
+      ${fmtRow()}
       <label class="switch"><input type="checkbox" name="simple" ${st.simple ? 'checked' : ''}><i></i><span>Знаю только итоговый счёт по партиям</span></label>
       ${st.simple ? `<div class="sets-simple"><input type="number" name="s1" min="0" max="4" value="${st.s1}" placeholder="0"><span>:</span><input type="number" name="s2" min="0" max="4" value="${st.s2}" placeholder="0"></div>`
         : `<div class="sets-grid"><div class="sg-h"><span></span><span>${esc(team(1))}</span><span>${esc(team(2))}</span></div>
@@ -3416,6 +3435,7 @@ function openMatchForm(opts = {}) {
       if (act === 'save') saveMatch(e.target.closest('button'));
       if (act === 'live') startLive(e.target.closest('button'), true);
       if (act === 'live-noscore') startLive(e.target.closest('button'), false);
+      if (act === 'past') { st.start = false; draw(sh); }
       if (act === 'delete') {
         const reason = await askReason('Удалить матч?', 'Рейтинг будет пересчитан. Укажите причину.');
         if (reason) await busy(null, async () => { await S.store.deleteMatch(m0.id, reason); toast('Матч удалён'); await refresh(); });
@@ -3838,7 +3858,7 @@ const ACT = {
   'ch-accept': el => busy(el, async () => {
     const c = await S.store.update('challenges', el.dataset.id, { status: 'accepted', responded_at: new Date().toISOString() });
     if (predOn()) await S.store.rpc('create_pred_event', { src: 'challenge', src_id: c.id, chance: chanceFor({ player1_id: c.from_id, player2_id: c.to_id }) }).catch(() => {});
-    await refresh(); toast('Вызов принят — к столу! 🏓');
+    await refresh(); toast('Вызов принят! У стола нажмите «▶ Начать игру» 🏓');
   }),
   'ch-decline': el => busy(el, async () => { await S.store.update('challenges', el.dataset.id, { status: 'declined', responded_at: new Date().toISOString() }); await refresh(); }),
   'ch-cancel': el => busy(el, async () => { await S.store.update('challenges', el.dataset.id, { status: 'cancelled' }); await refresh(); }),
@@ -3846,6 +3866,11 @@ const ACT = {
     const c = S.data.challenges.find(x => x.id === el.dataset.id);
     const other = c.from_id === S.me.id ? c.to_id : c.from_id;
     openMatchForm({ fixed: { player1_id: S.me.id, player2_id: other, type: 'free', challengeId: c.id } });
+  },
+  'ch-start': el => {
+    const c = S.data.challenges.find(x => x.id === el.dataset.id);
+    const other = c.from_id === S.me.id ? c.to_id : c.from_id;
+    openMatchForm({ start: true, fixed: { player1_id: S.me.id, player2_id: other, type: 'free', challengeId: c.id } });
   },
   'new-ann': () => openAnnForm(),
   predict: el => openPredict(el.dataset.id),
