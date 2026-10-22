@@ -1190,9 +1190,27 @@ async function renderPredBoard() {
   try { rows = await S.store.rpc('coin_leaderboard', { since }); } catch { box.innerHTML = '<div class="empty small">Таблица появится после обновления базы</div>'; return; }
   rows = rows.filter(r => S.byId.has(r.user_id)).sort((a, b) => (since ? b.profit - a.profit : b.balance - a.balance));
   if (document.getElementById('pred-board') !== box) return;
-  box.innerHTML = rows.map((r, i) => `<div class="rank-row ${r.user_id === S.me.id ? 'me' : ''}"><span class="pos">${['🥇', '🥈', '🥉'][i] || i + 1}</span>${ava(P(r.user_id), 'sm')}
+  box.innerHTML = rows.map((r, i) => `<div class="rank-row pr-who ${r.user_id === S.me.id ? 'me' : ''}" data-act="pred-user" data-id="${r.user_id}"><span class="pos">${['🥇', '🥈', '🥉'][i] || i + 1}</span>${ava(P(r.user_id), 'sm')}
     <span class="rn"><b>${esc(P(r.user_id).nickname)}</b><small>${r.bets ? `${Math.round(r.wins / r.bets * 100)}% верных · ${r.bets} прогн.` : 'ещё без прогнозов'}</small></span>
     <span class="rr"><b>${fmtC(since ? r.profit : r.balance)}</b><small class="muted">${since ? 'за месяц' : 'PC'}</small></span></div>`).join('') || '<div class="empty small">Пока никто не делал прогнозов</div>';
+  if (rows.length) box.insertAdjacentHTML('beforeend', '<p class="muted small center">Нажмите на игрока — увидите его прогнозы</p>');
+}
+
+// прогнозы другого игрока: на какие матчи, на кого, сколько и чем закончилось
+async function openPredUser(uid) {
+  const p = P(uid);
+  openModal(`<div class="stack"><a href="#/player/${uid}" class="pu-h">${ava(p, 'md')}<div class="rn"><h3>${esc(p.nickname)}</h3><small class="muted">прогнозы в клубе · профиль →</small></div></a><div id="pu-box"><div class="empty small"><span class="spin"></span></div></div></div>`);
+  let list;
+  try { list = await S.store.rpc('player_predictions', { uid }); } catch { list = null; }
+  const box = document.getElementById('pu-box');
+  if (!box) return;
+  if (!list) { box.innerHTML = '<div class="empty small">Чужие прогнозы появятся после обновления базы (миграция 29)</div>'; return; }
+  const settled = list.filter(x => ['won', 'lost'].includes(x.status)), won = settled.filter(x => x.status === 'won');
+  const profit = settled.reduce((a, x) => a + (x.status === 'won' ? x.payout - x.stake : -x.stake), 0);
+  const line = x => { const e = x.event; return `<div class="pr-hist ${x.status}"><div class="rn"><b>${esc(evName(e, 1))} — ${esc(evName(e, 2))}</b><small class="muted">на <b>${esc(evName(e, x.side))}</b> · ${x.stake} PC × ${x.odds} · ${fmtDT(x.created_at)}</small></div>
+    <b class="${x.status === 'won' ? 'up' : x.status === 'lost' ? 'down' : 'muted'}">${x.status === 'won' ? '+' + x.payout : x.status === 'lost' ? '−' + x.stake : x.status === 'refunded' ? 'возврат' : 'ждём'}</b></div>`; };
+  box.innerHTML = `<div class="stat-grid in pu-stats"><div><b>${settled.length}</b><small>прогнозов</small></div><div><b>${pct(settled.length ? won.length / settled.length : 0)}</b><small>верных</small></div><div><b class="${profit >= 0 ? 'up' : 'down'}">${profit >= 0 ? '+' : '−'}${fmtC(Math.abs(profit))}</b><small>итог, PC</small></div></div>
+    <div class="pu-list">${list.map(line).join('') || '<div class="empty small">Пока без прогнозов</div>'}</div>`;
 }
 
 // ───────────── Объявления ─────────────
@@ -3693,6 +3711,7 @@ const ACT = {
   },
   'new-ann': () => openAnnForm(),
   predict: el => openPredict(el.dataset.id),
+  'pred-user': el => openPredUser(el.dataset.id),
   'pred-board': el => { document.getElementById('pred-board').dataset.period = el.dataset.p; document.querySelectorAll('[data-act=pred-board]').forEach(b => b.classList.toggle('on', b === el)); renderPredBoard(); },
   'del-ann': async el => { if (await confirmDialog('Удалить объявление? Оно пропадёт из ленты у всех.', 'Удалить', true)) await busy(el, async () => { await S.store.remove('announcements', el.dataset.id); await refresh(); }); },
   'test-create': el => busy(el, async () => { const n = await S.store.createTestPlayers(4); await refresh(); toast(`Создано тестовых игроков: ${n}`); }),

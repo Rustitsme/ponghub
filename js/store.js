@@ -16,7 +16,7 @@ export function overlayMember(p, m) {
   return { ...p, role: ROLE_OUT[m.role] || 'player', status, initial_rating: m.initial_rating, club_status: m.status, joined_at: m.joined_at };
 }
 // функции, которым нужен текущий клуб
-const RPC_CID = new Set(['ensure_wallet', 'coin_leaderboard']);
+const RPC_CID = new Set(['ensure_wallet', 'coin_leaderboard', 'player_predictions']);
 
 export async function createStore() {
   if (CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY) {
@@ -773,6 +773,11 @@ class LocalStore {
       if (a.on_) t.push({ feature: a.fname, user_id: a.uid }); this.save(); return t.filter(x => x.feature === a.fname).length;
     }
     if (name === 'founder_set_grip') { this.needFounder(); this.db.platform.grip = a.p; this.save(); return a.p; }
+    if (name === 'player_predictions') {
+      const evs = new Map((this.db.pred_events || []).filter(e => e.club_id === this.cid).map(e => [e.id, e]));
+      return (this.db.predictions || []).filter(p => p.user_id === a.uid && evs.has(p.event_id))
+        .sort((x, y) => Date.parse(y.created_at) - Date.parse(x.created_at)).slice(0, 100).map(p => ({ ...p, event: evs.get(p.event_id) }));
+    }
     // демо: задания недели и стоп-кадр
     if (name === 'weekly_tasks') {
       const me = this.db.session, d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
