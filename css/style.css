@@ -1355,3 +1355,27 @@ body.av-big { overflow: hidden; }
 .bt-ssn > b { font-size: 20px; overflow: hidden; text-overflow: ellipsis; }
 .bt .bt-n { font-size: 26px; } .bt .wt-bar { margin-top: 8px; }
 .bento > .live-now { border: 2px solid var(--red); }
+
+/* ── Турнир с записью заранее ── */
+.t-when { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; font-weight: 600; font-size: 14px; }
+.t-sign { display: flex; flex-direction: column; gap: 10px; border: 2px solid color-mix(in srgb, var(--red) 45%, var(--line)); }
+.t-sign.on { border-color: color-mix(in srgb, var(--up) 55%, var(--line)); }
+.t-sign b { display: block; font: 800 18px var(--display); } .t-sign small { display: block; }
+.t-qr { width: 200px; max-width: 70%; margin: 4px auto 12px; padding: 8px; background: #fff; border-radius: 14px; border: 1px solid var(--line); }
+.t-qr svg { display: block; width: 100%; height: auto; }
+.t-open { border: 2px solid color-mix(in srgb, var(--red) 35%, var(--line)); }
+.t-open .t-body { flex: 1; min-width: 0; } .t-open .t-body small { display: block; }
+.bt-tour { border: 2px solid var(--red); background: linear-gradient(160deg, var(--surface), color-mix(in srgb, var(--red) 8%, var(--surface))); }
+.bt-tour > b { font-size: 22px; white-space: normal; }
+.ev-body { color: inherit; }
+/* плакат турнира А4 */
+.prn-tour h3 em { color: #ffd75e; font-style: normal; }
+.prn-when { margin-top: 3cqw; text-align: center; font: 700 4cqw/1.35 Inter, sans-serif; }
+.prn-tour .prn-qrbox { margin-top: 3.5cqw; }
+.t-hero .badge.ok { background: #fff; color: #12804d; }
+.t-qr-btns { justify-content: center; }
+.t-prize { margin: 10px 0 0; font-size: 14px; } .t-prize b { font-weight: 800; }
+.pz-box { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.pz-chips { display: flex; flex-wrap: wrap; gap: 6px; } .pz-chips .chip { cursor: pointer; font: 600 13px var(--font); color: var(--text); }
+.prn-prize { color: #ffd75e; }
+[data-form=t-announce] [hidden] { display: none !important; }

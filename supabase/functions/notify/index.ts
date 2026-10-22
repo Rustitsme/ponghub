@@ -175,8 +175,17 @@ async function onChange(table: string, type: string, r: any, o: any, actor: stri
   }
 
   if (table === 'tournaments') {
+    // объявлен заранее — всем в клубе: открыта запись
+    if (type === 'INSERT' && r.status === 'open') {
+      return send(except(all, r.created_by), { title: `🏆 Запись на турнир «${r.name}»`, body: `${tourWhen(r, cl)}${r.place ? ' · ' + r.place : ''} — записывайтесь!`, url: `#/tournament/${r.id}` });
+    }
+    // дата была «уточняется» — владелец назначил точную
+    if (type === 'UPDATE' && r.status === 'open' && !o?.starts_at && r.starts_at)
+      return send(except(all, r.created_by), { title: `📅 Назначена дата турнира «${r.name}»`, body: `${tourWhen(r, cl)}${r.place ? ' · ' + r.place : ''}`, url: `#/tournament/${r.id}` });
     if (type === 'INSERT')
       return send(except(r.participants ?? [], r.created_by), { title: 'Новый турнир', body: `«${r.name}» — вы в списке участников`, url: `#/tournament/${r.id}` });
+    if (type === 'UPDATE' && o?.status === 'open' && r.status === 'active')
+      return send(except(r.participants ?? [], r.created_by), { title: `🏓 Турнир «${r.name}» начался`, body: 'Сетка готова — вы в списке участников', url: `#/tournament/${r.id}` });
     if (type === 'UPDATE' && o?.status !== 'finished' && r.status === 'finished' && r.results?.gold)
       return send(all, { title: '🏆 Турнир завершён', body: `«${r.name}»: победитель — ${nick(r.results.gold)}`, url: `#/tournament/${r.id}` });
     return;
@@ -188,6 +197,16 @@ async function onChange(table: string, type: string, r: any, o: any, actor: stri
     });
     return send(except(all, r.created_by), { title: `📅 ${r.title}`, body: `${when}${r.place ? ' · ' + r.place : ''}`, url: '#/calendar' });
   }
+}
+
+// когда турнир: точная дата со временем или «ноябрь 2026 · дата уточняется»
+// deno-lint-ignore no-explicit-any
+function tourWhen(r: any, cl: any) {
+  if (r.config?.dateMode === 'month' && r.date) return `${monthName(String(r.date).slice(0, 7))} · дата уточняется`;
+  if (!r.starts_at) return '';
+  return new Date(r.starts_at).toLocaleString('ru-RU', {
+    timeZone: cl.settings?.timezone || 'Europe/Moscow', weekday: 'short', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
+  });
 }
 
 // ───────────── Задачи по расписанию (по каждому клубу отдельно) ─────────────
