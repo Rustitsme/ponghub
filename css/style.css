@@ -1266,9 +1266,6 @@ body.av-big { overflow: hidden; }
 .wt-bar { height: 7px; margin-top: 5px; border-radius: 9px; background: var(--line); overflow: hidden; } .wt-bar i { display: block; height: 100%; border-radius: 9px; background: #1f5fc4; }
 .wt-q.done .wt-bar i, .wt-q.got .wt-bar i { background: #16a34a; } .wt-q.got { opacity: .65; }
 .wt-rw { display: grid; justify-items: end; gap: 4px; font: 800 16px var(--display); color: #157a4b; white-space: nowrap; } .wt-rw .muted { font: 600 11px var(--font); }
-.wt-tile { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; margin-top: 12px; padding: 12px 14px; border-radius: 18px; background: var(--surface); border: 4px solid #1f5fc4; box-shadow: 0 0 0 3px #0e3b8c, 0 0 0 5px rgba(255, 210, 63, .9); color: var(--text); text-decoration: none; }
-.wt-tile > span { font-size: 28px; } .wt-tile b { display: block; font: 800 17px var(--display); text-transform: uppercase; } .wt-tile small { font-size: 12px; color: var(--muted); }
-.wt-tile em { font-style: normal; padding: 7px 12px; border-radius: 99px; background: #e63946; color: #fff; font: 800 12px var(--font); } .wt-tile em.off { background: var(--bg2); color: var(--muted); }
 
 /* ── Игроки, значки, сезоны, напоминание ── */
 .pl-search { width: 100%; margin-bottom: 10px; }
@@ -1334,3 +1331,27 @@ body.av-big { overflow: hidden; }
 .prn-t4 { margin-top: 2cqw; font: 500 2.5cqw/1.35 Inter, sans-serif; opacity: .9; }
 .prn-fold { position: absolute; left: 0; right: 0; top: 50%; border-top: .5cqw dashed #fff; z-index: 2; }
 .prn-fold span { position: absolute; right: 3cqw; top: -2.6cqw; background: #fff; color: #6b7a90; font: 700 2.2cqw Inter, sans-serif; padding: .4cqw 1.6cqw; border-radius: 99px; }
+
+/* ── Главная: плитки ── */
+.bento { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.bento > * { grid-column: span 2; min-width: 0; margin: 0; }
+.bento > .half { grid-column: auto; }
+.bt { position: relative; display: block; overflow: hidden; padding: 12px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); color: var(--text); }
+.bt h4 { margin: 0 0 6px; font: 800 14px var(--display); text-transform: uppercase; letter-spacing: .4px; color: var(--muted); }
+.bt > b { display: block; font: 800 30px/1 var(--display); white-space: nowrap; } .bt > b i { margin-left: 4px; font: 800 13px var(--display); font-style: normal; color: var(--muted); }
+.bt > small { display: block; margin-top: 4px; font-size: 12px; color: var(--muted); }
+.bt-go { display: block; margin-top: 8px; font: 700 12px var(--font); color: var(--red); }
+.bt-me { display: grid; grid-template-columns: minmax(0, 1fr) 104px; gap: 10px; align-items: center; background: var(--table); color: #fff; border: 3px solid var(--line-strong); text-shadow: 0 1px 2px rgba(10, 50, 100, .25); }
+.bt-me-main { display: flex; align-items: center; gap: 12px; min-width: 0; color: inherit; }
+.bt-me-id { min-width: 0; } .bt-me-id .badges { display: flex; flex-wrap: wrap; gap: 4px; } .bt-me-id .league, .bt-me-id .role-badge { margin: 0; }
+.bt-me .big-num { font-size: 40px; margin-top: 4px; }
+.bt-me small { display: block; font-size: 12px; opacity: .9; } .bt-me .delta.up { color: #7dffc4; }
+.bt-rk { height: 104px; border-radius: 16px; border: 3px solid #fff; background: radial-gradient(90% 75% at 50% 35%, #f3f5f9 0%, #e3e8f0 60%, #cfd7e3 100%); }
+.bt-spark { display: grid; place-items: center; }
+.bt-coin { background: linear-gradient(160deg, var(--surface), var(--surface2)); }
+.bt-bonus { background: linear-gradient(160deg, #ffe48a, #ffc93c); border-color: #f2b632; color: #2a1d00; }
+.bt-bonus h4, .bt-bonus b i { color: #6b4a00; } .bt-bonus .bt-go { color: #6b4a00; }
+.bt-bonus.done { background: var(--surface2); border-color: var(--line); color: var(--muted); } .bt-bonus.done h4, .bt-bonus.done b i, .bt-bonus.done .bt-go { color: var(--muted); }
+.bt-ssn > b { font-size: 20px; overflow: hidden; text-overflow: ellipsis; }
+.bt .bt-n { font-size: 26px; } .bt .wt-bar { margin-top: 8px; }
+.bento > .live-now { border: 2px solid var(--red); }

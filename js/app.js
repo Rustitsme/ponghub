@@ -457,7 +457,6 @@ function viewHome() {
   const hist = S.A.history.get(me.id) || [];
   const d30 = r - ratingAt(S.A, me.id, Date.now() - 30 * DAY);
   const st = playerStats(me.id, S.A, S.data.tournaments);
-  const nl = nextLeague(r);
   const pom = playerOfMonth(S.A, S.data.profiles);
   const pc = pendingCounts();
   const recent = S.data.matches.filter(m => m.status === 'approved' && (isAdmin() || players(m).includes(me.id))).sort((a, b) => ts(b) - ts(a)).slice(0, 6);
@@ -465,56 +464,40 @@ function viewHome() {
   const active = S.data.tournaments.filter(t => t.status === 'active');
   const mine = S.data.matches.filter(m => m.status === 'pending' && m.submitted_by === me.id);
 
-  // ракетка и 3D-игрок на главной (за флажками shop и avatar)
-  const showRk = feature('shop') && S.shop, showPl = feature('avatar');
-  const heroTop = showRk
-    ? `<div class="hm-top"><div><div class="hero-top">${ava(me, 'lg')}<div class="hero-id"><div class="hello">Привет,</div><div class="hero-nick">${esc(me.nickname)}</div><div class="badges">${leagueBadge(r)}${roleBadge(me)}</div></div></div>
-        <div class="hm-place">${st.matches ? pos : '—'} <small>место из ${total}</small></div></div><a href="#/racket" class="hm-frame hm-rk" id="hm-rk" aria-label="Моя ракетка"></a></div>`
-    : `<div class="hero-top">
-      ${ava(me, 'lg')}
-      <div class="hero-id"><div class="hello">Привет,</div><div class="hero-nick">${esc(me.nickname)}</div><div class="badges">${leagueBadge(r)}${roleBadge(me)}</div></div>
-      <div class="hero-rank"><small>место</small><b>${st.matches ? pos : '—'}</b><small>из ${total}</small></div>
-    </div>`;
+  // главная — плитки (вариант 3): «я», пинг-коины, бонус дня, дальше всё живое; 3D-игрок — в Профиле
+  const showRk = feature('shop') && S.shop;
   const bonus = S.shop && !S.shop.streak.claimed;
-  const tiles = showRk ? `<div class="hm-col"><a href="#/shop" class="hm-side"><small>Пинг-коины</small><b>${fmtC(S.coins ?? 0)}<i>PC</i></b><span>Магазин →</span></a>
-      <a href="#/shop?tab=bonus" class="hm-side bonus ${bonus ? '' : 'done'}"><small>🔥 Бонус дня</small><b>${bonus ? '+' + STREAK[S.shop.streak.day - 1] : '✓'}<i>${bonus ? 'PC' : 'получен'}</i></b><span>${bonus ? 'Забрать →' : 'Завтра ещё'}</span></a></div>` : '';
-  const homeRow = showRk ? `<div class="hm-row ${showPl ? '' : 'solo'}">${showPl ? `<a href="#/avatar" class="hm-card"><div class="hm-frame" id="hm-pl"></div><span class="hm-tag">Мой игрок</span></a>` : ''}${tiles}</div>` : '';
+  const coins = S.coins != null && (feature('shop') || predOn());
+  const meTile = `<section class="bt bt-me">
+    <a href="#/player/${me.id}" class="bt-me-main">${ava(me, 'md')}<div class="bt-me-id"><div class="badges">${leagueBadge(r)}${roleBadge(me)}</div>
+      <div class="big-num">${fmtR(r)}</div><small>${st.matches ? `${pos}-е место из ${total}` : 'ещё нет матчей'} · <span title="за 30 дней">${delta(d30)}</span></small></div></a>
+    ${showRk ? '<a href="#/racket" class="hm-frame bt-rk" id="hm-rk" aria-label="Моя ракетка"></a>' : `<div class="bt-spark">${sparkline(hist.slice(-20))}</div>`}
+  </section>`;
+  const coinTile = coins ? `<a href="${feature('shop') ? '#/shop' : '#/predict'}" class="bt bt-coin ${S.shop ? 'half' : ''}"><h4>🪙 Пинг-коины</h4><b>${fmtC(S.coins)}<i>PC</i></b><span class="bt-go">${feature('shop') ? 'Магазин' : 'Прогнозы'} →</span></a>` : '';
+  const bonusTile = S.shop ? `<a href="#/shop?tab=bonus" class="bt bt-bonus half ${bonus ? '' : 'done'}"><h4>🔥 Бонус дня</h4><b>${bonus ? '+' + STREAK[S.shop.streak.day - 1] : '✓'}<i>${bonus ? 'PC' : 'получен'}</i></b><span class="bt-go">${bonus ? 'Забрать' : 'Завтра ещё'} →</span></a>` : '';
+  const W = feature('shop') && S.tasks;
+  const tDone = W ? W.tasks.filter(t => t.have >= t.goal).length : 0;
+  const tReady = W ? W.tasks.filter(t => t.have >= t.goal && !(W.claimed || []).includes(t.key)).reduce((a, t) => a + t.reward, 0) : 0;
+  const cur = S.seasons.find(t => !t.finished), sp = cur && seasonPlace(cur, me.id), left = seasonDaysLeft();
+  const ssnTile = `<a href="#/seasons" class="bt bt-ssn ${W ? 'half' : ''}"><h4>⭐ Сезон</h4>
+    ${pom ? `<b>${esc(P(pom.id).nickname)}</b><small>лидер · ${fmtD(pom.g)}</small>` : '<b>Борьба за титул</b>'}
+    <small>${sp?.place ? `вы ${sp.place}-й · ` : ''}до конца ${left} ${plural(left, 'день', 'дня', 'дней')}</small></a>`;
+  const taskTile = W ? `<a href="#/shop?tab=bonus" class="bt half"><h4>🎯 Задания</h4><b class="bt-n">${tDone}/${W.tasks.length}</b><div class="wt-bar"><i style="width:${tDone / W.tasks.length * 100}%"></i></div><small>${tReady ? `+${tReady} PC ждут` : 'неделя идёт'}</small></a>` : '';
 
   return `
-  <section class="hero table-card${showRk ? ' hm' : ''}">
-    ${heroTop}
-    <div class="hero-mid">
-      <div><div class="big-num">${fmtR(r)}</div><div class="muted small">рейтинг · ${delta(d30)} за 30 дней</div></div>
-      ${sparkline(hist.slice(-20))}
-    </div>
-    <div class="hero-stats">
-      <div><b>${st.wins}</b><small>побед</small></div><div><b>${st.losses}</b><small>поражений</small></div>
-      <div><b>${pct(st.winRate)}</b><small>% побед</small></div>
-      <div><b>${st.streakType === 'W' ? '🔥' + st.streak : st.streak ? '−' + st.streak : '0'}</b><small>серия</small></div>
-    </div>
-    ${nl ? `<div class="next-league"><span>До лиги «${nl.name}»: ${fmtR(nl.min - r)}</span><div class="bar thin"><i style="width:${Math.max(4, Math.min(100, 100 - (nl.min - r) * 5))}%"></i></div></div>` : ''}
-    <div class="row-btns hero-links"><a href="#/player/${me.id}" class="btn ghost-light">Статистика и анализ →</a>${predOn() && S.coins != null && !showRk ? `<a href="${feature('shop') ? '#/shop' : '#/predict'}" class="btn coin-btn">${feature('shop') ? '🛍️' : '🎯'} ${fmtC(S.coins)} PC</a>` : ''}</div>
-  </section>
-
   ${pc.total ? `<a href="#/admin" class="alert">🔔 Ждут вашего решения: ${pc.users ? `${pc.users} ${plural(pc.users, 'заявка', 'заявки', 'заявок')} на регистрацию` : ''}${pc.users && pc.matches ? ', ' : ''}${pc.matches ? `${pc.matches} ${plural(pc.matches, 'матч', 'матча', 'матчей')}` : ''} →</a>` : ''}
   ${mine.length ? `<div class="alert info">⏳ ${mine.length} ${plural(mine.length, 'ваш результат ждёт', 'ваших результата ждут', 'ваших результатов ждут')} подтверждения администратором</div>` : ''}
 
-  ${homeRow}
-  ${feature('shop') ? tasksTile() : ''}
-  ${liveBlock()}
-  ${!showRk && feature('shop') && S.shop && !S.shop.streak.claimed ? `<a href="#/shop?tab=bonus" class="card sh-home"><span class="sh-home-ic">🔥</span><span class="rn"><b>Бонус дня: +${STREAK[S.shop.streak.day - 1]} PC</b><small class="muted">День ${S.shop.streak.day} из 7 — заберите, пока не сгорело</small></span><span class="btn sm primary">Забрать</span></a>` : ''}
-  ${predHomeBlock()}
-  ${challengesBlock()}
-  ${idleNudge()}
-  ${weekCard()}
-
-  ${active.map(t => `<a href="#/tournament/${t.id}" class="card live-t"><span class="live">● LIVE</span><div><b>${esc(t.name)}</b><div class="muted small">${FORMATS[t.format]} · ${t.participants.length} участников</div></div><span>→</span></a>`).join('')}
-
-  ${pom ? `<section class="card pom" data-act="go" data-href="#/seasons">
-    <div class="pom-badge">⭐ Лидер сезона · ${new Date().toLocaleDateString('ru-RU', { month: 'long' })}</div>
-    <div class="pom-row">${ava(P(pom.id), 'md')}<div><b>${esc(P(pom.id).nickname)}</b><div class="muted small">прибавил ${fmtD(pom.g)} за месяц · все сезоны →</div></div></div>
-    <div class="pom-me">${seasonMine(me.id)}</div>
-  </section>` : ''}
+  <div class="bento">
+    ${meTile}${coinTile}${bonusTile}
+    ${liveBlock()}
+    ${active.map(t => `<a href="#/tournament/${t.id}" class="card live-t"><span class="live">● LIVE</span><div><b>${esc(t.name)}</b><div class="muted small">${FORMATS[t.format]} · ${t.participants.length} участников</div></div><span>→</span></a>`).join('')}
+    ${predHomeBlock()}
+    ${challengesBlock()}
+    ${idleNudge()}
+    ${ssnTile}${taskTile}
+    ${weekCard()}
+  </div>
 
   <section class="card">
     <div class="card-h"><h3>Топ-5</h3><a href="#/rating" class="link">Весь рейтинг →</a></div>
@@ -2575,12 +2558,6 @@ function tasksCard() {
       <div class="wt-rw">+${t.reward}${got(t) ? '<span class="muted">✓ получено</span>' : done(t) ? `<button class="btn xs primary" data-act="task-claim" data-k="${t.key}">Забрать</button>` : '<span class="muted">в процессе</span>'}</div></div>`).join('')}
     ${ready ? '' : '<p class="muted small">Задания проверяются по подтверждённым матчам клуба.</p>'}</section>`;
 }
-function tasksTile() {
-  const W = S.tasks; if (!W) return '';
-  const n = W.tasks.filter(t => t.have >= t.goal).length, ready = W.tasks.filter(t => t.have >= t.goal && !(W.claimed || []).includes(t.key));
-  return `<a href="#/shop?tab=bonus" class="wt-tile"><span>🎯</span><div><b>Задания недели</b><small>${n} из ${W.tasks.length}${ready.length ? ` · можно забрать +${ready.reduce((a, t) => a + t.reward, 0)} PC` : ''}</small><div class="wt-bar"><i style="width:${n / W.tasks.length * 100}%"></i></div></div>${ready.length ? '<em>Забрать</em>' : '<em class="off">→</em>'}</a>`;
-}
-
 function bonusBody() {
   const sk = S.shop.streak, d = sk.day;
   const r = ratingOf(S.me.id);
