@@ -497,23 +497,25 @@ function viewHome() {
   const ssnTile = `<a href="#/seasons" class="bt bt-ssn ${W ? 'half' : ''}"><h4>⭐ Сезон</h4>
     ${pom ? `<b>${esc(P(pom.id).nickname)}</b><small>лидер · ${fmtD(pom.g)}</small>` : '<b>Борьба за титул</b>'}
     <small>${sp?.place ? `вы ${sp.place}-й · ` : ''}до конца ${left} ${plural(left, 'день', 'дня', 'дней')}</small></a>`;
+  const tourTiles = S.data.tournaments.filter(t => t.status === 'open' && !tReg(t).includes(me.id)).slice(0, 2).map(t => `<a href="#/tournament/${t.id}" class="bt bt-tour"><h4>🏆 Запись на турнир</h4><b>${esc(t.name)}</b><small>📅 ${esc(tWhen(t))}${t.place ? ' · 📍 ' + esc(t.place) : ''} · записались: ${tReg(t).length}</small><span class="bt-go">Записаться →</span></a>`).join('');
+  const activeTiles = active.map(t => `<a href="#/tournament/${t.id}" class="card live-t"><span class="live">● LIVE</span><div><b>${esc(t.name)}</b><div class="muted small">${FORMATS[t.format]} · ${t.participants.length} участников</div></div><span>→</span></a>`).join('');
+  // компьютер: главная в две колонки; в левой под вызовами — 3D-игрок (кому открыт) или «Кого вызвать»
+  const desk = matchMedia('(min-width: 1024px)').matches;
+  const opps = desk && !feature('avatar') ? suggestOpponents(3) : [];
+  const deskTile = !desk ? '' : feature('avatar')
+    ? `<a href="#/avatar" class="bt bt-pl"><div class="hm-frame" id="hm-pl"></div><span class="hm-tag">Мой игрок</span></a>`
+    : opps.length ? `<section class="bt bt-opp"><h4>⚔️ Кого вызвать</h4><p class="muted small">Соперники по силам — ближе всех к вам по рейтингу</p>
+      ${opps.map(({ p }) => `<div class="plx-row"><a href="#/player/${p.id}" class="pl-main">${ava(p, 'md')}<span class="rn"><b>${esc(p.nickname)}</b><small>${fmtR(ratingOf(p.id))} · шанс ${pct(expected(r, ratingOf(p.id), S.A.S.spread))}</small></span></a>${challengeBtn(p.id)}</div>`).join('')}
+      <a href="#/players" class="bt-go">Все игроки →</a></section>` : '';
   const taskTile = W ? `<a href="#/shop?tab=bonus" class="bt half"><h4>🎯 Задания</h4><b class="bt-n">${tDone}/${W.tasks.length}</b><div class="wt-bar"><i style="width:${tDone / W.tasks.length * 100}%"></i></div><small>${tReady ? `+${tReady} PC ждут` : 'неделя идёт'}</small></a>` : '';
 
   return `
   ${pc.total ? `<a href="#/admin" class="alert">🔔 Ждут вашего решения: ${pc.users ? `${pc.users} ${plural(pc.users, 'заявка', 'заявки', 'заявок')} на регистрацию` : ''}${pc.users && pc.matches ? ', ' : ''}${pc.matches ? `${pc.matches} ${plural(pc.matches, 'матч', 'матча', 'матчей')}` : ''} →</a>` : ''}
   ${mine.length ? `<div class="alert info">⏳ ${mine.length} ${plural(mine.length, 'ваш результат ждёт', 'ваших результата ждут', 'ваших результатов ждут')} подтверждения администратором</div>` : ''}
 
-  <div class="bento">
-    ${meTile}${coinTile}${bonusTile}
-    ${S.data.tournaments.filter(t => t.status === 'open' && !tReg(t).includes(me.id)).slice(0, 2).map(t => `<a href="#/tournament/${t.id}" class="bt bt-tour"><h4>🏆 Запись на турнир</h4><b>${esc(t.name)}</b><small>📅 ${esc(tWhen(t))}${t.place ? ' · 📍 ' + esc(t.place) : ''} · записались: ${tReg(t).length}</small><span class="bt-go">Записаться →</span></a>`).join('')}
-    ${liveBlock()}
-    ${active.map(t => `<a href="#/tournament/${t.id}" class="card live-t"><span class="live">● LIVE</span><div><b>${esc(t.name)}</b><div class="muted small">${FORMATS[t.format]} · ${t.participants.length} участников</div></div><span>→</span></a>`).join('')}
-    ${predHomeBlock()}
-    ${challengesBlock()}
-    ${idleNudge()}
-    ${ssnTile}${taskTile}
-    ${weekCard()}
-  </div>
+  ${desk ? `<div class="bento-2"><div class="bento">${meTile}${challengesBlock()}${idleNudge()}${deskTile}</div>
+    <div class="bento">${coinTile}${bonusTile}${tourTiles}${liveBlock()}${activeTiles}${predHomeBlock()}${ssnTile}${taskTile}${weekCard()}</div></div>`
+  : `<div class="bento">${meTile}${coinTile}${bonusTile}${tourTiles}${liveBlock()}${activeTiles}${predHomeBlock()}${challengesBlock()}${idleNudge()}${ssnTile}${taskTile}${weekCard()}</div>`}
 
   <section class="card">
     <div class="card-h"><h3>Топ-5</h3><a href="#/rating" class="link">Весь рейтинг →</a></div>
@@ -4239,6 +4241,8 @@ async function boot() {
     if (S.user) { await reload(); if (!$modal.classList.contains('open')) render(); }
   });
   addEventListener('hashchange', () => { closeModal(); render(); });
+  // окно растянули до компьютерной ширины или сузили до телефонной — перерисовываем раскладку
+  matchMedia('(min-width: 1024px)').addEventListener?.('change', () => { if (!$modal.classList.contains('open')) render(); });
   render();
   document.getElementById('splash')?.remove();
   setTimeout(startupModals, 800);

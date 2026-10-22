@@ -1433,10 +1433,10 @@ body.av-big { overflow: hidden; }
 
   /* главная: плитки в 4 колонки, дальше — две колонки */
   .pg-home { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
-  .pg-home > * { margin: 0 !important; } .pg-home > .bento, .pg-home > .alert { grid-column: 1 / -1; }
-  .pg-home .bento { grid-template-columns: repeat(4, 1fr); gap: 14px; grid-auto-flow: row dense; align-items: start; }
-  .pg-home .bento > * { grid-column: span 2; } .pg-home .bento > .half { grid-column: span 1; }
-  .pg-home .bento > .bt-me { grid-column: span 2; grid-row: span 2; align-self: stretch; grid-template-columns: minmax(0, 1fr) 150px; padding: 20px; }
+  .pg-home > * { margin: 0 !important; } .pg-home > .bento-2, .pg-home > .alert { grid-column: 1 / -1; }
+  .bento-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  .pg-home .bento { gap: 14px; }
+  .pg-home .bento > .bt-me { grid-template-columns: minmax(0, 1fr) 150px; padding: 20px; }
   .pg-home .bt-me .big-num { font-size: 60px; } .pg-home .bt-me .ava.md { width: 72px; height: 72px; font-size: 36px; } .pg-home .bt-rk { height: 150px; }
   /* игроки и турниры — сеткой */
   .pl-list { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; }
@@ -1451,17 +1451,11 @@ body.av-big { overflow: hidden; }
   .pg-player .stat-grid { grid-template-columns: repeat(8, 1fr); }
   .pg-me > .btn, .pg-me > .ver { grid-column: 1 / -1; }
 }
-/* вариант Б (макет): меню сверху строкой */
+@media (min-width: 1024px) { .side-bell { display: none; } }
 @media (min-width: 1024px) {
-  html.nav-top { --side-w: 0px; }
-  html.nav-top .side { position: sticky; flex-direction: row; align-items: center; width: auto; height: 64px; bottom: auto; padding: 0 28px; border-right: 0; border-bottom: 1px solid var(--line); gap: 18px; }
-  html.nav-top .side .brand { flex: none; }
-  html.nav-top .side-nav { flex-direction: row; flex: 1; gap: 2px; overflow-x: auto; }
-  html.nav-top .side-nav hr { display: none; }
-  html.nav-top .side-i { padding: 8px 11px; white-space: nowrap; font-size: 14px; } html.nav-top .side-i span { width: auto; }
-  html.nav-top .side-i.ico b { display: none; } html.nav-top .side-i.ico { position: relative; } html.nav-top .side-i.ico .dot { position: absolute; top: 0; right: -2px; }
-  html.nav-top .side-add { order: 3; flex: none; padding: 9px 14px; }
-  html.nav-top .top { display: none; }
-  html.nav-top .page { margin-left: auto; }
+  /* главная на компьютере: 3D-игрок или «Кого вызвать» — справа, на две строки */
+  .bt-pl { display: flex; padding: 6px; background: linear-gradient(160deg, #2f74d6, #1f5fc4 55%, #0e3b8c); border: 0; }
+  .bt-pl .hm-frame { flex: 1; min-height: 340px; border-radius: 14px; background: radial-gradient(90% 75% at 50% 35%, #f3f5f9 0%, #e3e8f0 60%, #cfd7e3 100%); }
+  .bt-opp .plx-row:last-of-type { border-bottom: 0; }
+  .bt-opp > .muted { margin: -2px 0 6px; }
 }
-@media (min-width: 1024px) { html:not(.nav-top) .side-bell { display: none; } }
