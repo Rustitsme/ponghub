@@ -15,6 +15,28 @@ export function overlayMember(p, m) {
     : { active: 'approved', pending: 'pending', archived: 'archived', former: 'archived' }[m.status] || 'archived';
   return { ...p, role: ROLE_OUT[m.role] || 'player', status, initial_rating: m.initial_rating, club_status: m.status, joined_at: m.joined_at };
 }
+// ── Доступ к базе с VPN и без ──
+// В России адреса Supabase часто блокируют, а сайт открывается. Тогда ходим в базу через свой сайт:
+// Vercel пересылает /sb/… в Supabase (vercel.json). Напрямую — если база доступна (быстрее и с живыми обновлениями).
+const PROXY = () => `${location.origin}/sb`;
+let BASE = CONFIG.SUPABASE_URL;
+// фото из хранилища — тем же путём, что и база
+export const media = u => (u && BASE !== CONFIG.SUPABASE_URL && u.startsWith(CONFIG.SUPABASE_URL) ? BASE + u.slice(CONFIG.SUPABASE_URL.length) : u);
+async function reachable(url, ms) {
+  const c = new AbortController(), t = setTimeout(() => c.abort(), ms);
+  try { const r = await fetch(`${url}/auth/v1/health`, { headers: { apikey: CONFIG.SUPABASE_ANON_KEY }, signal: c.signal, cache: 'no-store' }); return r.ok; }
+  catch { return false; } finally { clearTimeout(t); }
+}
+async function pickBase() {
+  const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
+  const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* */ } };
+  // в прошлый раз напрямую не вышло — сразу через сайт, а прямой путь проверяем в фоне на следующий запуск
+  if (lsGet('ponghub_route') === 'proxy') { reachable(CONFIG.SUPABASE_URL, 4000).then(ok => ok && lsSet('ponghub_route', 'direct')); return PROXY(); }
+  if (await reachable(CONFIG.SUPABASE_URL, 3000)) { lsSet('ponghub_route', 'direct'); return CONFIG.SUPABASE_URL; }
+  lsSet('ponghub_route', 'proxy');
+  return PROXY();
+}
+
 // функции, которым нужен текущий клуб
 const RPC_CID = new Set(['ensure_wallet', 'coin_leaderboard', 'player_predictions']);
 
@@ -47,9 +69,11 @@ class SupaStore {
   mode = 'supabase';
 
   async connect() {
-    const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.50.0/+esm');
-    this.sb = createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY, {
-      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+    const [{ createClient }, base] = await Promise.all([import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.50.0/+esm'), pickBase()]);
+    BASE = base; this.proxy = base !== CONFIG.SUPABASE_URL;
+    this.sb = createClient(base, CONFIG.SUPABASE_ANON_KEY, {
+      // ключ сессии — один и тот же при любом пути, чтобы при включении/выключении VPN не выкидывало из аккаунта
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storageKey: `sb-${new URL(CONFIG.SUPABASE_URL).hostname.split('.')[0]}-auth-token` },
     });
   }
 
@@ -338,7 +362,9 @@ class SupaStore {
     const path = `${user.id}/${Date.now()}.jpg`;
     const { error } = await this.sb.storage.from('avatars').upload(path, blob, { contentType: 'image/jpeg', upsert: true });
     if (error) throw translateError(error);
-    return this.sb.storage.from('avatars').getPublicUrl(path).data.publicUrl;
+    // в базе храним настоящий адрес хранилища (показываем через media())
+    const u = this.sb.storage.from('avatars').getPublicUrl(path).data.publicUrl;
+    return u.startsWith(BASE) ? CONFIG.SUPABASE_URL + u.slice(BASE.length) : u;
   }
 
   async pushPublicKey() {
@@ -366,6 +392,8 @@ class SupaStore {
 
   subscribe(cb) {
     let timer;
+    // через сайт живой канал не проходит — обновляемся сами, пока приложение на экране
+    if (this.proxy) { setInterval(() => { if (!document.hidden) cb(); }, 15000); return; }
     const ch = this.sb.channel('ponghub-all');
     for (const t of TABLES)
       ch.on('postgres_changes', { event: '*', schema: 'public', table: t }, () => {

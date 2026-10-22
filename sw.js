@@ -1,6 +1,6 @@
 // Service worker: приложение открывается быстро, работает как установленное и принимает push-уведомления.
 // Стратегия «сначала сеть»: всегда берём свежую версию, кэш — только если нет интернета.
-const CACHE = 'ponghub-v66';
+const CACHE = 'ponghub-v67';
 const SHELL = ['./', './index.html', './css/style.css', './js/app.js', './js/engine.js', './js/tourney.js', './js/store.js', './js/tv.js', './js/shop-catalog.js', './js/shop3d.js', './js/player3d.js', './js/config.js',
   './icons/hub.svg', './icons/table.svg', './manifest-hub.webmanifest', './manifest-table.webmanifest'];
 
@@ -15,7 +15,8 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
-  if (e.request.method !== 'GET' || url.origin !== location.origin) return;
+  // запросы к базе через сайт (/sb/…) не кэшируем — только свежие данные
+  if (e.request.method !== 'GET' || url.origin !== location.origin || url.pathname.startsWith('/sb/')) return;
   e.respondWith(
     fetch(e.request)
       .then(res => { const copy = res.clone(); caches.open(CACHE).then(c => c.put(e.request, copy)); return res; })

@@ -1,4 +1,4 @@
-import { createStore } from './store.js';
+import { createStore, media } from './store.js';
 import { ITEMS, RG, RGSUB, RUBBER_COLORS, STYLE, EQUIP, LEAGUE_REWARDS, STREAK, STARTER, byId, colorOf, priceOf, keyOf, parseKey } from './shop-catalog.js';
 import { thumb, mountViewer, loadThree, racketShot } from './shop3d.js';
 import {
@@ -35,7 +35,7 @@ const settings = () => ({ ...DEFAULT_SETTINGS, ...(S.data?.settings || {}) });
 const tById = id => S.data.tournaments.find(t => t.id === id);
 
 function ava(p, cls = '') {
-  const inner = p.photo_url ? `<img src="${esc(p.photo_url)}" alt="" loading="lazy">` : esc(p.avatar || (p.nickname || '?')[0]);
+  const inner = p.photo_url ? `<img src="${esc(media(p.photo_url))}" alt="" loading="lazy">` : esc(p.avatar || (p.nickname || '?')[0]);
   return `<span class="ava ${cls}" style="--c:${esc(p.color || '#e63946')}">${inner}</span>`;
 }
 function leagueBadge(r) { const l = leagueOf(r); return `<span class="league ${l.cls}">${l.name}</span>`; }
@@ -1694,7 +1694,7 @@ async function sharePlayer(id, noPhoto = false) {
   const cx = 540, cy = 400, R = 160;
   x.save(); x.beginPath(); x.arc(cx, cy, R, 0, Math.PI * 2); x.closePath();
   x.fillStyle = p.color || '#e63946'; x.fill(); x.clip();
-  const photo = p.photo_url && !noPhoto ? await img(p.photo_url, true) : null;
+  const photo = p.photo_url && !noPhoto ? await img(media(p.photo_url), true) : null;
   if (photo) { const k = Math.max(2 * R / photo.width, 2 * R / photo.height); x.drawImage(photo, cx - photo.width * k / 2, cy - photo.height * k / 2, photo.width * k, photo.height * k); }
   else { x.fillStyle = '#fff'; x.textAlign = 'center'; x.font = '160px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif'; x.fillText(p.avatar || (p.nickname || '?')[0], cx, cy + 10); }
   x.restore();
