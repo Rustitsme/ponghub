@@ -1466,3 +1466,15 @@ body.av-big { overflow: hidden; }
   .bt-opp .plx-row:last-of-type { border-bottom: 0; }
   .bt-opp > .muted { margin: -2px 0 6px; }
 }
+@media (min-width: 1024px) {
+  /* большое синее табло на компьютере */
+  .h-hero .hm-top { grid-template-columns: minmax(0, 1fr) 170px; }
+  .h-hero .hm-rk { height: 200px; }
+  .h-hero .hero-nick { font-size: 30px; }
+  .h-hero .big-num { font-size: 64px; }
+  .h-hero .spark { width: 160px; height: 52px; }
+  .h-col > .mv > * { margin: 0; }
+}
+/* 3D-игрок и ракетка вертятся мышью: ссылку вокруг не «перетаскиваем» */
+.bt-pl, .hm-rk, .hm-card { -webkit-user-drag: none; user-select: none; }
+.mcard[hidden] { display: none !important; }
