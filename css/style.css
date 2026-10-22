@@ -1395,3 +1395,8 @@ body.av-big { overflow: hidden; }
 .bt-bonus .bt-go { background: #fff; color: var(--red); box-shadow: 0 3px 8px rgba(180, 86, 10, .25); }
 .bt-bonus.done .bt-go { background: none; box-shadow: none; padding: 0; color: var(--muted); font-weight: 600; }
 .bt-coin:active .bt-go, .bt-bonus:active .bt-go { transform: scale(.96); }
+/* прогнозы другого игрока */
+.pr-who { cursor: pointer; }
+.pu-stats { grid-template-columns: repeat(3, 1fr); }
+.pu-list { max-height: 55vh; overflow-y: auto; }
+.pu-h { display: flex; align-items: center; gap: 12px; color: inherit; padding-right: 44px; }
