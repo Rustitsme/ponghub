@@ -3321,7 +3321,7 @@ function openMatchForm(opts = {}) {
     if (checkPlayers(err) !== true) return;
     const dbl = st.kind === 'doubles';
     const row = {
-      kind: st.kind, type: lockFormat ? 'tournament' : dbl ? 'free' : st.type,
+      kind: st.kind, type: (fx.tournament_id || m0?.tournament_id) ? 'tournament' : dbl ? 'free' : st.type,
       player1_id: st.p1, player2_id: st.p2, player3_id: dbl ? st.p3 : null, player4_id: dbl ? st.p4 : null,
       best_of: st.bestOf, points_to: st.pointsTo, rated: dbl ? st.rated : true,
       tournament_id: fx.tournament_id ?? null, stage: fx.stage ?? null, grp: fx.grp ?? null, round: fx.round ?? null, slot: fx.slot ?? null,
@@ -3367,7 +3367,7 @@ function openMatchForm(opts = {}) {
     }
     if (!st.date) return err('Укажите дату');
     const row = {
-      player1_id: st.p1, player2_id: st.p2, type: lockFormat ? 'tournament' : st.type,
+      player1_id: st.p1, player2_id: st.p2, type: (fx.tournament_id || m0?.tournament_id) ? 'tournament' : st.type,
       tournament_id: fx.tournament_id ?? m0?.tournament_id ?? null,
       stage: fx.stage ?? m0?.stage ?? null, grp: fx.grp ?? m0?.grp ?? null, round: fx.round ?? m0?.round ?? null, slot: fx.slot ?? m0?.slot ?? null,
       sets, sets1: s1, sets2: s2, winner_id: s1 > s2 ? st.p1 : st.p2,
