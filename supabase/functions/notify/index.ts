@@ -175,8 +175,17 @@ async function onChange(table: string, type: string, r: any, o: any, actor: stri
   }
 
   if (table === 'tournaments') {
+    // объявлен заранее — всем в клубе: открыта запись
+    if (type === 'INSERT' && r.status === 'open') {
+      const when = r.starts_at ? new Date(r.starts_at).toLocaleString('ru-RU', {
+        timeZone: cl.settings?.timezone || 'Europe/Moscow', weekday: 'short', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
+      }) : '';
+      return send(except(all, r.created_by), { title: `🏆 Запись на турнир «${r.name}»`, body: `${when}${r.place ? ' · ' + r.place : ''} — записывайтесь!`, url: `#/tournament/${r.id}` });
+    }
     if (type === 'INSERT')
       return send(except(r.participants ?? [], r.created_by), { title: 'Новый турнир', body: `«${r.name}» — вы в списке участников`, url: `#/tournament/${r.id}` });
+    if (type === 'UPDATE' && o?.status === 'open' && r.status === 'active')
+      return send(except(r.participants ?? [], r.created_by), { title: `🏓 Турнир «${r.name}» начался`, body: 'Сетка готова — вы в списке участников', url: `#/tournament/${r.id}` });
     if (type === 'UPDATE' && o?.status !== 'finished' && r.status === 'finished' && r.results?.gold)
       return send(all, { title: '🏆 Турнир завершён', body: `«${r.name}»: победитель — ${nick(r.results.gold)}`, url: `#/tournament/${r.id}` });
     return;

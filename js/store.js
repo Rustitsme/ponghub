@@ -184,6 +184,9 @@ class SupaStore {
     if (error) throw translateError(error);
   }
 
+  // запись на турнир (пока запись открыта) — сам участник клуба
+  async tournamentSignup(tid, on) { return this.rpc('tournament_signup', { tid, p_on: on }); }
+
   async rpc(name, args = {}) {
     if (RPC_CID.has(name)) args = { cid: this.cid, ...args };
     const { data, error } = await this.sb.rpc(name, args);
@@ -634,6 +637,15 @@ class LocalStore {
     const me = this.db.session;
     e.attendees = e.attendees.includes(me) ? e.attendees.filter(x => x !== me) : [...e.attendees, me];
     this.save();
+  }
+
+  async tournamentSignup(tid, on) {
+    const t = this.db.tournaments.find(x => x.id === tid), me = this.db.session;
+    if (!t) throw new Error('Турнир не найден');
+    if (t.status !== 'open') throw new Error('Запись на этот турнир закрыта');
+    const reg = (t.registered || []).filter(x => x !== me);
+    t.registered = on ? [...reg, me] : reg;
+    this.save(); return t.registered;
   }
 
   // ── прогнозы в демо-режиме (упрощённая копия серверной логики) ──

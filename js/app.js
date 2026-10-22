@@ -233,7 +233,7 @@ function render() {
   if (!S.user) {
     if (r.name === 'join' && r.args[0]) lsSet('ponghub_join', r.args[0]);
     // QR со стола: после входа вернёмся к этому столу
-    if (r.name === 'play' && r.args[0]) lsSet('ponghub_after', location.hash);
+    if ((r.name === 'play' || r.name === 'tournament') && r.args[0]) lsSet('ponghub_after', location.hash);
     html = authView(r);
   }
   else if (S.recovery) html = recoveryView();
@@ -241,6 +241,7 @@ function render() {
   else if (CLUB_FREE[r.name]) html = CLUB_FREE[r.name](r);
   // QR со стола у человека без клуба — сразу на страницу клуба с заявкой
   else if (!S.club && r.name === 'play' && r.args[0]) html = bare(viewPlay(r));
+  else if (!S.club && r.name === 'tournament' && r.q.get('club')) html = bare(viewTournament(r));
   else if (!S.club) html = S.ctx.me.legacy && !S.ctx.platform?.migration_done && !isFounder() ? waitView() : viewClubs(r);
   else {
     const views = { shop: r => feature('shop') ? viewShop(r) : viewHome(r), racket: () => feature('shop') ? viewRacket() : viewHome(), avatar: r => feature('avatar') ? viewAvatar(r) : viewHome(r), invite: viewInvite, clubedit: viewClubEdit, home: viewHome, rating: viewRating, players: viewPlayers, matches: viewMatches, player: viewPlayer, h2h: viewH2H, tournaments: viewTournaments, tournament: viewTournament, calendar: viewCalendar, admin: viewAdmin, rules: viewRules, me: viewMe, help: viewHelp, seasons: viewSeasons, live: viewLive, inbox: viewInbox, predict: viewPredict, play: viewPlay, tables: viewPrint, print: viewPrint };
@@ -309,6 +310,7 @@ function authView(r) {
   const demo = S.store.mode === 'demo';
   const head = `<div class="auth-hero"><img src="${logo()}" alt="" width="84" height="84"><h1>PongHub</h1><p>Клубы настольного тенниса: рейтинг, матчи, турниры</p></div>
     ${lsGet('ponghub_join') ? '<div class="auth-card invite-note">✉️ Вас пригласили в клуб. Зарегистрируйтесь или войдите — заявка в клуб отправится сама.</div>'
+      : lsGet('ponghub_after')?.includes('/tournament/') ? '<div class="auth-card invite-note">🏆 Вас ждёт турнир. Зарегистрируйтесь или войдите — и откроется запись (если вы ещё не в клубе, заявка отправится сама).</div>'
       : lsGet('ponghub_after') ? '<div class="auth-card invite-note">🏓 Вы у стола клуба. Зарегистрируйтесь или войдите — и сразу к игре (если вы ещё не в клубе, заявка отправится сама).</div>' : ''}`;
   let form;
   if (mode === 'register') form = `
@@ -490,6 +492,7 @@ function viewHome() {
 
   <div class="bento">
     ${meTile}${coinTile}${bonusTile}
+    ${S.data.tournaments.filter(t => t.status === 'open' && !tReg(t).includes(me.id)).slice(0, 2).map(t => `<a href="#/tournament/${t.id}" class="bt bt-tour"><h4>🏆 Запись на турнир</h4><b>${esc(t.name)}</b><small>📅 ${esc(tWhen(t))}${t.place ? ' · 📍 ' + esc(t.place) : ''} · записались: ${tReg(t).length}</small><span class="bt-go">Записаться →</span></a>`).join('')}
     ${liveBlock()}
     ${active.map(t => `<a href="#/tournament/${t.id}" class="card live-t"><span class="live">● LIVE</span><div><b>${esc(t.name)}</b><div class="muted small">${FORMATS[t.format]} · ${t.participants.length} участников</div></div><span>→</span></a>`).join('')}
     ${predHomeBlock()}
@@ -701,6 +704,12 @@ function viewH2H(r) {
 function viewTournaments() {
   const ts2 = [...S.data.tournaments].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const active = ts2.filter(t => t.status === 'active'), done = ts2.filter(t => t.status === 'finished');
+  const open = S.data.tournaments.filter(t => t.status === 'open').sort((a, b) => (a.starts_at || a.date || '').localeCompare(b.starts_at || b.date || ''));
+  const openCard = t => { const on = tReg(t).includes(S.me.id); return `<a href="#/tournament/${t.id}" class="card t-card t-open">
+      <div class="t-ic">📅</div>
+      <div class="t-body"><b>${esc(t.name)}</b><small class="muted">${esc(tWhen(t))}${t.place ? ' · ' + esc(t.place) : ''}</small>
+      <small>✍️ записались: ${tReg(t).length}${on ? ' · <b class="up">вы в списке</b>' : ''}</small></div>
+      <span class="badge ${on ? 'ok' : 'tour'}">${on ? '✓' : 'Записаться'}</span></a>`; };
   const card = t => {
     const r = t.results;
     return `<a href="#/tournament/${t.id}" class="card t-card">
@@ -710,6 +719,7 @@ function viewTournaments() {
       ${t.status === 'active' ? '<span class="live">● идёт</span>' : ''}</a>`;
   };
   return `<div class="page-h"><h1>Турниры</h1>${isAdmin() ? '<button class="btn primary sm" data-act="new-tournament">+ Создать</button>' : ''}</div>
+    ${open.length ? `<div class="sec-h"><h3>Запись открыта</h3></div>${open.map(openCard).join('')}` : ''}
     ${active.length ? `<div class="sec-h"><h3>Идут сейчас</h3></div>${active.map(card).join('')}` : ''}
     <div class="sec-h"><h3>Архив</h3></div>${done.map(card).join('') || '<div class="empty">Завершённых турниров пока нет</div>'}`;
 }
@@ -784,8 +794,17 @@ function tNext(t, ms) {
 const T_HOW = { ko: 'Проиграл — выбыл. Победитель идёт дальше по сетке, финал решает, кто чемпион.', rr: 'Каждый сыграет со всеми по разу. У кого больше побед — тот выше.', groups: 'Игроки поделены на группы, в группе каждый играет с каждым. Лучшие из групп — в плей-офф на вылет.' };
 
 function viewTournament(r) {
+  const cid = r.q.get('club');
+  // QR турнира: клуб из ссылки, в котором вас нет — страница клуба, заявка уходит сама
+  if (cid && S.club?.id !== cid) {
+    if ((S.ctx?.clubs || []).some(c => c.id === cid && c.my_status === 'active')) { setTimeout(() => switchClub(cid).then(() => location.replace(`#/tournament/${r.args[0]}`)), 0); return '<div class="empty"><span class="spin"></span></div>'; }
+    const code = r.q.get('code');
+    setTimeout(() => location.replace(`#/club/${cid}?auto=1&tour=1${code ? '&code=' + encodeURIComponent(code) : ''}`), 0);
+    return '<div class="empty"><span class="spin"></span></div>';
+  }
   const t = tById(r.args[0]);
   if (!t) return '<div class="empty">Турнир не найден</div>';
+  if (t.status === 'open') return viewTournamentOpen(t);
   const ms = tMatches(t);
   const can = isAdmin();
   let body = '';
@@ -821,13 +840,131 @@ function viewTournament(r) {
   <div class="chips people">${t.participants.map(id => `<a href="#/player/${id}" class="chip">${ava(P(id), 'xs')} ${esc(P(id).nickname)}</a>`).join('')}</div>`;
 }
 
+// ───────────── Турнир с записью заранее (статус 'open') ─────────────
+// Владелец объявляет турнир (дата, время, место), участники клуба сами записываются;
+// QR турнира ведёт прямо сюда (новичок — регистрация и заявка в клуб). Старт — из записавшихся.
+const tReg = t => t.registered || [];
+const tWhen = t => {
+  const at = t.starts_at ? new Date(t.starts_at) : t.date ? new Date(t.date + 'T00:00') : null;
+  if (!at) return 'дата уточняется';
+  return at.toLocaleString('ru-RU', { weekday: 'short', day: 'numeric', month: 'long', ...(t.starts_at ? { hour: '2-digit', minute: '2-digit' } : {}) });
+};
+const tourLink = (t, code) => `${location.origin}${location.pathname}#/tournament/${t.id}?club=${S.club.id}${code ? '&code=' + encodeURIComponent(code) : ''}`;
+function signupBtn(t, cls = '') {
+  const on = tReg(t).includes(S.me.id);
+  return `<button class="btn ${on ? '' : 'primary'} ${cls}" data-act="t-signup" data-t="${t.id}" data-on="${on ? 0 : 1}">${on ? '✓ Вы записаны · отменить' : '✍️ Записаться'}</button>`;
+}
+function viewTournamentOpen(t) {
+  const reg = tReg(t), on = reg.includes(S.me.id), can = isAdmin();
+  return `<div class="page-h"><a href="#/tournaments" class="back">← Турниры</a></div>
+  <section class="hero table-card t-hero">
+    <div class="t-title"><h1>${esc(t.name)}</h1><span class="badge ok">запись открыта</span></div>
+    <div class="t-when"><span>📅 ${esc(tWhen(t))}</span>${t.place ? `<span>📍 ${esc(t.place)}</span>` : ''}</div>
+    <div class="chips"><span class="chip">${FORMATS[t.format].split(' (')[0]}</span><span class="chip">до ${winsNeeded(t.best_of)} ${plural(winsNeeded(t.best_of), 'победы', 'побед', 'побед')} в партиях</span><span class="chip">партия до ${t.points_to}</span></div>
+    ${t.config?.note ? `<p class="bio">${esc(t.config.note)}</p>` : ''}
+  </section>
+  <section class="card t-sign ${on ? 'on' : ''}">
+    <div><b>${on ? 'Вы в списке участников 🎉' : 'Хотите сыграть?'}</b><small class="muted">${on ? 'Сетку составят в день турнира по рейтингу.' : 'Запишитесь — сетку составят в день турнира из записавшихся.'}</small></div>
+    ${signupBtn(t, 'full')}
+  </section>
+  <div class="sec-h"><h3>Записались · ${reg.length}</h3></div>
+  ${reg.length ? `<div class="chips people">${reg.map(id => `<a href="#/player/${id}" class="chip">${ava(P(id), 'xs')} ${esc(P(id).nickname)}</a>`).join('')}</div>` : '<div class="empty small">Пока никто не записался — будьте первым!</div>'}
+  ${can ? `<section class="card"><div class="card-h"><h3>📲 QR-код турнира</h3></div>
+    <p class="muted small">Ведёт прямо на этот турнир: игрок наводит камеру и записывается. Новичок сначала регистрируется — заявка в клуб уходит сама, после вашего «Принять» он записывается тем же QR.</p>
+    <div class="t-qr" id="t-qr" data-t="${t.id}"></div>
+ <div class="row-btns t-qr-btns"><button class="btn" data-act="t-qr-svg" data-t="${t.id}">⬇️ SVG (для дизайна)</button><button class="btn" data-act="t-qr-png" data-t="${t.id}">⬇️ PNG 3000×3000</button></div>
+    <button class="btn primary full" data-act="t-poster" data-t="${t.id}">🖨 Плакат турнира А4</button>
+  </section>
+  <section class="card admin-actions">
+    <button class="btn primary" data-act="t-start" data-t="${t.id}">▶ Начать турнир</button>
+    <button class="btn" data-act="t-edit" data-t="${t.id}">✏️ Изменить</button>
+    <button class="btn danger ghost" data-act="del-t" data-t="${t.id}">Удалить</button>
+    <p class="muted small">При старте записавшиеся уже будут отмечены — можно добавить или убрать игроков.</p>
+  </section>` : ''}`;
+}
+// форма «Объявить турнир заранее» (и правка объявленного)
+function openAnnounceForm(t = null) {
+  const at = t?.starts_at ? toLocalInput(t.starts_at) : (() => { const d = new Date(Date.now() + 7 * DAY); d.setHours(19, 0, 0, 0); return toLocalInput(d); })();
+  openModal(`<form data-form="t-announce" class="stack" ${t ? `data-t="${t.id}"` : ''}>
+    <h3>${t ? 'Изменить турнир' : '📅 Объявить турнир заранее'}</h3>
+    <p class="muted small">Игроки увидят дату и место и смогут записаться сами. Сетку составите в день турнира — из записавшихся.</p>
+    <label>Название<input name="name" required maxlength="60" value="${esc(t?.name || '')}" placeholder="Например: Кубок IT Park"></label>
+    <div class="two"><label>Дата и время<input type="datetime-local" name="starts_at" required value="${at}"></label><label>Место<input name="place" maxlength="60" value="${esc(t?.place || '')}" placeholder="Например: 3 этаж, у окна"></label></div>
+    <div class="tf-sec"><small class="tf-lbl">Вид турнира</small><div class="tf-fmt">${[['ko', '🏆', 'Олимпийская', 'на вылет'], ['groups', '🗂', 'Группы', '+ плей-офф'], ['rr', '🔄', 'Круг', 'все со всеми']].map(([k, ic, v, d]) => `<label><input type="radio" name="format" value="${k}" ${(t?.format || 'ko') === k ? 'checked' : ''}><span><i>${ic}</i><b>${v}</b><small>${d}</small></span></label>`).join('')}</div></div>
+    <div class="two"><label>До скольких побед<select name="best_of">${[[3, 'до 2 побед'], [5, 'до 3 побед'], [7, 'до 4 побед']].map(([v, l]) => `<option value="${v}" ${(t?.best_of || 5) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <label>Партия до<select name="points_to">${[11, 21].map(v => `<option ${(t?.points_to || 11) === v ? 'selected' : ''}>${v}</option>`).join('')}</select></label></div>
+    <label>Описание (необязательно)<textarea name="note" maxlength="300" rows="2" placeholder="Взнос, призы, что взять с собой">${esc(t?.config?.note || '')}</textarea></label>
+    <button class="btn primary full">${t ? 'Сохранить' : '📣 Открыть запись'}</button></form>`);
+}
+// QR турнира: SVG — вектор (любой размер без потери качества), PNG — 3000×3000
+async function tourQr(t) {
+  await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js');
+  const code = S.printCode?.club === S.club.id ? S.printCode.code : (S.printCode = { club: S.club.id, code: await S.store.inviteCode(S.club.id) }).code;
+  const q = window.qrcode(0, 'Q'); q.addData(tourLink(t, code)); q.make();
+  return q;
+}
+const qrFile = t => `qr-${(t.name || 'turnir').toLowerCase().replace(/[^a-zа-яё0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 40) || 'turnir'}`;
+async function downloadTourQr(t, kind) {
+  const q = await tourQr(t), n = q.getModuleCount(), m = 4, size = n + m * 2;
+  if (kind === 'svg') {
+    let d = '';
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (q.isDark(y, x)) d += `M${x + m},${y + m}h1v1h-1z`;
+    const svg = `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="1000" height="1000" shape-rendering="crispEdges"><rect width="${size}" height="${size}" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
+    return download(qrFile(t) + '.svg', svg, 'image/svg+xml');
+  }
+  const px = 3000, cell = Math.floor(px / size), off = Math.floor((px - cell * size) / 2) + m * cell;
+  const c = document.createElement('canvas'); c.width = c.height = px;
+  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, px, px); x.fillStyle = '#000';
+  for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) if (q.isDark(r, k)) x.fillRect(off + k * cell, off + r * cell, cell, cell);
+  const blob = await new Promise(res => c.toBlob(res, 'image/png'));
+  download(qrFile(t) + '.png', blob, 'image/png');
+}
+async function renderTourQr() {
+  const el = document.getElementById('t-qr'); if (!el) return;
+  const t = tById(el.dataset.t); if (!t) return;
+  try { el.innerHTML = (await tourQr(t)).createSvgTag({ cellSize: 4, margin: 2, scalable: true }); } catch { el.innerHTML = '<div class="muted small">QR-код не загрузился</div>'; }
+}
+// плакат турнира А4 — в стиле рекламного плаката клуба
+function tourSheet(t) {
+  return `<div class="prn-a4"><div class="prn-in prn-poster prn-tour">
+    <div class="prn-logo"><img src="${logo()}" alt="">PONGHUB</div>
+    <div class="prn-club">${esc(S.club.name)}</div>
+    <h3><span class="prn-fit"><em>Турнир</em></span><span class="prn-fit">${esc(t.name)}</span></h3>
+    <div class="prn-when"><span class="prn-fit">📅 ${esc(tWhen(t))}</span>${t.place ? `<span class="prn-fit">📍 ${esc(t.place)}</span>` : ''}</div>
+    <div class="prn-qrbox"><div class="prn-qr" data-prn="tour" data-t="${t.id}"></div></div>
+    <div class="prn-scan">📷 Наведи камеру — и запишись</div>
+    <div class="prn-steps"><div><i>1</i>Наведи камеру на QR-код</div><div><i>2</i>Нажми «Записаться»</div><div><i>3</i>Приходи играть!</div></div>
+  </div></div>`;
+}
+async function printTour(t) {
+  let el = document.getElementById('print-area');
+  if (!el) { el = document.createElement('div'); el.id = 'print-area'; document.body.appendChild(el); }
+  el.innerHTML = tourSheet(t);
+  const box = el.querySelector('[data-prn=tour]');
+  box.innerHTML = (await tourQr(t)).createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+  await document.fonts?.ready;
+  el.style.cssText = 'display:block;position:fixed;left:-10000px;top:0;width:400px';
+  fitPrint(el);
+  el.style.cssText = '';
+  await new Promise(res => setTimeout(res, 300));
+  window.print();
+}
+
 // ───────────── Календарь ─────────────
 function upcomingItems() {
   const now = Date.now() - 3 * 36e5;
   const ev = S.data.events.filter(e => Date.parse(e.starts_at) >= now).map(e => ({ kind: 'event', t: Date.parse(e.starts_at), e }));
-  return ev.sort((a, b) => a.t - b.t);
+  const tours = S.data.tournaments.filter(t => t.status === 'open').map(t => ({ kind: 'tour', t: Date.parse(t.starts_at || t.date) || Date.now(), tour: t }));
+  return [...ev, ...tours].sort((a, b) => a.t - b.t);
 }
 function eventRow(it) {
+  if (it.kind === 'tour') {
+    const t = it.tour, d = new Date(it.t);
+    return `<div class="ev"><div class="ev-date"><b>${d.getDate()}</b><small>${d.toLocaleDateString('ru-RU', { month: 'short' })}</small></div>
+      <a href="#/tournament/${t.id}" class="ev-body"><b>🏆 ${esc(t.name)}</b><small class="muted">${esc(tWhen(t))}${t.place ? ' · ' + esc(t.place) : ''}</small>
+        <div class="ev-people">${tReg(t).slice(0, 8).map(id => ava(P(id), 'xs')).join('')}<small class="muted">записались: ${tReg(t).length}</small></div></a>
+      <div class="ev-act">${signupBtn(t, 'sm')}</div></div>`;
+  }
   const e = it.e;
   const going = (e.attendees || []).includes(S.me.id);
   const d = new Date(e.starts_at);
@@ -2032,7 +2169,7 @@ function renderMapList(q) {
 function viewClubPage(r) {
   return bare(`<div id="club-page"><div class="empty">Загружаю клуб…</div></div>`, S.club ? '#/home' : '#/map');
 }
-async function renderClubPage(id, code = null, auto = false, table = null) {
+async function renderClubPage(id, code = null, auto = false, table = null, tour = false) {
   const box = document.getElementById('club-page');
   if (!box) return;
   let d;
@@ -2043,7 +2180,7 @@ async function renderClubPage(id, code = null, auto = false, table = null) {
     S.autoJoined.add(id);
     try { await S.store.requestJoin(id, code || null); S.ctx = await S.store.loadContext(); toast('Заявка отправлена — клуб рассмотрит её'); }
     catch (e) { toast(e.message, 'err'); }
-    return renderClubPage(id, code, false, table);
+    return renderClubPage(id, code, false, table, tour);
   }
   const st = { ...DEFAULT_SETTINGS, ...(d.settings || {}) };
   const pool = d.players.filter(p => ['approved', 'archived', 'deleted'].includes(p.status));
@@ -2055,7 +2192,7 @@ async function renderClubPage(id, code = null, auto = false, table = null) {
   const active = d.players.filter(p => p.status === 'approved').length;
   const btn = d.my_status === 'active' ? `<button class="btn primary big full" data-act="switch-club" data-id="${c.id}">Открыть клуб</button>`
     : d.my_status === 'pending' ? `<div class="card row-btns"><span>⏳ Заявка отправлена</span><button class="btn ghost sm" data-act="cancel-request" data-id="${c.id}">Отозвать</button></div>
-      <p class="muted small center">${table ? `Как только владелец примет заявку, снова наведите камеру на QR-код стола ${esc(table)} — и сразу к игре.` : 'Как только владелец примет заявку, клуб откроется — мы пришлём уведомление.'}</p>`
+      <p class="muted small center">${table ? `Как только владелец примет заявку, снова наведите камеру на QR-код стола ${esc(table)} — и сразу к игре.` : tour ? 'Как только владелец примет заявку, снова наведите камеру на QR-код турнира — и запишитесь.' : 'Как только владелец примет заявку, клуб откроется — мы пришлём уведомление.'}</p>`
     : `${code ? '<p class="muted small center">✉️ Вас пригласили в этот клуб. Отправьте заявку — в клуб вы попадёте, когда её примут.</p>' : ''}<button class="btn primary big full" data-act="request-join" data-id="${c.id}" data-code="${esc(code || '')}">Отправить заявку</button>`;
   const fin = d.tournaments.filter(t => t.status === 'finished' && t.results?.gold).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const nick = pid => d.players.find(p => p.id === pid)?.nickname || 'Игрок';
@@ -3359,13 +3496,15 @@ function cropImage(file, host, size) {
   });
 }
 
-function openTournamentForm() {
+function openTournamentForm(pre = null) {
   const players = S.rank.map(x => x.p);
+  const reg = pre ? tReg(pre) : [];
   const opt = (sel) => `<option value="">— никто —</option>${players.map(p => `<option value="${p.id}" ${sel === p.id ? 'selected' : ''}>${esc(p.nickname)}</option>`).join('')}`;
-  openModal(`<form data-form="tournament" class="stack tf">
-    <div class="tf-main"><h3>Новый турнир</h3>
-    <label>Название<input name="name" required maxlength="60" placeholder="Например: Кубок офиса"></label>
-    <div class="tf-sec"><small class="tf-lbl">Вид турнира</small><div class="tf-fmt">${[['ko', '🏆', 'Олимпийская', 'на вылет'], ['groups', '🗂', 'Группы', '+ плей-офф'], ['rr', '🔄', 'Круг', 'все со всеми']].map(([k, ic, v, d], n) => `<label><input type="radio" name="format" value="${k}" ${n === 0 ? 'checked' : ''}><span><i>${ic}</i><b>${v}</b><small>${d}</small></span></label>`).join('')}</div><p class="hint" id="fmt-hint"></p></div>
+  openModal(`<form data-form="tournament" class="stack tf" ${pre ? `data-t="${pre.id}"` : ''}>
+    <div class="tf-main"><h3>${pre ? 'Начать турнир' : 'Новый турнир'}</h3>
+    ${pre ? `<p class="muted small">Отмечены записавшиеся (${reg.length}). Можно добавить или убрать игроков.</p>` : ''}
+    <label>Название<input name="name" required maxlength="60" value="${esc(pre?.name || '')}" placeholder="Например: Кубок офиса"></label>
+    <div class="tf-sec"><small class="tf-lbl">Вид турнира</small><div class="tf-fmt">${[['ko', '🏆', 'Олимпийская', 'на вылет'], ['groups', '🗂', 'Группы', '+ плей-офф'], ['rr', '🔄', 'Круг', 'все со всеми']].map(([k, ic, v, d], n) => `<label><input type="radio" name="format" value="${k}" ${(pre ? pre.format === k : n === 0) ? 'checked' : ''}><span><i>${ic}</i><b>${v}</b><small>${d}</small></span></label>`).join('')}</div><p class="hint" id="fmt-hint"></p></div>
     <div class="tf-sec"><small class="tf-lbl">Участники</small><button type="button" class="tf-pick" id="t-open"><span class="tf-stack" id="t-stack"></span><b id="t-cnt">0 игроков</b><span class="tf-go">Выбрать игроков ›</span></button></div>
     <div class="two only-groups"><label>Игроков в группе<input type="number" name="gsize" value="4" min="2" max="16"></label><input type="hidden" name="groups" value="2"><label>Выходят из группы<select name="advance"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option></select></label></div>
     <p class="hint only-groups" id="grp-hint"></p>
@@ -3373,14 +3512,14 @@ function openTournamentForm() {
       <div><small class="tf-lbl">Счёт</small><div class="tf-seg2"><label><input type="radio" name="scoring" value="points" checked><span>По очкам</span></label><label><input type="radio" name="scoring" value="final"><span>Только итог</span></label></div></div></div>
     <div id="tf-scorers"></div>
     <p class="hint">Пары по столам назначает система: закончилась игра — на свободный стол встаёт следующая пара. Роль секунданта можно передать в перерыве между партиями.</p></div>
-    <div class="two"><label>До скольких побед<select name="best_of"><option value="3">до 2 побед</option><option value="5" selected>до 3 побед</option><option value="7">до 4 побед</option></select></label>
-    <label>Партия до<select name="points_to"><option>11</option><option>21</option></select></label></div>
+    <div class="two"><label>До скольких побед<select name="best_of">${[[3, 'до 2 побед'], [5, 'до 3 побед'], [7, 'до 4 побед']].map(([v, l]) => `<option value="${v}" ${(pre?.best_of || 5) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    <label>Партия до<select name="points_to">${[11, 21].map(v => `<option ${(pre?.points_to || 11) === v ? 'selected' : ''}>${v}</option>`).join('')}</select></label></div>
     <label class="switch only-ko tf-switch"><input type="checkbox" name="thirdPlace" checked><i></i><span>Матч за 3-е место</span></label>
-    <input type="hidden" name="date" value="${new Date().toISOString().slice(0, 10)}"><input type="hidden" name="place" value="">
-    <button class="btn primary full tf-create">🏆 Создать турнир</button></div>
+    <input type="hidden" name="date" value="${new Date().toISOString().slice(0, 10)}"><input type="hidden" name="place" value="${esc(pre?.place || '')}">
+    <button class="btn primary full tf-create">${pre ? '▶ Начать турнир' : '🏆 Создать турнир'}</button></div>
     <div class="tf-players" hidden><div class="tf-ph"><button type="button" class="tf-back" id="t-back">←</button><h3>Выбор игроков</h3></div><input class="tf-search" placeholder="🔍 Найти игрока">
       <div class="tf-all"><span>Выбрано <b id="t-cnt2">0</b> из ${players.length}</span><a id="t-all">Все</a><a id="t-none">Никого</a></div>
-      <div class="tf-list">${players.map(p => `<label class="tf-p" data-n="${esc(p.nickname.toLowerCase())}"><input type="checkbox" name="participants" value="${p.id}">${ava(p, 'sm')}<b>${esc(p.nickname)}</b><small>${fmtR(ratingOf(p.id))}</small><i>✓</i></label>`).join('')}</div>
+      <div class="tf-list">${players.map(p => `<label class="tf-p" data-n="${esc(p.nickname.toLowerCase())}"><input type="checkbox" name="participants" value="${p.id}" ${reg.includes(p.id) ? 'checked' : ''}>${ava(p, 'sm')}<b>${esc(p.nickname)}</b><small>${fmtR(ratingOf(p.id))}</small><i>✓</i></label>`).join('')}</div>
       <button type="button" class="btn primary full tf-done" id="t-done">Готово</button></div></form>`, sh => {
     const f = sh.querySelector('form'), main = sh.querySelector('.tf-main'), pl = sh.querySelector('.tf-players');
     const fmt = () => f.querySelector('[name=format]:checked').value;
@@ -3555,7 +3694,17 @@ const ACT = {
   theme: el => { try { localStorage.setItem('ponghub_theme', el.dataset.v); } catch { /* */ } applyTheme(); render(); },
   install: async () => { if (!S.installEvt) return; S.installEvt.prompt(); await S.installEvt.userChoice; S.installEvt = null; render(); },
   'h2h-pick': () => go(`#/h2h/${S.me.id}`),
-  'new-tournament': () => openTournamentForm(),
+  'new-tournament': () => openModal(`<div class="stack"><h3>Новый турнир</h3>
+    <button class="btn primary big full" data-act="t-announce">📅 Объявить заранее<small style="display:block;font-weight:500;opacity:.9">дата, место и запись участников</small></button>
+    <button class="btn big full" data-act="t-now">▶ Начать сейчас<small style="display:block;font-weight:500;opacity:.8">выбрать игроков и сразу сетку</small></button></div>`),
+  't-announce': () => openAnnounceForm(),
+  't-now': () => openTournamentForm(),
+  't-edit': el => openAnnounceForm(tById(el.dataset.t)),
+  't-start': el => openTournamentForm(tById(el.dataset.t)),
+  't-signup': el => busy(el, async () => { await S.store.tournamentSignup(el.dataset.t, el.dataset.on === '1'); await refresh(); toast(el.dataset.on === '1' ? 'Вы записаны на турнир ✍️' : 'Запись отменена'); }),
+  't-qr-svg': el => busy(el, () => downloadTourQr(tById(el.dataset.t), 'svg')),
+  't-qr-png': el => busy(el, () => downloadTourQr(tById(el.dataset.t), 'png')),
+  't-poster': el => busy(el, () => printTour(tById(el.dataset.t))),
   'new-event': () => openEventForm(),
   rsvp: el => busy(el, async () => { await S.store.toggleRsvp(el.dataset.id); await refresh(); }),
   'del-event': async el => { if (await confirmDialog('Удалить событие?', 'Удалить', true)) await busy(el, async () => { await S.store.remove('events', el.dataset.id); await refresh(); }); },
@@ -3685,11 +3834,23 @@ const FORMS = {
       config.groups = snakeGroups(sorted, g);
       config.advance = Math.min(+fd.get('advance') || 2, Math.min(...config.groups.map(x => x.length)));
     }
-    const t = await S.store.insert('tournaments', {
-      name: fd.get('name').trim(), date: fd.get('date') || null, place: (fd.get('place') || '').trim(), format,
-      best_of: +fd.get('best_of'), points_to: +fd.get('points_to'), status: 'active', participants: sorted, config, results: null, created_by: S.me.id, ...testFlag(),
-    });
-    closeModal(); await refresh(); go(`#/tournament/${t.id}`); toast('Турнир создан!');
+    const row = { name: fd.get('name').trim(), date: fd.get('date') || null, place: (fd.get('place') || '').trim(), format,
+      best_of: +fd.get('best_of'), points_to: +fd.get('points_to'), status: 'active', participants: sorted, results: null };
+    const pre = f.dataset.t && tById(f.dataset.t);
+    const t = pre ? (await S.store.update('tournaments', pre.id, { ...row, config: { ...config, note: pre.config?.note } }), pre)
+      : await S.store.insert('tournaments', { ...row, config, created_by: S.me.id, ...testFlag() });
+    closeModal(); await refresh(); go(`#/tournament/${t.id}`); toast(pre ? 'Турнир начался! 🏓' : 'Турнир создан!');
+  },
+  't-announce': async (f, fd) => {
+    const at = new Date(fd.get('starts_at'));
+    if (isNaN(at)) throw new Error('Укажите дату и время');
+    const row = { name: fd.get('name').trim(), starts_at: at.toISOString(), date: toLocalInput(at).slice(0, 10), place: fd.get('place').trim(), format: fd.get('format'),
+      best_of: +fd.get('best_of'), points_to: +fd.get('points_to') };
+    const note = fd.get('note').trim() || null;
+    const old = f.dataset.t && tById(f.dataset.t);
+    const t = old ? (await S.store.update('tournaments', old.id, { ...row, config: { ...old.config, note } }), old)
+      : await S.store.insert('tournaments', { ...row, status: 'open', participants: [], registered: [], config: { note }, results: null, created_by: S.me.id, ...testFlag() });
+    closeModal(); await refresh(); go(`#/tournament/${t.id}`); toast(old ? 'Сохранено' : 'Запись на турнир открыта 📣');
   },
   ann: async (f, fd) => {
     const body = fd.get('body').trim();
@@ -3886,11 +4047,12 @@ function afterRender(r) {
   if (r.name === 'avatar' && feature('avatar')) mountAvatarView(r);
   if (r.name === 'home') mountHome3D();
   if (r.name === 'print' || r.name === 'tables') renderPrint();
+  if (r.name === 'tournament' && isAdmin()) renderTourQr();
   if (document.getElementById('dir-box')) renderDirectory(document.querySelector('[data-input=dir-search]')?.value || '');
   if (document.getElementById('pick-map')) mountPickMap();
   if (r.name === 'invite') renderInvite();
   if (r.name === 'map') renderMap();
-  if (r.name === 'club' && r.args[0]) renderClubPage(r.args[0], r.q.get('code'), r.q.get('auto') === '1', r.q.get('table'));
+  if (r.name === 'club' && r.args[0]) renderClubPage(r.args[0], r.q.get('code'), r.q.get('auto') === '1', r.q.get('table'), r.q.get('tour') === '1');
   if (r.name === 'founder') renderFounder();
   if (r.name === 'join' && r.args[0] && S.user) openInvite(r.args[0]);
   const f = document.querySelector('[data-form=settings]');
