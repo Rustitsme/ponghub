@@ -277,6 +277,8 @@ function shell(r, body) {
   const pc = pendingCounts();
   const tab = (name, label, ic, also = []) => `<a href="#/${name}" class="tab ${r.name === name || also.includes(r.name) ? 'on' : ''}">${icon(ic)}<span>${label}</span></a>`;
   const club = settings().clubName || 'PongHub';
+  const side = (name, label, ic, also = [], extra = '', cls = '') => `<a href="#/${name}" class="side-i ${cls} ${r.name === name || also.includes(r.name) ? 'on' : ''}" title="${label}"><span>${ic}</span><b>${label}</b>${extra}</a>`;
+  const n = pc.total + unreadCount();
   return `
   <header class="top">
     <button class="brand club-switch" data-act="club-menu" aria-label="Мои клубы"><img src="${logo()}" alt="" width="30" height="30"><span>${esc(club)}</span><i class="caret">▾</i></button>
@@ -287,7 +289,17 @@ function shell(r, body) {
     </div>
   </header>
   ${S.testMode ? `<div class="test-banner">🧪 <span><b>Тестовый режим.</b> Тестовых игроков и их матчи видите только вы.</span><a href="#/admin/players" class="link">Управлять</a></div>` : ''}
-  <main class="page">${body}</main>
+  <aside class="side">
+    <button class="brand club-switch" data-act="club-menu" aria-label="Мои клубы"><img src="${logo()}" alt="" width="34" height="34"><span>${esc(club)}</span><i class="caret">▾</i></button>
+    <button class="btn primary side-add" data-act="add-match">${icon('plus')} ${isAdmin() ? 'Внести матч' : 'Внести результат'}</button>
+    <nav class="side-nav">
+      ${side('home', 'Главная', '🏠')}${side('players', 'Игроки', '👥', ['player'])}${side('tournaments', 'Турниры', '🏆', ['tournament'])}
+      ${side('rating', 'Рейтинг', '📊', ['seasons'])}${side('matches', 'Матчи', '📋', ['h2h'])}${predOn() ? side('predict', 'Прогнозы', '🎯') : ''}${side('calendar', 'Календарь', '📅', [], '', 'ico')}
+      ${side('inbox', 'Уведомления', '🔔', [], n ? `<i class="dot inline">${n}</i>` : '', 'ico side-bell')}
+      <hr>${side('me', 'Профиль', '👤', [], '', 'ico')}${isAdmin() ? side('admin', 'Управление', '🛠️', ['rules', 'invite', 'print', 'clubedit'], pc.total ? `<i class="dot inline">${pc.total}</i>` : '', 'ico') : ''}
+    </nav>
+  </aside>
+  <main class="page pg-${esc(r.name)}">${body}</main>
   <nav class="tabs">
     ${tab('home', 'Главная', 'home')}
     ${tab('players', 'Игроки', 'users', ['player'])}
