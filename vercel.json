@@ -1,3 +1,14 @@
 {
-  "crons": [{ "path": "/api/keepalive", "schedule": "0 6 * * *" }]
+  "crons": [
+    {
+      "path": "/api/keepalive",
+      "schedule": "0 6 * * *"
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/sb/:path*",
+      "destination": "https://iprhrrmejvhkkyqogiyn.supabase.co/:path*"
+    }
+  ]
 }

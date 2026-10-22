@@ -5,6 +5,7 @@ import { analyze, ranking, leagueOf, replayLive, DEFAULT_SETTINGS, isDoubles, wi
 import { koBracket, roundName, standings, pairings, findPairMatch } from './tourney.js';
 import { parseKey } from './shop-catalog.js';
 import { unlock, sfx, soundOn } from './sound.js';
+import { media } from './store.js';
 
 const LS = 'ponghub_tv_token';
 const POLL = 2000;            // как часто спрашиваем текущую игру
@@ -106,7 +107,7 @@ export async function startTV(root, store) {
   async function avatars(ids) { try { return await store.rpc('screen_avatars', { p_token: T.token, ids }); } catch { return null; } }
   function who(id, av) {
     const p = av?.players?.find(x => x.id === id), r = rating(id);
-    return { gender: p?.avatar3d || 'boy', face: p?.face || null, photo: P(id).photo_url || null, icon: P(id).avatar || '', loadout: p?.loadout || {}, nick: P(id).nickname, rating: fmtR(r), league: leagueOf(r), racket: racketName(p?.loadout) };
+    return { gender: p?.avatar3d || 'boy', face: p?.face || null, photo: media(P(id).photo_url) || null, icon: P(id).avatar || '', loadout: p?.loadout || {}, nick: P(id).nickname, rating: fmtR(r), league: leagueOf(r), racket: racketName(p?.loadout) };
   }
   async function shows(d) {
     if (showing || d.status !== 'ok' || !T.full) return;
@@ -148,7 +149,7 @@ export async function startTV(root, store) {
   const rating = id => T.A?.rating.get(id) ?? T.A?.S.initialRating ?? 40;
   const sideIds = (l, s) => (s === 0 ? [l.player1_id, l.player3_id] : [l.player2_id, l.player4_id]).filter(Boolean);
   const sideName = (l, s) => sideIds(l, s).map(id => P(id).nickname).join(' + ');
-  const ava = p => p.photo_url ? `<img src="${esc(p.photo_url)}" alt="">` : esc(p.avatar || (p.nickname || '?')[0]);
+  const ava = p => p.photo_url ? `<img src="${esc(media(p.photo_url))}" alt="">` : esc(p.avatar || (p.nickname || '?')[0]);
   const tour = id => T.full?.tournaments.find(t => t.id === id);
   const clock = () => new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 
@@ -168,7 +169,7 @@ export async function startTV(root, store) {
   }
   // ник любой длины влезает: шрифт уменьшается по длине, дальше — «…»
   const fitNick = (name, max = 3.6, min = 1.9, k = 34) => `<div class="tvx-nk" style="font-size:${Math.max(min, Math.min(max, k / Math.max(10, [...String(name)].length))).toFixed(2)}cqw">${esc(name)}</div>`;
-  const avaTv = p => `<span class="tvx-av" style="--c:${esc(p.color || '#e63946')}">${p.photo_url ? `<img src="${esc(p.photo_url)}" alt="">` : esc(p.avatar || (p.nickname || '?')[0])}</span>`;
+  const avaTv = p => `<span class="tvx-av" style="--c:${esc(p.color || '#e63946')}">${p.photo_url ? `<img src="${esc(media(p.photo_url))}" alt="">` : esc(p.avatar || (p.nickname || '?')[0])}</span>`;
   function crumbFor(l) {
     const t = l.tournament_id ? tour(l.tournament_id) : null;
     const fmt = `до ${winsNeeded(l.best_of)} ${plural(winsNeeded(l.best_of), 'победы', 'побед', 'побед')}, партия до ${l.points_to}`;
