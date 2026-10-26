@@ -998,7 +998,7 @@ async function printTour(t) {
   const box = el.querySelector('[data-prn=tour]');
   box.innerHTML = qrSvg(await tourQr(t));
   await document.fonts?.ready;
-  el.style.cssText = 'display:block;position:fixed;left:-10000px;top:0;width:400px';
+  el.style.cssText = 'display:block;position:fixed;left:-10000px;top:0;width:794px';   // ширина листа А4 при печати (210 мм)
   fitPrint(el);
   el.style.cssText = '';
   await new Promise(res => setTimeout(res, 300));
@@ -3102,9 +3102,14 @@ function fitPrint(root) {
   for (const el of root.querySelectorAll('.prn-fit')) {
     el.style.fontSize = '';
     // размер в долях ширины листа (cqw) — тогда на принтере будет так же, как на экране
+    el.style.whiteSpace = el.style.textWrap = el.style.lineHeight = '';
     const sheet = el.closest('.prn-a4').clientWidth, base = parseFloat(getComputedStyle(el).fontSize);
+    // запас 6%: принтер и телефон рисуют шрифт чуть шире, чем при замере
+    const rg = document.createRange(); rg.selectNodeContents(el);
+    const over = () => rg.getBoundingClientRect().width > el.parentElement.clientWidth * 0.94;   // ширина самого текста против места в строке (блок бывает «по ширине текста»)
     let k = 1;
-    while (el.scrollWidth > el.clientWidth + 1 && k > 0.5) { k -= 0.04; el.style.fontSize = `${base * k / sheet * 100}cqw`; }
+    while (over() && k > 0.5) { k -= 0.04; el.style.fontSize = `${base * k / sheet * 100}cqw`; }
+    if (over()) { el.style.whiteSpace = 'normal'; el.style.textWrap = 'balance'; el.style.lineHeight = '1.05'; el.style.fontSize = `${base * 0.44 / sheet * 100}cqw`; }   // очень длинное название — в две строки, а не обрезка
   }
   // домик: если половина не вмещает надписи, уменьшаем их понемногу
   for (const half of root.querySelectorAll('.prn-half')) {
@@ -3118,7 +3123,11 @@ function fitPrint(root) {
     const box = sh.querySelector('.prn-qrbox');
     box.style.width = '';
     let w = 44;
-    while (sh.scrollHeight > sh.clientHeight + 1 && w > 26) { w -= 2; box.style.width = `${w}cqw`; }
+    // всё, включая шаги внизу, должно поместиться внутри рамки с запасом
+    // + запас по высоте: телефон при печати рисует текст чуть крупнее, чем при замере
+    const st = sh.querySelector('.prn-steps');
+    const over = () => sh.scrollHeight > sh.clientHeight + 1 || (st && st.getBoundingClientRect().top - st.previousElementSibling.getBoundingClientRect().bottom < sh.clientHeight * 0.03);
+    while (over() && w > 22) { w -= 2; box.style.width = `${w}cqw`; }
   }
 }
 async function renderPrint() {
@@ -3135,7 +3144,7 @@ async function printSheets(what) {
   await fillPrintQr(el);
   await document.fonts?.ready;
   // на экране область печати скрыта — на миг выводим её за край экрана, чтобы измерить и подогнать надписи
-  el.style.cssText = 'display:block;position:fixed;left:-10000px;top:0;width:400px';
+  el.style.cssText = 'display:block;position:fixed;left:-10000px;top:0;width:794px';   // ширина листа А4 при печати (210 мм)
   fitPrint(el);
   el.style.cssText = '';
   await new Promise(res => setTimeout(res, 300));
