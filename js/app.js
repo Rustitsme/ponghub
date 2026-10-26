@@ -1,4 +1,4 @@
-import { createStore, media } from './store.js';
+import { createStore, media, leaveSandbox } from './store.js';
 import { makeQr, qrSvg, qrPng, drawQr } from './qr.js';
 import { UNLOCK_KIND, unlockText, unlockNow, ITEMS, RG, RGSUB, RUBBER_COLORS, STYLE, EQUIP, LEAGUE_REWARDS, STREAK, STARTER, byId, colorOf, priceOf, keyOf, parseKey } from './shop-catalog.js';
 import { thumb, mountViewer, loadThree, racketShot } from './shop3d.js';
@@ -286,7 +286,7 @@ function shell(r, body) {
   <header class="top">
     <button class="brand club-switch" data-act="club-menu" aria-label="Мои клубы"><img src="${logo()}" alt="" width="30" height="30"><span>${esc(club)}</span><i class="caret">▾</i></button>
     <div class="top-actions">
-      ${S.store.mode === 'demo' ? '<span class="demo-pill" title="Данные хранятся только в этом браузере">ДЕМО</span>' : ''}
+      ${S.store.mode === 'demo' ? `<span class="demo-pill" title="Данные хранятся только в этом браузере">${S.store.sandbox ? 'ПЕСОЧНИЦА' : 'ДЕМО'}</span>` : ''}
       <a href="#/calendar" class="icon-btn" aria-label="Календарь">${icon('cal')}</a>
       <a href="#/inbox" class="icon-btn" aria-label="Уведомления">${icon('bell')}${pc.total + unreadCount() ? `<i class="dot">${pc.total + unreadCount()}</i>` : ''}</a>
     </div>
@@ -320,8 +320,47 @@ function gateView(emoji, title, text, refreshBtn = false) {
   </div></div>`;
 }
 
+// ───────────── Песочница: гид и боты ─────────────
+function sandboxState() {
+  const st = S.store, cid = S.club?.id;
+  const bots = st.bots(), inClub = bots.filter(b => st.mem(cid, b.id)), active = inClub.filter(b => st.mem(cid, b.id).status === 'active');
+  return { invited: inClub.length > 0, accepted: active.length >= 2, played: S.data.matches.length > 0,
+    live: (st.db.live_matches || []).some(l => l.club_id === cid && l.bot), challenged: S.data.challenges.some(c => c.from_id === S.me.id && st.db.profiles.find(p => p.id === c.to_id)?.bot) };
+}
+function sandboxButtons() {
+  return `<div class="sb-btns"><button class="btn" data-act="sb-bots">🤖 Боты отправят заявки</button><button class="btn" data-act="sb-play">🏓 Боты сыграют 10 матчей</button><button class="btn" data-act="sb-live">🔴 Боты начнут живую игру</button></div>`;
+}
+function sandboxGuide() {
+  if (!S.store.sandbox || !isAdmin()) return '';
+  const g = sandboxState();
+  const steps = [
+    [g.invited, 'Пригласите игроков', 'В настоящем клубе вы отправите ссылку или повесите QR. Здесь приглашение получат боты.', '<button class="btn sm primary" data-act="sb-bots">🤖 Пригласить ботов</button>'],
+    [g.accepted, 'Примите заявки', 'Вы решаете, кого пустить в клуб.', '<a class="btn sm" href="#/admin/reqs">Открыть заявки</a>'],
+    [g.played, 'Матчи и рейтинг', 'Боты сыграют между собой — появятся рейтинг, история и топ.', '<button class="btn sm" data-act="sb-play">🏓 Сыграть 10 матчей</button>'],
+    [g.live, 'Живая игра', 'Счёт идёт очко за очком, все видят его вживую, можно делать прогнозы.', '<button class="btn sm" data-act="sb-live">🔴 Начать игру ботов</button>'],
+    [g.challenged, 'Вызовите бота на матч', 'Бот примет вызов — дальше «▶ Начать игру» и счёт.', '<a class="btn sm" href="#/players">Игроки →</a>'],
+  ];
+  const done = steps.filter(x => x[0]).length;
+  if (done === steps.length && lsGet('ponghub_sb_guide') === 'hide') return '';
+  return `<section class="card sb-guide"><div class="card-h"><h3>🧪 Песочница: попробуйте по шагам</h3><span class="muted small">${done} из ${steps.length}</span></div>
+    ${steps.map(([ok, t, d, btn], i) => `<div class="sb-step ${ok ? 'ok' : ''}"><i>${ok ? '✓' : i + 1}</i><div><b>${t}</b><small>${d}</small></div>${ok ? '' : btn}</div>`).join('')}
+    <small class="muted">Ещё стоит заглянуть: «Турниры» (создайте турнир с ботами), «Печать» (плакат и домики с QR), «Пригласить в клуб».${done === steps.length ? ' <a href="#" data-act="sb-hide" class="link">Скрыть гид</a>' : ''}</small></section>`;
+}
+
 // ───────────── Вход / регистрация ─────────────
+function sandboxAuth() {
+  return `<div class="auth-wrap"><div class="auth-hero"><img src="${logo()}" alt="" width="84" height="84"><h1>PongHub</h1><p>Песочница для организатора</p></div>
+    <div class="auth-card"><form data-form="sb-start" class="stack">
+      <h2>Попробуйте как организатор</h2>
+      <p class="muted small">Это тестовая копия приложения: вы создаёте свой клуб, а играть в нём будут боты — они примут приглашение, сыграют матчи и живую игру. Всё хранится только на этом устройстве и не попадает в настоящие клубы.</p>
+      <label>Как вас называть (ник)<input name="nickname" required minlength="2" maxlength="20" placeholder="Например: Coach" autocomplete="nickname"></label>
+      <button class="btn primary big">Начать →</button>
+      <p class="muted small center">Регистрация, email и пароль не нужны.</p>
+    </form></div>
+    <button class="btn ghost full" data-act="sb-leave">Выйти из песочницы в обычное приложение</button></div>`;
+}
 function authView(r) {
+  if (S.store.sandbox) return sandboxAuth();
   const mode = r.name === 'join' ? 'register' : ['register', 'forgot'].includes(r.name) ? r.name : 'login';
   const demo = S.store.mode === 'demo';
   const head = `<div class="auth-hero"><img src="${logo()}" alt="" width="84" height="84"><h1>PongHub</h1><p>Клубы настольного тенниса: рейтинг, матчи, турниры</p></div>
@@ -538,6 +577,7 @@ function viewHome() {
   const taskTile = W ? `<a href="#/shop?tab=bonus" class="bt half"><h4>🎯 Задания</h4><b class="bt-n">${tDone}/${W.tasks.length}</b><div class="wt-bar"><i style="width:${tDone / W.tasks.length * 100}%"></i></div><small>${tReady ? `+${tReady} PC ждут` : 'неделя идёт'}</small></a>` : '';
 
   return `
+  ${sandboxGuide()}
   ${pc.total ? `<a href="#/admin" class="alert">🔔 Ждут вашего решения: ${pc.users ? `${pc.users} ${plural(pc.users, 'заявка', 'заявки', 'заявок')} на регистрацию` : ''}${pc.users && pc.matches ? ', ' : ''}${pc.matches ? `${pc.matches} ${plural(pc.matches, 'матч', 'матча', 'матчей')}` : ''} →</a>` : ''}
   ${mine.length ? `<div class="alert info">⏳ ${mine.length} ${plural(mine.length, 'ваш результат ждёт', 'ваших результата ждут', 'ваших результатов ждут')} подтверждения администратором</div>` : ''}
 
@@ -2002,7 +2042,11 @@ function viewMe() {
     ${S.installEvt ? '<button class="btn primary full" data-act="install">Установить приложение</button>' : ios
       ? '<p class="small">В Safari нажмите <b>«Поделиться»</b> <span class="kbd">⬆︎</span>, затем <b>«На экран „Домой“»</b>.</p>'
       : '<p class="small">Откройте меню браузера <span class="kbd">⋮</span> и выберите <b>«Установить приложение»</b> или <b>«Добавить на главный экран»</b>.</p>'}</section>`}
-  ${S.store.mode === 'demo' ? `<section class="card"><div class="card-h"><h3>Демо-режим</h3></div>
+  ${S.store.sandbox ? `<section class="card"><div class="card-h"><h3>🧪 Песочница</h3></div>
+    <p class="muted small">Тестовая копия: ваш клуб и боты живут только на этом устройстве.</p>
+    ${sandboxButtons()}
+    <div class="row-btns"><button class="btn ghost" data-act="sb-reset">↺ Начать заново</button><button class="btn ghost" data-act="sb-leave">Выйти из песочницы</button></div></section>`
+  : S.store.mode === 'demo' ? `<section class="card"><div class="card-h"><h3>Демо-режим</h3></div>
     <p class="muted small">Сейчас вы вошли как демо-пользователь. Данные хранятся только в этом браузере.</p>
     <div class="row-btns"><button class="btn" data-act="logout">Сменить роль</button><button class="btn ghost" data-act="demo-reset">Сбросить демо-данные</button></div></section>` : ''}
   ${!isAdmin() ? '<button class="btn ghost full danger-text" data-act="leave-club">🚪 Покинуть клуб</button>' : ''}
@@ -2087,7 +2131,7 @@ async function addrResolve(it) { return it; }
 // каркас для экранов вне клуба (выбор клуба, карта, страница клуба, панель создателя)
 function bare(body, back = S.club ? '#/home' : '') {
   return `<header class="top"><a href="${S.club ? '#/home' : '#/clubs'}" class="brand"><img src="${logo()}" alt="" width="30" height="30"><span>PongHub</span></a>
-    <div class="top-actions">${S.store.mode === 'demo' ? '<span class="demo-pill">ДЕМО</span>' : ''}${back ? `<a href="${back}" class="btn ghost sm">← ${back === '#/home' ? 'В клуб' : 'Назад'}</a>` : ''}</div></header>
+    <div class="top-actions">${S.store.mode === 'demo' ? `<span class="demo-pill">${S.store.sandbox ? 'ПЕСОЧНИЦА' : 'ДЕМО'}</span>` : ''}${back ? `<a href="${back}" class="btn ghost sm">← ${back === '#/home' ? 'В клуб' : 'Назад'}</a>` : ''}</div></header>
     <main class="page">${body}</main>`;
 }
 
@@ -2242,6 +2286,7 @@ function viewInvite(r) {
   return `<div class="page-h"><a href="#/me" class="back">← Профиль</a></div>
     ${r.q.get('new') ? `<section class="hero table-card club-hero"><h2>Клуб создан 🎉</h2><p>${esc(c.name)}${c.city ? ' · ' + esc(c.city) : ''}</p></section>` : '<div class="page-h"><h1>Пригласить в клуб</h1></div>'}
     <p class="muted small">По ссылке или QR-коду «Вступить в клуб» человек регистрируется — и заявка в ваш клуб уходит сама, код вводить не нужно. В клуб он попадёт, когда вы её примете (вкладка «Заявки»). Код — для тех, кто уже скачал приложение.</p>
+    ${S.store.sandbox ? `<section class="card sb-guide"><div class="card-h"><h3>🧪 Песочница</h3></div><p class="muted small">Ссылка и QR ниже — настоящие, но в песочнице по ним никто не придёт. Отправьте приглашение ботам: они зарегистрируются и пришлют заявки.</p><button class="btn primary full" data-act="sb-bots">🤖 Пригласить ботов</button></section>` : ''}
     <section class="card stack" id="invite-box"><div class="muted small">Загружаю приглашение…</div></section>
     <section class="card"><div class="card-h"><h3>ID клуба для поиска</h3><span class="badge">${esc(c.code)}</span></div>
       <p class="muted small">По этому ID клуб находят в поиске и подают заявку — её подтверждаете вы.</p></section>
@@ -2653,6 +2698,8 @@ function ensureThree() {
 async function ensureShop(force = false) {
   if (S.shop && !force) return S.shop;
   try { S.shop = await S.store.shopState(); S.coins = S.shop.balance; } catch (e) { S.shop = null; throw e; }
+  // цены и условия скинов — как в базе (их проверяет и сервер), а не зашитые в приложение
+  try { for (const r of await S.store.skinItems()) { const it = byId(r.id); if (it) { it.price = r.price; if (r.unlock?.kind && r.unlock.n) it.unlock = { kind: r.unlock.kind, n: +r.unlock.n }; } } } catch { /* останутся из приложения */ }
   return S.shop;
 }
 const owns = key => !!S.shop?.items?.includes(key);
@@ -3979,6 +4026,12 @@ const ACT = {
   'push-test': el => busy(el, async () => { await S.store.testPush(); toast('Отправлено — уведомление придёт через пару секунд'); }),
   logout: async () => { closeModal(); await disablePush().catch(() => {}); await S.store.signOut(); S.user = null; S.me = null; await reload(); location.hash = '#/login'; render(); },
   'demo-as': async el => { await S.store.signInAs(el.dataset.id); },
+  'sb-bots': el => busy(el, async () => { const n = S.store.botsRequest(S.club.id); toast(n ? `🤖 ${n} ботов получили приглашение — заявки придут через пару секунд` : 'Все боты уже в клубе'); }),
+  'sb-play': el => busy(el, async () => { S.store.botsPlay(S.club.id); toast('🏓 Боты сыграли 10 матчей — загляните в рейтинг'); }),
+  'sb-live': el => busy(el, async () => { const id = S.store.botLive(S.club.id); go(`#/live/${id}`); }),
+  'sb-hide': () => { lsSet('ponghub_sb_guide', 'hide'); render(); },
+  'sb-reset': async () => { if (await confirmDialog('Начать песочницу заново? Ваш тестовый клуб и матчи удалятся.', 'Начать заново', true)) { S.store.reset(); await S.store.signOut(); location.hash = '#/login'; } },
+  'sb-leave': () => leaveSandbox(),
   'demo-reset': async () => { if (await confirmDialog('Вернуть демо-данные к исходным?')) { S.store.reset(); await refresh(); toast('Демо-данные сброшены'); } },
   'add-match': () => openMatchForm(),
   match: el => openMatchDetail(el.dataset.id),
@@ -4103,6 +4156,12 @@ const CHANGE = {
 
 const FORMS = {
   login: async (f, fd) => { await S.store.signIn(fd.get('email').trim(), fd.get('password')); },
+  'sb-start': async (f, fd) => {
+    const nickname = fd.get('nickname').trim();
+    if (!(await S.store.nicknameAvailable(nickname))) throw new Error('Такой ник уже у бота — выберите другой');
+    await S.store.signUp({ email: `me-${Date.now()}@sandbox.ponghub.app`, password: String(Math.random()), nickname, full_name: nickname });
+    location.hash = '#/newclub';
+  },
   register: async (f, fd) => {
     const nickname = fd.get('nickname').trim();
     if (!(await S.store.nicknameAvailable(nickname))) throw new Error('Такой ник уже занят');
