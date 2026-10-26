@@ -2705,7 +2705,7 @@ async function loadSkins(force = false) {
 const fmtStat = (k, v) => k === 'rating' ? String(Math.round(v * 10) / 10).replace('.', ',') : Math.round(v).toLocaleString('ru-RU');
 function skinProgress(it) {
   const st = S.skin?.stats, u = it.unlock, now = st ? unlockNow(u, st) : 0, pct = Math.max(0, Math.min(100, now / u.n * 100));
-  return { now, pct, text: st ? `${fmtStat(u.kind, now)} из ${fmtStat(u.kind, u.n)}` : 'проверяю…' };
+  return { now, pct, text: st ? `${fmtStat(u.kind, now)} из ${fmtStat(u.kind, u.n)}` : S.skin ? 'пока не удалось проверить' : 'проверяю…' };
 }
 function renderSkinList(box) {
   const st = S.skin?.stats, all = ITEMS.filter(it => it.skin), open = all.filter(skinOpen).length;
