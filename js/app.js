@@ -1,4 +1,5 @@
 import { createStore, media } from './store.js';
+import { makeQr, qrSvg, qrPng, drawQr } from './qr.js';
 import { ITEMS, RG, RGSUB, RUBBER_COLORS, STYLE, EQUIP, LEAGUE_REWARDS, STREAK, STARTER, byId, colorOf, priceOf, keyOf, parseKey } from './shop-catalog.js';
 import { thumb, mountViewer, loadThree, racketShot } from './shop3d.js';
 import {
@@ -961,12 +962,6 @@ function openAnnounceForm(t = null) {
     sh.querySelectorAll('[data-pz]').forEach(b => b.onclick = () => { const v = f.prizes.value.trim(); f.prizes.value = v ? `${v}, ${b.dataset.pz}` : b.dataset.pz; f.prizes.focus(); });
   });
 }
-// QR турнира: SVG — вектор (любой размер без потери качества), PNG — 3000×3000
-async function makeQr(text) {
-  await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js');
-  const q = window.qrcode(0, 'Q'); q.addData(text); q.make();
-  return q;
-}
 async function tourQr(t) {
   const code = S.printCode?.club === S.club.id ? S.printCode.code : (S.printCode = { club: S.club.id, code: await S.store.inviteCode(S.club.id) }).code;
   return makeQr(tourLink(t, code));
@@ -974,26 +969,15 @@ async function tourQr(t) {
 const qrName = s => (s || 'ponghub').toLowerCase().replace(/[^a-zа-яё0-9]+/gi, '-').replace(/^-|-$/g, '').slice(0, 40) || 'ponghub';
 const qrFile = t => `qr-${qrName(t.name || 'turnir')}`;
 async function downloadTourQr(t, kind) { return saveQr(await tourQr(t), qrFile(t), kind); }
-// QR файлом: SVG — вектор (любой размер без потери качества), PNG — 3000×3000
+// QR файлом (с логотипом): SVG — вектор (любой размер без потери качества), PNG — 3000×3000
 async function saveQr(q, file, kind) {
-  const n = q.getModuleCount(), m = 4, size = n + m * 2;
-  if (kind === 'svg') {
-    let d = '';
-    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (q.isDark(y, x)) d += `M${x + m},${y + m}h1v1h-1z`;
-    const svg = `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="1000" height="1000" shape-rendering="crispEdges"><rect width="${size}" height="${size}" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
-    return download(file + '.svg', svg, 'image/svg+xml');
-  }
-  const px = 3000, cell = Math.floor(px / size), off = Math.floor((px - cell * size) / 2) + m * cell;
-  const c = document.createElement('canvas'); c.width = c.height = px;
-  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, px, px); x.fillStyle = '#000';
-  for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) if (q.isDark(r, k)) x.fillRect(off + k * cell, off + r * cell, cell, cell);
-  const blob = await new Promise(res => c.toBlob(res, 'image/png'));
-  download(file + '.png', blob, 'image/png');
+  if (kind === 'svg') return download(file + '.svg', `<?xml version="1.0" encoding="UTF-8"?>\n${qrSvg(q, { margin: 4, size: 1000 })}`, 'image/svg+xml');
+  download(file + '.png', await qrPng(q), 'image/png');
 }
 async function renderTourQr() {
   const el = document.getElementById('t-qr'); if (!el) return;
   const t = tById(el.dataset.t); if (!t) return;
-  try { el.innerHTML = (await tourQr(t)).createSvgTag({ cellSize: 4, margin: 2, scalable: true }); } catch { el.innerHTML = '<div class="muted small">QR-код не загрузился</div>'; }
+  try { el.innerHTML = qrSvg(await tourQr(t)); } catch { el.innerHTML = '<div class="muted small">QR-код не загрузился</div>'; }
 }
 // плакат турнира А4 — в стиле рекламного плаката клуба
 function tourSheet(t) {
@@ -1012,7 +996,7 @@ async function printTour(t) {
   if (!el) { el = document.createElement('div'); el.id = 'print-area'; document.body.appendChild(el); }
   el.innerHTML = tourSheet(t);
   const box = el.querySelector('[data-prn=tour]');
-  box.innerHTML = (await tourQr(t)).createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+  box.innerHTML = qrSvg(await tourQr(t));
   await document.fonts?.ready;
   el.style.cssText = 'display:block;position:fixed;left:-10000px;top:0;width:400px';
   fitPrint(el);
@@ -2272,7 +2256,7 @@ async function renderInvite() {
     if (box.dataset.mode === 'player') {
       box.innerHTML = `<div class="center"><b>🏓 QR: вступить в «${esc(S.club.name)}»</b><div id="qr" class="qr-box qr-big"></div><small class="muted">Покажите экран другу — пусть наведёт камеру</small></div>
         <div class="row-btns"><button class="btn primary" data-act="share-invite" data-link="${esc(link)}">📤 Отправить ссылку</button><button class="btn" data-act="copy" data-text="${esc(link)}">Скопировать</button><button class="btn" data-act="inv-qr" data-k="club" data-f="png">⬇️ QR картинкой</button></div>`;
-      return drawQr(document.getElementById('qr'), link, 6);
+      return drawQr(document.getElementById('qr'), link);
     }
     box.innerHTML = `<div><b class="small">Ссылка-приглашение</b><div class="copy-row"><span class="mono">${esc(link)}</span></div>
         <div class="row-btns"><button class="btn primary" data-act="share-invite" data-link="${esc(link)}">Поделиться</button><button class="btn" data-act="copy" data-text="${esc(link)}">Скопировать</button></div></div>
@@ -2286,19 +2270,11 @@ async function renderInvite() {
       <a class="btn full" href="#/print">🖨 Плакат и домики для столов</a>
       <button class="btn ghost sm" data-act="rotate-invite">Сменить ссылку и код</button>
       <small class="muted">Если код попал не туда — смените его. Старые ссылка, код и QR перестанут работать, участники клуба останутся.</small>`;
-    await drawQr(document.getElementById('qr'), link, 6);
-    await drawQr(document.getElementById('qr-app'), appLink(), 6);
+    await drawQr(document.getElementById('qr'), link);
+    await drawQr(document.getElementById('qr-app'), appLink());
   } catch (e) { box.innerHTML = `<div class="empty small">${esc(e.message)}</div>`; }
 }
 
-async function drawQr(el, text, cell) {
-  if (!el) return;
-  try {
-    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js');
-    const qr = window.qrcode(0, 'M'); qr.addData(text); qr.make();
-    el.innerHTML = qr.createSvgTag({ cellSize: cell, margin: 2, scalable: true });
-  } catch { el.innerHTML = '<div class="muted small">QR-код не загрузился</div>'; }
-}
 
 // ── карта клубов ──
 function viewMap() {
@@ -3119,7 +3095,7 @@ function viewPrint() {
 async function fillPrintQr(root) {
   const code = S.printCode?.club === S.club.id ? S.printCode.code : (S.printCode = { club: S.club.id, code: await S.store.inviteCode(S.club.id) }).code;
   await Promise.all([...root.querySelectorAll('[data-prn]')].map(el =>
-    drawQr(el, el.dataset.prn === 'join' ? inviteLink(code) : tableLink(el.dataset.n, code), 4)));
+    drawQr(el, el.dataset.prn === 'join' ? inviteLink(code) : tableLink(el.dataset.n, code))));
 }
 // если на телефоне увеличен шрифт, надписи уменьшаются, пока не влезут: строка — по ширине, плакат — по высоте (за счёт QR)
 function fitPrint(root) {
