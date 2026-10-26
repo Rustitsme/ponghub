@@ -405,7 +405,7 @@ select:disabled, input:disabled { opacity: .7; }
 .people .chip { margin: 0; }
 
 /* ── Календарь ── */
-.ev { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.ev { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .ev:last-child { border-bottom: 0; }
 .ev-date { flex: none; width: 52px; text-align: center; border-radius: 12px; background: var(--table); color: #fff; padding: 6px 0; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--line); }
 .ev-date b { display: block; font: 800 24px/1 var(--display); }
@@ -414,6 +414,11 @@ select:disabled, input:disabled { opacity: .7; }
 .ev-people { display: flex; align-items: center; gap: 2px; margin-top: 4px; flex-wrap: wrap; }
 .ev-people small { margin-left: 6px; }
 .ev-act { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+/* телефон: кнопка записи — отдельной строкой под текстом, чтобы текст не сжимался в столбик */
+@media (max-width: 600px) {
+  .ev { grid-template-columns: 52px minmax(0, 1fr); row-gap: 8px; }
+  .ev-act { grid-column: 2; flex-direction: row; flex-wrap: wrap; align-items: center; }
+}
 
 /* ── Меню профиля ── */
 .me-card, .menu-item { display: flex; align-items: center; gap: 12px; }
