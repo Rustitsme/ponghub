@@ -1,6 +1,6 @@
 import { createStore, media } from './store.js';
 import { makeQr, qrSvg, qrPng, drawQr } from './qr.js';
-import { ITEMS, RG, RGSUB, RUBBER_COLORS, STYLE, EQUIP, LEAGUE_REWARDS, STREAK, STARTER, byId, colorOf, priceOf, keyOf, parseKey } from './shop-catalog.js';
+import { UNLOCK_KIND, unlockText, unlockNow, ITEMS, RG, RGSUB, RUBBER_COLORS, STYLE, EQUIP, LEAGUE_REWARDS, STREAK, STARTER, byId, colorOf, priceOf, keyOf, parseKey } from './shop-catalog.js';
 import { thumb, mountViewer, loadThree, racketShot } from './shop3d.js';
 import {
   analyze, ranking, playerStats, ACHIEVEMENTS, insights, playerOfMonth, headToHead, validateSet,
@@ -2640,8 +2640,8 @@ const CLUB_FORMS = {
 // ───────────── Магазин ─────────────
 // Каталог и 3D — в shop-catalog.js / shop3d.js. Цены и покупки проверяет база (buy_item), награды за лиги — функция notify.
 const SHOP = { region: 'cn', kind: 'blade', color: 'red' };
-const RG_ICON = { cn: '🇨🇳', eu: '🇪🇺', jp: '🇯🇵', acc: '🧻', wear: '👟' };
-const SHOP_REGIONS = ['cn', 'eu', 'jp', 'acc', 'wear'];
+const RG_ICON = { cn: '🇨🇳', eu: '🇪🇺', jp: '🇯🇵', acc: '🧻', wear: '👟', skin: '🏆' };
+const SHOP_REGIONS = ['cn', 'eu', 'jp', 'acc', 'wear', 'skin'];
 let threeAsked = false;
 function ensureThree() {
   if (window.THREE || threeAsked) return;
@@ -2657,7 +2657,7 @@ const owns = key => !!S.shop?.items?.includes(key);
 const ownsAny = it => it.colors ? it.colors.some(c => owns(`${it.id}:${c.key}`)) : owns(it.id);
 const shopBars = it => it.s == null ? '' : `<div class="sh-bars">${[['Скорость', it.s, '#e63946'], ['Вращение', it.w, '#2563b8'], ['Контроль', it.c, '#12a061']].map(([l, v, c]) => `<div class="sh-bar">${l}<i><b style="width:${v * 10}%;background:${c}"></b></i><span>${String(v).replace('.', ',')}</span></div>`).join('')}</div>`;
 const shopTags = it => `<div class="sh-tags"><span class="sh-tag ${STYLE[it.style][1]}">${STYLE[it.style][0]}</span>${it.type === 'blade' ? `<span class="sh-tag">${esc(it.layers)}</span>` : it.type === 'rubber' ? `<span class="sh-tag">${esc(it.rubber)}</span><span class="sh-tag">${esc(it.sponge)}</span>` : ''}</div>`;
-const WEAR_3D = ['shirt', 'shorts', 'shoes', 'socks', 'wrist', 'head'];
+const WEAR_3D = ['shirt', 'shorts', 'shoes', 'socks', 'wrist', 'head', 'cap'];
 const thumbEl = (it, color, big) => {
   const el = thumb(it, color, big); el.classList.add(big ? 'sh-pic-img' : 'sh-thumb-img');
   // форма: сначала рисунок, затем — снимок вещи на 3D-игроке (только у кого открыт 3D-игрок)
@@ -2687,10 +2687,51 @@ function viewShop(r) {
     ${racketRegion && SHOP.kind === 'rubber' ? `<div class="sh-colors">Цвет: ${RUBBER_COLORS.map(c => `<button data-act="sh-color" data-v="${c.key}" class="${SHOP.color === c.key ? 'on' : ''}" style="background:${c.hex}" aria-label="${c.name}"></button>`).join('')}<span>${colorOf({ colors: RUBBER_COLORS }, SHOP.color).name}${SHOP.color === 'blue' ? ' · +60 PC' : ''}</span></div>` : ''}
     <div class="sh-list" id="sh-list"></div>`;
 }
+// ───────────── Коллекция: скины за достижения ─────────────
+const SKIN_GROUPS = [['🏓 Ракетки', ['blade', 'rubber']], ['👕 Одежда', ['shirt', 'shorts']], ['🧢 Головные уборы', ['cap']]];
+const skinOpen = it => (S.skin?.unlocked || []).includes(it.id) || ownsAny(it);
+async function loadSkins(force = false) {
+  if (!feature('shop')) return null;
+  if (!force && S.skin && Date.now() - (S.skinAt || 0) < 45000) return S.skin;
+  try {
+    const res = await S.store.claimSkins(); S.skin = res; S.skinAt = Date.now();
+    if (res.granted?.length) {
+      await ensureShop(true);
+      toast('🎁 Открыт новый скин: ' + res.granted.map(id => byId(id)?.name).filter(Boolean).join(', '));
+    }
+  } catch (e) { console.warn('claimSkins', e); if (!S.skin) S.skin = { stats: null, unlocked: [] }; }
+  return S.skin;
+}
+const fmtStat = (k, v) => k === 'rating' ? String(Math.round(v * 10) / 10).replace('.', ',') : Math.round(v).toLocaleString('ru-RU');
+function skinProgress(it) {
+  const st = S.skin?.stats, u = it.unlock, now = st ? unlockNow(u, st) : 0, pct = Math.max(0, Math.min(100, now / u.n * 100));
+  return { now, pct, text: st ? `${fmtStat(u.kind, now)} из ${fmtStat(u.kind, u.n)}` : 'проверяю…' };
+}
+function renderSkinList(box) {
+  const st = S.skin?.stats, all = ITEMS.filter(it => it.skin), open = all.filter(skinOpen).length;
+  box.innerHTML = `<div class="sk-stats card"><b>Ваш прогресс</b><div class="sk-chips">
+      <span>⭐ Рейтинг <b>${st ? fmtStat('rating', st.rating) : '…'}</b></span><span>🏆 Победы <b>${st ? st.wins : '…'}</b></span><span>🏓 Матчи <b>${st ? st.matches : '…'}</b></span><span>🪙 Заработано <b>${st ? fmtStat('coins', st.coins) : '…'} PC</b></span></div>
+      <small class="muted">Открыто ${open} из ${all.length}. Скины не продаются — они открываются сами, когда выполнено условие. На игру они не влияют, только внешний вид.</small></div>`;
+  for (const [title, types] of SKIN_GROUPS) {
+    const items = all.filter(it => types.includes(it.type));
+    const h = document.createElement('h4'); h.className = 'sk-h'; h.textContent = title; box.appendChild(h);
+    for (const it of items) {
+      const ok = skinOpen(it), pr = skinProgress(it), color = it.colors[0].key;
+      const el = document.createElement('button'); el.className = 'sh-item sk-item' + (ok ? ' open' : ' lock'); el.dataset.act = 'sh-open'; el.dataset.id = it.id; el.dataset.color = it.type === 'blade' ? 'FL' : color;
+      const th = document.createElement('span'); th.className = 'sh-thumb'; th.appendChild(thumbEl(it, it.type === 'blade' ? 'FL' : color));
+      const body = document.createElement('span'); body.className = 'sh-body';
+      body.innerHTML = `<span class="sh-top"><span><small class="sh-brand">${esc(it.brand)} · ${it.colors.length > 1 ? it.colors.length + ' ' + (it.handles ? 'формы ручки' : 'цвета') : 'эксклюзив'}</small><b class="sh-name">${esc(it.name)}</b></span>
+        <span class="sk-badge ${ok ? 'ok' : ''}">${ok ? '✓ открыто' : '🔒'}</span></span>
+        ${ok ? '' : `<span class="sk-cond">${esc(unlockText(it.unlock))}</span><span class="sk-bar"><i style="width:${pr.pct}%"></i></span><small class="muted">у вас ${esc(pr.text)}</small>`}`;
+      el.append(th, body); box.appendChild(el);
+    }
+  }
+}
 function renderShopList() {
   const box = document.getElementById('sh-list');
   if (!box) return;
   const reg = SHOP.region, racketRegion = ['cn', 'eu', 'jp'].includes(reg);
+  if (reg === 'skin') { renderSkinList(box); return; }
   const list = ITEMS.filter(it => it.region === reg && !it.reward && (!racketRegion || it.type === SHOP.kind));
   for (const it of list) {
     const color = it.type === 'rubber' ? SHOP.color : null;
@@ -2722,7 +2763,8 @@ function openShopItem(it, color, mode = 'buy') {
   function draw() {
     const box = document.getElementById('sh-sheet'); if (!box) return;
     const k = keyOf(it, sel), own = owns(k), price = priceOf(it, sel);
-    const spec = it.type === 'blade' ? [['Слои', it.layers], ['Материал', it.material], ['Класс', it.cls], ['Вес', it.wt + ' г'], ['Толщина', String(it.th).replace('.', ',') + ' мм'], ['Стиль', STYLE[it.style][0]]]
+    const skinSpec = it.skin ? [['Условие', unlockText(it.unlock)], ['Статус', skinOpen(it) ? 'Открыто ✓' : 'Закрыто — ' + skinProgress(it).text], ['Тип', 'Эксклюзив · не продаётся']] : null;
+    const spec = skinSpec ? skinSpec : it.type === 'blade' ? [['Слои', it.layers], ['Материал', it.material], ['Класс', it.cls], ['Вес', it.wt + ' г'], ['Толщина', String(it.th).replace('.', ',') + ' мм'], ['Стиль', STYLE[it.style][0]]]
       : it.type === 'rubber' ? [['Тип', it.rubber], ['Губка', it.sponge], ['Жёсткость губки', it.hard], ['Дуга полёта', it.arc], ['Липкость', it.tack], ['Вес листа', '≈ ' + it.wt + ' г'], ['Цвет', colorOf(it, sel).name]]
       : [['Цвет', colorOf(it, sel)?.name || '—']];
     box.innerHTML = `<div class="sh-pic" id="sh-pic"></div>
@@ -2743,6 +2785,17 @@ function openShopItem(it, color, mode = 'buy') {
       act.querySelector('#sh-rw')?.addEventListener('click', e => busy(e.currentTarget, async () => {
         await S.store.claimLeague(mode.slice(7), k); await ensureShop(true); closeModal(); toast('Награда получена 🎁'); render();
       }));
+      return;
+    }
+    if (it.skin) {
+      const wearT = ['shirt', 'shorts', 'cap'].includes(it.type), pr = skinProgress(it);
+      if (own) {
+        const slot = wearT ? it.type : null, worn = Object.values(S.shop.loadout || {}).includes(k);
+        act.innerHTML = `<button class="btn primary full" id="sk-eq">${worn ? 'Уже надето' : wearT ? 'Надеть на игрока' : 'Поставить на ракетку'}</button>`;
+        act.querySelector('#sk-eq').onclick = e => wearT ? busy(e.currentTarget, async () => { S.shop.loadout = await S.store.equipItem(slot, k); closeModal(); toast('Надето ✓'); go('#/avatar'); }) : askEquip(it, k, act);
+      } else {
+        act.innerHTML = `<div class="sk-lock"><b>🔒 ${esc(unlockText(it.unlock))}</b><span class="sk-bar"><i style="width:${pr.pct}%"></i></span><small class="muted">у вас ${esc(pr.text)}</small></div>${wearT && feature('avatar') ? `<a class="btn full" href="#/avatar?try=${encodeURIComponent(k)}" data-act="close">👀 Примерить на игроке</a>` : ''}`;
+      }
       return;
     }
     if (own) {
@@ -2873,7 +2926,7 @@ function openRewardPicker(league) {
   const w = LEAGUE_REWARDS.find(x => x.league === league);
   const opts = [];
   for (const it of ITEMS) {
-    if (it.reward || !w.types.includes(it.type)) continue;
+    if (it.reward || it.skin || !w.types.includes(it.type)) continue;
     for (const c of it.colors || [{ key: null, extra: 0 }]) if (priceOf(it, c.key) <= w.cap && !owns(keyOf(it, c.key))) opts.push({ it, color: c.key });
   }
   openModal(`<h3>Награда: ${esc(w.name)}</h3><p class="muted small">${esc(w.text)}. Выберите, что забрать.</p><div class="sh-pick" id="sh-pick"></div>`, sh => {
@@ -2896,6 +2949,7 @@ const SHOP_ACT = {
   'sh-region': el => { SHOP.region = el.dataset.v; render(); },
   'sh-kind': el => { SHOP.kind = el.dataset.v; render(); },
   'sh-color': el => { SHOP.color = el.dataset.v; render(); },
+  'sk-back': () => { SHOP.region = 'skin'; location.hash = '#/shop'; },
   'sh-open': el => { const it = byId(el.dataset.id); if (it) openShopItem(it, el.dataset.color || null); },
   'sh-claim': el => busy(el, async () => { const r = await S.store.claimDaily(); S.coins = r.balance; await ensureShop(true); render(); toast(`+${r.amount} PC 🔥`); }),
   'sh-reward': el => openRewardPicker(el.dataset.v),
@@ -2909,7 +2963,7 @@ const SHOP_ACT = {
 let AV = null;
 // лицо по селфи отложено: нужна платная нейросеть (Gemini без оплаты не рисует картинки)
 const FACE_ON = false;
-const WEAR = [['shirt', 'Футболка'], ['shorts', 'Шорты'], ['shoes', 'Кроссовки'], ['socks', 'Носки'], ['wrist', 'Напульсники'], ['head', 'Повязка']];
+const WEAR = [['shirt', 'Футболка'], ['shorts', 'Шорты'], ['shoes', 'Кроссовки'], ['socks', 'Носки'], ['wrist', 'Напульсники'], ['head', 'Повязка'], ['cap', 'Головной убор']];
 function viewAvatar(r) {
   const a = r.args[0], grip = a === 'grip', other = a && !grip && a !== S.me.id;
   if (grip && !isFounder()) return viewHome(r);
@@ -2917,12 +2971,13 @@ function viewAvatar(r) {
   if (!p) return '<div class="empty">Игрок не найден</div>';
   const mine = !other && !grip, lo = (other ? p.loadout : S.shop?.loadout) || p.loadout || {}, owned = S.shop?.items || [];
   const gender = p.avatar3d || 'boy';
+  const tryIt = mine && r.q.get('try') ? parseKey(r.q.get('try')).it : null;
   const title = grip ? '✋ Хват ракетки' : mine ? '🧍 Мой игрок' : '🧍 ' + esc(p.nickname);
   const wearBox = mine ? WEAR.map(([slot, name]) => {
     const mineItems = owned.filter(k => byId(k.split(':')[0])?.type === slot);
     return `<div class="stack"><b class="small">${name}</b>${mineItems.length ? `<div class="av-wear">${mineItems.map(k => { const { it, color } = parseKey(k); const c = colorOf(it, color); return `<button class="av-w ${lo[slot] === k ? 'on' : ''}" data-act="av-wear" data-slot="${slot}" data-k="${esc(k)}"><i style="background:${c.hex}"></i>${esc(it.name)}<small>${esc(c.name)}</small></button>`; }).join('')}${lo[slot] ? `<button class="av-w" data-act="av-wear" data-slot="${slot}" data-k="">Снять</button>` : ''}</div>` : `<small class="muted">Пока нет — <a href="#/shop" class="link">купить в магазине</a></small>`}</div>`;
   }).join('') : '';
-  return `<div class="page-h"><h1>${title}</h1>${mine ? '<a href="#/racket" class="btn sm">🏓 Ракетка</a>' : ''}</div>
+  return `${tryIt ? `<div class="card sk-try">👀 Примерка: <b>${esc(tryIt.name)}</b><br><small class="muted">${esc(unlockText(tryIt.unlock))}</small> <a href="#/shop" class="link" data-act="sk-back">К коллекции →</a></div>` : ''}<div class="page-h"><h1>${title}</h1>${mine ? '<a href="#/racket" class="btn sm">🏓 Ракетка</a>' : ''}</div>
     <div class="av-stage ${AV?.big ? 'big' : ''}" id="av-stage"><div class="av-load" id="av-load"><span class="spin"></span></div>
       <div class="av-tools"><button data-act="av-tool" data-v="flip" aria-label="Повернуть">⟲</button><button data-act="av-tool" data-v="face" aria-label="Лицо крупно">🔍</button><button data-act="av-tool" data-v="full" aria-label="Во весь рост">⤢</button><button data-act="av-tool" data-v="big" aria-label="Во весь экран">⛶</button></div>
       ${grip ? '' : `<div class="av-emotes"><button data-act="av-play" data-v="win">🏆 Победа</button><button data-act="av-play" data-v="swing">🏓 Удар</button><button data-act="av-play" data-v="wave">👋 Привет</button><button data-act="av-play" data-v="clap">👏 Хлопки</button></div>`}</div>
@@ -2937,7 +2992,10 @@ async function mountAvatarView(r) {
   const a = r.args[0], grip = a === 'grip', other = a && !grip && a !== S.me.id;
   if (!other && !S.shop && feature('shop')) { try { await ensureShop(); } catch { /* без магазина — базовая форма */ } }
   const p = other ? S.byId.get(a) : S.ctx.me;
-  const lo = (other ? p?.loadout : S.shop?.loadout) || p?.loadout || {};
+  let lo = (other ? p?.loadout : S.shop?.loadout) || p?.loadout || {};
+  const tk = !other && !grip ? r.q.get('try') : null, ti = tk ? parseKey(tk).it : null;
+  if (ti) lo = { ...lo, [ti.type === 'rubber' ? 'fh' : ti.type]: tk };
+  if (!other && !grip) loadSkins().then(g => { if (g?.granted?.length && route().name === 'avatar') render(); });
   try {
     const { mountAvatar, RK } = await import('./player3d.js');
     const ctl = await mountAvatar(el, { gender: p?.avatar3d || 'boy', face: p?.face || null, loadout: lo, grip: S.ctx.platform?.grip || {}, tune: grip });
@@ -4277,7 +4335,7 @@ function afterRender(r) {
   if (r.name === 'admin' && r.args[0] === 'log') renderAudit();
   if (r.name === 'admin' && r.args[0] === 'data') renderBackups();
   if (r.name === 'admin' && r.args[0] === 'screens') renderScreens();
-  if (r.name === 'shop') { if (!S.shop && feature('shop')) ensureShop().then(render).catch(e => toast(e.message, 'err')); else renderShopList(); }
+  if (r.name === 'shop') { if (!S.shop && feature('shop')) ensureShop().then(render).catch(e => toast(e.message, 'err')); else { renderShopList(); if (SHOP.region === 'skin') loadSkins().then(() => { if (route().name === 'shop' && SHOP.region === 'skin') renderShopList(); }); } }
   if (r.name === 'racket') { if (!S.shop && feature('shop')) ensureShop().then(render).catch(e => toast(e.message, 'err')); else mountRacket(); }
   if (r.name === 'player' && feature('shop')) { ensureThree(); mountPlayerRackets(); }
   if (r.name === 'avatar' && feature('avatar')) mountAvatarView(r);

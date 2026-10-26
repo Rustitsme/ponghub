@@ -15,13 +15,14 @@ const BRANDS = {
   qinglan: { name: 'Qinglan', color: '#e8590c', mark: 'wave' },
   kunlun: { name: 'Kunlun', color: '#16181d', mark: 'mountain' },
   huaxia: { name: 'Huaxia', color: '#d62839', mark: 'stripes' },
+  ph: { name: 'PongHub', color: '#e63946', mark: 'bolt' },
   aozora: { name: 'Aozora', color: '#1f5fc4', mark: 'diamond' },
 };
 const brandName = bk => BRANDS[bk]?.name || bk;
 
 // ───────────── Каталог ─────────────
-const RG = { cn: 'Китай', eu: 'Европа', jp: 'Япония', acc: 'Аксессуары', wear: 'Форма', rw: 'Награды' };
-const RGSUB = { cn: 'Липкие накладки и мощный накат', eu: 'Германия и Швеция: тензоры и контроль', jp: 'Легенды японских мастеров', acc: 'Обмотки, лента, мячи, чехлы', wear: 'Футболки, шорты, кроссовки, носки, напульсники, повязки', rw: 'Бесплатно за достижения' };
+const RG = { cn: 'Китай', eu: 'Европа', jp: 'Япония', acc: 'Аксессуары', wear: 'Форма', rw: 'Награды', skin: 'Коллекция' };
+const RGSUB = { cn: 'Липкие накладки и мощный накат', eu: 'Германия и Швеция: тензоры и контроль', jp: 'Легенды японских мастеров', acc: 'Обмотки, лента, мячи, чехлы', wear: 'Футболки, шорты, кроссовки, носки, напульсники, повязки', rw: 'Бесплатно за достижения', skin: 'Эксклюзивные скины — только за достижения' };
 const C = (key, name, hex, extra = 0) => ({ key, name, hex, extra });
 const RUBBER_COLORS = [C('red', 'красная', '#d62839'), C('black', 'чёрная', '#18191d'), C('blue', 'синяя', '#1f5fc4', 60)];
 // s: скорость, w: вращение, c: контроль (из 10)
@@ -123,6 +124,45 @@ const STYLE = { atk: ['Атака', 'atk'], def: ['Защита', 'def'], uni: [
 const EQUIP = { blade: 'blade', rubber: 'side', grip: 'grip', tape: 'tape' };
 
 
+
+// ───────────── Коллекция: эксклюзивные скины за достижения ─────────────
+// Не продаются: открываются сами, когда выполнено условие (проверяет сервер). Только внешний вид — на игру не влияют.
+// unlock: rating — рейтинг клуба, wins — победы, matches — сыгранные матчи, coins — заработанные PC за всё время.
+const UNLOCK_KIND = { rating: ['Рейтинг', n => `${n}`], wins: ['Победы', n => `${n}`], matches: ['Матчи', n => `${n}`], coins: ['Заработать PC', n => n.toLocaleString('ru-RU')] };
+const unlockText = u => !u ? '' : ({ rating: `Достичь рейтинга ${u.n}`, wins: `Выиграть матчей: ${u.n}`, matches: `Сыграть матчей: ${u.n}`, coins: `Заработать ${u.n.toLocaleString('ru-RU')} PC за всё время` })[u.kind];
+const unlockNow = (u, st) => st ? (u.kind === 'rating' ? st.rating : u.kind === 'wins' ? st.wins : u.kind === 'matches' ? st.matches : st.coins) : 0;
+const SK = (o) => ({ region: 'skin', bk: 'ph', brand: 'PongHub', price: 0, style: 'top', skin: true, ...o });
+const HND = [C('FL', 'FL — расширяется книзу', '#c98a4b'), C('ST', 'ST — прямая', '#c98a4b'), C('AN', 'AN — анатомическая', '#c98a4b'), C('CS', 'CS — короткая', '#c98a4b')];
+const RACKET_SKINS = [
+  SK({ id: 'skin-b1', type: 'blade', name: 'Obsidian Gold', unlock: { kind: 'rating', n: 70 }, s: 8.5, w: 8.5, c: 8, layers: '5+2 карбон', material: 'чёрный лак + золото', desc: 'Чёрный лак, золотая ручка и золотые тонкие полосы. Для тех, кто дошёл до лиги «Золото».', wt: 86, th: 5.9, cls: 'OFF+', look: { face: '#17171c', cheek: '#c9a227', ply: ['#17171c', '#d4af37', '#17171c'], finish: 'goldblack' }, colors: HND, handles: true }),
+  SK({ id: 'skin-b2', type: 'blade', name: 'Mirror Silver', unlock: { kind: 'rating', n: 55 }, s: 8, w: 8, c: 8.5, layers: '7 слоёв', material: 'зеркальное серебро', desc: 'Зеркальное серебро: блестит, как хром. Открывается в лиге «Серебро».', wt: 85, th: 6, cls: 'ALL+', look: { face: '#cfd4de', cheek: '#e9ecf2', ply: ['#cfd4de', '#8a8f99', '#e9ecf2'], finish: 'silver' }, colors: HND, handles: true }),
+  SK({ id: 'skin-b3', type: 'blade', name: 'Bronze Forge', unlock: { kind: 'wins', n: 10 }, s: 7.5, w: 8, c: 8.5, layers: '5 слоёв', material: 'бронза', desc: 'Тёплая бронза, как свежая медаль. За 10 побед.', wt: 87, th: 5.8, cls: 'ALL', look: { face: '#b0703c', cheek: '#6b3f1d', ply: ['#b0703c', '#5b3519', '#d19a64'], finish: 'bronze' }, colors: HND, handles: true }),
+];
+const RUBBER_SKINS = [
+  SK({ id: 'skin-r1', type: 'rubber', name: 'Gold Foil', unlock: { kind: 'coins', n: 5000 }, s: 8, w: 9, c: 7, rubber: 'липкая', sponge: '2,0 мм', sp: '#d4af37', hard: '40°', arc: 'высокая', tack: 'высокая', wt: 48, desc: 'Золотая фольга на накладке. За 5 000 заработанных PC.', colors: [C('gold', 'золотая', '#d4af37')], fin: 'gold' }),
+  SK({ id: 'skin-r2', type: 'rubber', name: 'Silver Glitter', unlock: { kind: 'wins', n: 50 }, s: 8, w: 8.5, c: 7.5, rubber: 'липкая', sponge: '2,0 мм', sp: '#9aa6b8', hard: '40°', arc: 'высокая', tack: 'высокая', wt: 47, desc: 'Серебряные блёстки по всей накладке. За 50 побед.', colors: [C('silver', 'серебряная', '#b9c2d0'), C('blue', 'синие блёстки', '#2f6fd1'), C('pink', 'розовые блёстки', '#e0529c')], fin: 'glitter' }),
+];
+const WEAR_SKINS = [
+  SK({ id: 'skin-t1', type: 'shirt', name: 'Рваная футболка', unlock: { kind: 'wins', n: 5 }, desc: 'Уличная футболка с дырами и потёртыми краями. За 5 побед.', sty: 1, colors: [C('black', 'чёрная', '#1b1c20'), C('grey', 'серая', '#6b6f77'), C('white', 'белая', '#f4f6fa')] }),
+  SK({ id: 'skin-t2', type: 'shirt', name: 'Баскетбольное джерси', unlock: { kind: 'rating', n: 55 }, desc: 'Майка без рукавов и контрастные вставки по бокам. Рейтинг 55.', sty: 2, accMap: { red: '#ffffff', blue: '#ffcc00', black: '#e63946' }, colors: [C('red', 'красное', '#d62839'), C('blue', 'синее', '#1f5fc4'), C('black', 'чёрное', '#1b1c20')] }),
+  SK({ id: 'skin-t3', type: 'shirt', name: 'Футбольное джерси', unlock: { kind: 'wins', n: 25 }, desc: 'Классические вертикальные полосы и цветные рукава. За 25 побед.', sty: 3, accMap: { red: '#1b1c20', blue: '#ffffff', green: '#ffffff' }, colors: [C('red', 'красно-чёрное', '#d62839'), C('blue', 'сине-белое', '#1f5fc4'), C('green', 'зелёно-белое', '#12a061')] }),
+  SK({ id: 'skin-t4', type: 'shirt', name: 'Неоновая майка', unlock: { kind: 'rating', n: 70 }, desc: 'Яркая майка без рукавов — видно за километр. Рейтинг 70.', sty: 2, accMap: { lime: '#1b1c20', pink: '#1b1c20', cyan: '#1b1c20' }, colors: [C('lime', 'лайм', '#b6f400'), C('pink', 'розовая', '#ff3d9a'), C('cyan', 'бирюзовая', '#00d3e6')] }),
+  SK({ id: 'skin-s1', type: 'shorts', name: 'Джинсовые шорты', unlock: { kind: 'matches', n: 10 }, desc: 'Настоящий деним с фактурой. За 10 сыгранных матчей.', sty: 1, colors: [C('blue', 'синие', '#3a5a8c'), C('light', 'голубые', '#6f8fb8'), C('black', 'чёрные', '#2a2c33')] }),
+  SK({ id: 'skin-s2', type: 'shorts', name: 'Баскетбольные шорты', unlock: { kind: 'wins', n: 15 }, desc: 'Свободные, с лампасом сбоку. За 15 побед.', sty: 3, accMap: { red: '#ffffff', black: '#d4af37', blue: '#ffffff' }, colors: [C('red', 'красные', '#d62839'), C('black', 'чёрные', '#1b1c20'), C('blue', 'синие', '#1f5fc4')] }),
+  SK({ id: 'skin-s3', type: 'shorts', name: 'Камуфляж', unlock: { kind: 'coins', n: 2000 }, desc: 'Военный рисунок: пятна трёх оттенков. За 2 000 заработанных PC.', sty: 2, accMap: { green: '#8a9a55', sand: '#c8b27a', urban: '#8d939c' }, colors: [C('green', 'зелёный', '#4d5b30'), C('sand', 'песочный', '#9c8756'), C('urban', 'городской', '#4a4f57')] }),
+  SK({ id: 'skin-s4', type: 'shorts', name: 'Рваные джинсовые шорты', unlock: { kind: 'wins', n: 40 }, desc: 'Деним с дырами на ногах. За 40 побед.', sty: 4, colors: [C('blue', 'синие', '#3a5a8c'), C('black', 'чёрные', '#2a2c33')] }),
+];
+const CAP_SKINS = [
+  SK({ id: 'skin-c1', type: 'cap', name: 'Бейсболка', unlock: { kind: 'wins', n: 3 }, desc: 'Классическая бейсболка с козырьком. За 3 победы.', cap: 'cap', colors: [C('red', 'красная', '#d62839'), C('black', 'чёрная', '#1b1c20'), C('white', 'белая', '#f4f6fa'), C('blue', 'синяя', '#1f5fc4')] }),
+  SK({ id: 'skin-c2', type: 'cap', name: 'Снепбэк', unlock: { kind: 'wins', n: 10 }, desc: 'Плоский прямой козырёк, уличный стиль. За 10 побед.', cap: 'snap', colors: [C('black', 'чёрный', '#1b1c20'), C('white', 'белый', '#f4f6fa'), C('gold', 'золотой', '#d4af37')] }),
+  SK({ id: 'skin-c3', type: 'cap', name: 'Кепка задом наперёд', unlock: { kind: 'matches', n: 25 }, desc: 'Козырёк назад, как у настоящих уличных игроков. За 25 матчей.', cap: 'rev', colors: [C('navy', 'тёмно-синяя', '#14306b'), C('red', 'красная', '#d62839'), C('green', 'зелёная', '#12a061')] }),
+  SK({ id: 'skin-c4', type: 'cap', name: 'Шапка-бини', unlock: { kind: 'coins', n: 1000 }, desc: 'Тёплая вязаная шапка с отворотом. За 1 000 заработанных PC.', cap: 'beanie', colors: [C('black', 'чёрная', '#1b1c20'), C('grey', 'серая', '#8a8f99'), C('orange', 'оранжевая', '#ff7a00')] }),
+  SK({ id: 'skin-c5', type: 'cap', name: 'Панама', unlock: { kind: 'wins', n: 50 }, desc: 'Широкие поля, лёгкая ткань. За 50 побед.', cap: 'bucket', colors: [C('beige', 'бежевая', '#d8c9a3'), C('black', 'чёрная', '#1b1c20'), C('green', 'зелёная', '#5b6b3a')] }),
+];
+const SKINS = [...RACKET_SKINS, ...RUBBER_SKINS, ...WEAR_SKINS, ...CAP_SKINS];
+ITEMS.push(...SKINS);
+const accOf = (it, color) => it.accMap?.[color] || it.acc || '#ffffff';
+
 // эксклюзив за лигу «Золото» — не продаётся
 ITEMS.push({ id: 'rw-tape-gold', region: 'rw', type: 'tape', bk: 'rhein', brand: 'Rheinwerk', name: 'Золотая торцевая лента', price: 0, style: 'top', tape: 'gold', desc: 'Только для тех, кто дошёл до Золота.', colors: [C('gold', 'золотая', '#d4af37')], reward: true });
 // награды за лиги: что можно выбрать бесплатно
@@ -134,4 +174,4 @@ export const LEAGUE_REWARDS = [
 ];
 export const STREAK = [20, 30, 40, 50, 60, 80, 120];
 export const STARTER = 'cn-b1:FL';
-export { BRANDS, ITEMS, RG, RGSUB, RUBBER_COLORS, STYLE, EQUIP, byId, colorOf, priceOf, keyOf, parseKey, brandName };
+export { UNLOCK_KIND, unlockText, unlockNow, accOf, SKINS, BRANDS, ITEMS, RG, RGSUB, RUBBER_COLORS, STYLE, EQUIP, byId, colorOf, priceOf, keyOf, parseKey, brandName };

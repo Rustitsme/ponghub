@@ -1,6 +1,7 @@
 // Слой данных: Supabase (боевой режим) или localStorage (демо-режим, если база не настроена).
 import { CONFIG } from './config.js';
-import { parseKey, priceOf } from './shop-catalog.js';
+import { parseKey, priceOf, SKINS } from './shop-catalog.js';
+import { analyze, playerStats, DEFAULT_SETTINGS } from './engine.js';
 
 const TABLES = ['profiles', 'matches', 'tournaments', 'events', 'challenges', 'live_matches', 'announcements', 'pred_events', 'predictions', 'coin_tx', 'clubs', 'club_members', 'platform'];
 // данные, которые принадлежат клубу (club_id подставляется автоматически)
@@ -294,6 +295,13 @@ class SupaStore {
   async claimLeague(league, item) {
     const { data, error } = await this.sb.functions.invoke('notify', { body: { action: 'league_reward', cid: this.cid, league, item } });
     if (error) { let msg = 'Не удалось получить награду'; try { const j = await error.context?.json(); if (j?.error) msg = j.error; } catch { /* */ } throw new Error(msg); }
+    return data;
+  }
+
+  // коллекция скинов: сервер считает рейтинг, победы, матчи и заработанные PC и сам выдаёт открытое
+  async claimSkins() {
+    const { data, error } = await this.sb.functions.invoke('notify', { body: { action: 'claim_skins' } });
+    if (error) { let msg = 'Не удалось проверить достижения'; try { const j = await error.context?.json(); if (j?.error) msg = j.error; } catch { /* */ } throw new Error(msg); }
     return data;
   }
 
@@ -741,6 +749,23 @@ class LocalStore {
     d.user_items.push({ user_id: me, item_key: item, source: 'reward', created_at: new Date().toISOString() });
     if (league === 'gold' && !d.user_items.some(x => x.user_id === me && x.item_key === 'rw-tape-gold:gold')) d.user_items.push({ user_id: me, item_key: 'rw-tape-gold:gold', source: 'reward', created_at: new Date().toISOString() });
     d.league_rewards.push({ user_id: me, league, item_key: item }); this.save(); return { ok: true };
+  }
+  async claimSkins() {
+    const d = this.shopDb(), me = this.db.session;
+    const pool = d.profiles.filter(p => ['approved', 'archived', 'deleted'].includes(p.status));
+    const ms = d.matches.filter(m => !this.cid || m.club_id === this.cid);
+    let rating = 40, wins = 0, matches = 0;
+    try { const A = analyze(pool, ms, { ...DEFAULT_SETTINGS, ...((this.club && this.club.settings) || {}) }); rating = A.rating.get(me) ?? A.S.initialRating; const st = playerStats(me, A, []); wins = st.wins; matches = st.matches; } catch { /* */ }
+    const coins = (d.coin_tx || []).filter(t => t.user_id === me && t.amount > 0 && ['match', 'prize', 'streak', 'daily', 'weekly', 'payout'].includes(t.kind)).reduce((a, t) => a + t.amount, 0);
+    const stats = { rating: Math.round(rating * 10) / 10, wins, matches, coins }, unlocked = [], granted = [];
+    for (const it of SKINS) {
+      if ((stats[it.unlock.kind] || 0) < it.unlock.n) continue;
+      unlocked.push(it.id);
+      let add = false;
+      for (const c of it.colors) { const k = `${it.id}:${c.key}`; if (!d.user_items.some(x => x.user_id === me && x.item_key === k)) { d.user_items.push({ user_id: me, item_key: k, source: 'reward', price: 0, created_at: new Date().toISOString() }); add = true; } }
+      if (add) granted.push(it.id);
+    }
+    this.save(); return { ok: true, stats, unlocked, granted };
   }
   screenRpc(name, a) {
     const S = this.db.screens = this.db.screens || [];

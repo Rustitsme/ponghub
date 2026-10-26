@@ -4,7 +4,7 @@
 import webpush from 'npm:web-push@3.6.7';
 import { createClient } from 'npm:@supabase/supabase-js@2.50.0';
 // Тот же движок рейтинга, что и в приложении: engine.js — копия js/engine.js (обновлять вместе)
-import { analyze, analyzeDoubles, weekSummary, seasonTable, monthKey, monthName, LEAGUES } from './engine.js';
+import { analyze, analyzeDoubles, weekSummary, seasonTable, monthKey, monthName, LEAGUES, playerStats } from './engine.js';
 
 const SB_URL = Deno.env.get('SUPABASE_URL')!;
 const sb = createClient(SB_URL, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
@@ -376,6 +376,52 @@ Deno.serve(async (req) => {
     if (rw.bonus) await sb.from('user_items').upsert({ user_id: uid, item_key: rw.bonus, club_id: cid, price: 0, source: 'reward' }, { onConflict: 'user_id,item_key', ignoreDuplicates: true });
     await sb.from('league_rewards').insert({ user_id: uid, league, item_key: item, club_id: cid });
     return json({ ok: true });
+  }
+
+
+  // коллекция скинов: условия (рейтинг, победы, матчи, заработанные PC) проверяем на сервере и сами выдаём открытое
+  if (body.action === 'claim_skins') {
+    const jwt = req.headers.get('Authorization')?.replace('Bearer ', '') ?? '';
+    const { data: au } = await sb.auth.getUser(jwt);
+    if (!au.user) return json({ error: 'Войдите в аккаунт' }, 401);
+    const uid = au.user.id;
+    const { data: feat } = await sb.from('platform').select('value').eq('key', 'features').maybeSingle();
+    const mode = feat?.value?.shop ?? 'all';
+    if (mode !== 'all') {
+      const { data: me } = await sb.from('profiles').select('is_founder').eq('id', uid).maybeSingle();
+      const { data: tst } = await sb.from('feature_testers').select('user_id').eq('feature', 'shop').eq('user_id', uid).maybeSingle();
+      if (!(mode === 'founder' && (me?.is_founder || tst))) return json({ error: 'Магазин пока недоступен' }, 403);
+    }
+    const { data: mems } = await sb.from('club_members').select('club_id').eq('user_id', uid).eq('status', 'active');
+    let rating = 0, wins = 0, matches = 0;
+    for (const m of mems ?? []) {
+      const c = await club(m.club_id);
+      if (!c) continue;
+      const { profiles, matches: ms, settings } = await loadClub(c);
+      const A = analyze(profiles.filter((p) => ['approved', 'archived', 'deleted'].includes(p.status)), ms, settings);
+      const st = playerStats(uid, A, []);
+      rating = Math.max(rating, A.rating.get(uid) ?? A.S.initialRating);
+      wins += st.wins; matches += st.matches;
+    }
+    const { data: tx } = await sb.from('coin_tx').select('amount, kind').eq('user_id', uid).gt('amount', 0).in('kind', ['match', 'prize', 'streak', 'daily', 'weekly', 'payout']);
+    const coins = (tx ?? []).reduce((a: number, t: { amount: number }) => a + t.amount, 0);
+    const stats = { rating: Math.round(rating * 10) / 10, wins, matches, coins };
+    const { data: sk } = await sb.from('shop_items').select('id, variants, unlock').not('unlock', 'is', null);
+    const { data: have } = await sb.from('user_items').select('item_key').eq('user_id', uid);
+    const owned = new Set((have ?? []).map((x: { item_key: string }) => x.item_key));
+    const unlocked: string[] = [], granted: string[] = [];
+    for (const it of sk ?? []) {
+      const u = it.unlock as { kind: string; n: number };
+      if ((stats as Record<string, number>)[u.kind] >= u.n) {
+        unlocked.push(it.id);
+        const keys = Object.keys(it.variants ?? {}).map((v) => `${it.id}:${v}`).filter((k) => !owned.has(k));
+        if (keys.length) {
+          await sb.from('user_items').upsert(keys.map((k) => ({ user_id: uid, item_key: k, club_id: mems?.[0]?.club_id ?? null, price: 0, source: 'reward' })), { onConflict: 'user_id,item_key', ignoreDuplicates: true });
+          granted.push(it.id);
+        }
+      }
+    }
+    return json({ ok: true, stats, unlocked, granted });
   }
 
   if (body.action === 'test') {

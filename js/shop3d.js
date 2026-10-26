@@ -149,6 +149,11 @@ function thumb(it, color, big = false) {
     const acc = BRANDS[it.bk]?.color || '#333';
     x.fillStyle = light(col.hex) ? acc : 'rgba(255,255,255,.85)'; x.fillRect(-35, 26, 5, 8); x.fillRect(30, 26, 5, 8);
     emblem(x, it.bk, -18, 18, 10, light(col.hex) ? acc : '#fff');
+  } else if (t === 'cap') {
+    x.translate(64, 70); x.shadowColor = 'rgba(10,30,70,.28)'; x.shadowBlur = 9; x.shadowOffsetY = 4;
+    x.fillStyle = col.hex; x.beginPath(); x.moveTo(-40, 8); x.quadraticCurveTo(-40, -42, 0, -44); x.quadraticCurveTo(40, -42, 40, 8); x.closePath(); x.fill();
+    x.shadowColor = 'transparent'; x.fillStyle = shade(col.hex, -40); x.beginPath(); x.ellipse(24, 10, 36, 7, 0, 0, 7); x.fill();
+    x.fillStyle = 'rgba(255,255,255,.2)'; x.beginPath(); x.ellipse(-12, -24, 12, 7, -.5, 0, 7); x.fill();
   } else if (t === 'shoes') {
     x.translate(64, 70);
     x.fillStyle = 'rgba(10,30,70,.18)'; x.beginPath(); x.ellipse(2, 24, 54, 6, 0, 0, 7); x.fill();
@@ -235,6 +240,18 @@ function woodCanvas(x, w, h, base, seed, dark = 1) {
   }
   for (let i = 0; i < 6; i++) { const cx = rnd() * w, cy = rnd() * h; const g = x.createRadialGradient(cx, cy, 2, cx, cy, 30 + rnd() * 40); g.addColorStop(0, 'rgba(110,60,20,.10)'); g.addColorStop(1, 'rgba(110,60,20,0)'); x.fillStyle = g; x.fillRect(0, 0, w, h); }
 }
+// металлические отделки скинов: чёрно-золотая, серебро, бронза, золотая фольга, блёстки
+function metalCanvas(x, w, h, kind, base) {
+  const G = (stops, ang = 0.8) => { const g = x.createLinearGradient(0, 0, w * Math.cos(ang), h * Math.sin(ang) + h * .2); stops.forEach(([o, c]) => g.addColorStop(o, c)); x.fillStyle = g; x.fillRect(0, 0, w, h); };
+  if (kind === 'silver') G([[0, '#8d94a3'], [.25, '#f3f5f9'], [.5, '#aab1bf'], [.75, '#ffffff'], [1, '#939aa8']]);
+  else if (kind === 'bronze') G([[0, '#6b3f1d'], [.3, '#d19a64'], [.55, '#9a5f2c'], [.8, '#e0b27a'], [1, '#6b3f1d']]);
+  else if (kind === 'gold') G([[0, '#8a6a12'], [.25, '#ffe08a'], [.5, '#c9a227'], [.75, '#fff0b3'], [1, '#9a7714']]);
+  else if (kind === 'goldblack') { x.fillStyle = '#121216'; x.fillRect(0, 0, w, h); const g = x.createLinearGradient(0, 0, w, h); g.addColorStop(0, 'rgba(212,175,55,.0)'); g.addColorStop(.5, 'rgba(212,175,55,.22)'); g.addColorStop(1, 'rgba(212,175,55,0)'); x.fillStyle = g; x.fillRect(0, 0, w, h); x.strokeStyle = '#d4af37'; x.lineWidth = 3; for (let i = -h; i < w + h; i += 46) { x.globalAlpha = .75; x.beginPath(); x.moveTo(i, h); x.lineTo(i + h, 0); x.stroke(); } x.globalAlpha = 1; }
+  else { x.fillStyle = base; x.fillRect(0, 0, w, h); }
+  // шлифовка + блики
+  for (let i = 0; i < 260; i++) { x.fillStyle = `rgba(255,255,255,${Math.random() * .07})`; x.fillRect(Math.random() * w, Math.random() * h, 1 + Math.random() * 90, 1); }
+  if (kind === 'glitter') for (let i = 0; i < 2600; i++) { x.fillStyle = `rgba(255,255,255,${.3 + Math.random() * .7})`; const r = .6 + Math.random() * 2; x.fillRect(Math.random() * w, Math.random() * h, r, r); }
+}
 // контур головы (см): ширина 15, высота 15.8, «плечи» переходят в ручку шириной 2.5
 function headShape(hex, inset = 0) {
   const s = new THREE.Shape();
@@ -297,8 +314,9 @@ function buildRacket(cfg, q = 1) {
   const seq = bl.look.ply.length === 3 ? [0, 2, 1, 2, 1, 2, 0].map(i => bl.look.ply[i]) : [0, 1, 0, 1, 0].map(i => bl.look.ply[i]);
   const plyTex = canvasTex(8, 256, (x, w, h) => { const hh = h / seq.length; seq.forEach((c, i) => { x.fillStyle = c; x.fillRect(0, i * hh, w, hh + 1); x.fillStyle = 'rgba(60,30,10,.25)'; x.fillRect(0, i * hh, w, 1); }); });
   plyTex.wrapT = THREE.ClampToEdgeWrapping; plyTex.repeat.set(1, 1 / (T + .06)); plyTex.offset.set(0, .03 / (T + .06));
-  const faceTex = canvasTex(R(512), R(512), (x, w, h) => woodCanvas(x, w, h, bl.look.face, bl.price), { repeat: true });
-  const bladeMat = [new THREE.MeshPhysicalMaterial({ map: faceTex, roughness: .55, clearcoat: .25, clearcoatRoughness: .5 }), new THREE.MeshStandardMaterial({ map: plyTex, roughness: .7 })];
+  const fin = bl.look.finish;
+  const faceTex = canvasTex(R(512), R(512), (x, w, h) => fin ? metalCanvas(x, w, h, fin, bl.look.face) : woodCanvas(x, w, h, bl.look.face, bl.price), { repeat: true });
+  const bladeMat = [new THREE.MeshPhysicalMaterial({ map: faceTex, roughness: fin ? .22 : .55, metalness: fin ? .85 : 0, clearcoat: fin ? 1 : .25, clearcoatRoughness: fin ? .15 : .5 }), new THREE.MeshStandardMaterial({ map: plyTex, roughness: .7 })];
   if (cfg.only !== 'rubber') inner.add(new THREE.Mesh(bladeGeo, bladeMat));
   // ── ручка: стержень + две щёчки с расширением книзу (FL) и выпуклой «короной»
   const HTOP = -6.15, HBOT = HAND === 'CS' ? -13.1 : -16.3;
@@ -322,7 +340,7 @@ function buildRacket(cfg, q = 1) {
   };
   const grip = parseKey(cfg.grip);
   const CT = 0.42, CB = 0.22; // щёчка: толщина + скругление → ручка ≈ 2,3 см
-  const cheekWood = canvasTex(R(256), R(512), (x, w, h) => woodCanvas(x, w, h, bl.look.cheek, bl.price + 3, light(bl.look.cheek) ? 1 : .6), { repeat: true });
+  const cheekWood = canvasTex(R(256), R(512), (x, w, h) => fin ? metalCanvas(x, w, h, fin === 'goldblack' ? 'gold' : fin, bl.look.cheek) : woodCanvas(x, w, h, bl.look.cheek, bl.price + 3, light(bl.look.cheek) ? 1 : .6), { repeat: true });
   let cheekMat;
   if (grip.it) {
     const gc = colorOf(grip.it, grip.color).hex;
@@ -332,7 +350,7 @@ function buildRacket(cfg, q = 1) {
       if (grip.it.id === 'acc-g1') for (let i = 0; i < 2500; i++) { x.fillStyle = `rgba(255,255,255,${Math.random() * .12})`; x.fillRect(Math.random() * w, Math.random() * h, 2, 2); }
     }, { repeat: true });
     cheekMat = new THREE.MeshStandardMaterial({ map: wrap, roughness: grip.it.id === 'acc-g3' ? .45 : .9 });
-  } else cheekMat = new THREE.MeshPhysicalMaterial({ map: cheekWood, roughness: .45, clearcoat: .5, clearcoatRoughness: .35 });
+  } else cheekMat = new THREE.MeshPhysicalMaterial({ map: cheekWood, roughness: fin ? .25 : .45, metalness: fin ? .8 : 0, clearcoat: fin ? 1 : .5, clearcoatRoughness: .3 });
   for (const sgn of cfg.only === 'rubber' ? [] : [1, -1]) {
     const cg = new THREE.ExtrudeGeometry(cheekShape(), { depth: CT, bevelEnabled: true, bevelThickness: CB, bevelSize: .2, bevelSegments: 6, curveSegments: 48 });
     setCapUV(cg, 6);
@@ -381,6 +399,7 @@ function buildRacket(cfg, q = 1) {
       const img = x.getImageData(0, 0, w, h), d = img.data;
       for (let i = 0; i < d.length; i += 4) { const n = (Math.random() - .5) * 6; d[i] += n; d[i + 1] += n; d[i + 2] += n; }
       x.putImageData(img, 0, 0);
+      if (it.fin) { const k = it.fin === 'gold' ? 'gold' : 'glitter'; x.save(); if (k === 'glitter') { x.fillStyle = col.hex; x.fillRect(0, 0, w, h); } metalCanvas(x, w, h, k, col.hex); x.restore(); if (k === 'glitter') { x.fillStyle = col.hex; x.globalAlpha = .55; x.fillRect(0, 0, w, h); x.globalAlpha = 1; } }
       x.fillStyle = lc; x.strokeStyle = lc; x.textAlign = 'center';
       // логотип у ручки, как на настоящих накладках
       emblem(x, it.bk, w / 2, h * .74, 70, lc);
@@ -391,7 +410,7 @@ function buildRacket(cfg, q = 1) {
     });
     const bump = pimples ? canvasTex(512, 512, (x, w, h) => { x.fillStyle = '#000'; x.fillRect(0, 0, w, h); x.fillStyle = '#fff'; for (let a = 6; a < w; a += 12) for (let b = 6; b < h; b += 12) { x.beginPath(); x.arc(a + ((b / 12) % 2) * 6, b, 3.6, 0, 7); x.fill(); } }, { data: true }) : null;
     const tacky = it.rubber.includes('лип');
-    const topMat = new THREE.MeshPhysicalMaterial({ map: topTex, roughness: pimples ? .75 : tacky ? .42 : .55, clearcoat: pimples ? 0 : tacky ? .6 : .3, clearcoatRoughness: tacky ? .22 : .45, bumpMap: bump, bumpScale: pimples ? .05 : 0, envMapIntensity: .45 });
+    const topMat = new THREE.MeshPhysicalMaterial({ map: topTex, metalness: it.fin === 'gold' ? .5 : it.fin ? .12 : 0, roughness: it.fin ? .32 : pimples ? .75 : tacky ? .42 : .55, clearcoat: pimples ? 0 : tacky ? .6 : .3, clearcoatRoughness: tacky ? .22 : .45, bumpMap: bump, bumpScale: pimples ? .05 : 0, envMapIntensity: .45 });
     const edgeMat = new THREE.MeshStandardMaterial({ color: shade(col.hex, -10), roughness: .7 });
     const spongeMat = new THREE.MeshStandardMaterial({ color: it.sp || col.hex, roughness: .95 });
     const grp = new THREE.Group();

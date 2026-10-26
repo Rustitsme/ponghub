@@ -1,12 +1,12 @@
 // 3D-игрок PongHub: модели парня и девушки (Hunyuan3D + Mixamo), форма из магазина, ракетка из «Моей ракетки», жесты.
 // Перекраска формы — в шейдере по зонам роста; хват ракетки — настройки из редактора создателя (platform.grip).
-import { BRANDS, colorOf, parseKey } from './shop-catalog.js';
+import { BRANDS, colorOf, parseKey, accOf } from './shop-catalog.js';
 import { buildRacket, loadThree } from './shop3d.js';
 
 const lin = hex => new THREE.Color(hex).convertSRGBToLinear();
 const ZONES = {
-  boy: { shirt: [.505, .838], shorts: [.335, .52], shoe: .072, sock: .125, high: .24, sleeve: .118, sole: .016, file: 'models/boy.glb' },
-  girl: { shirt: [.535, .848], shorts: [.40, .55], shoe: .068, sock: .12, high: .24, sleeve: .098, sole: .016, file: 'models/girl.glb' },
+  boy: { shirt: [.505, .838], shorts: [.335, .52], shoe: .072, sock: .125, high: .24, sleeve: .118, sole: .016, skin: '#e9b99c', stripe: .084, file: 'models/boy.glb' },
+  girl: { shirt: [.535, .848], shorts: [.40, .55], shoe: .068, sock: .12, high: .24, sleeve: .098, sole: .016, skin: '#e8bda5', stripe: .078, file: 'models/girl.glb' },
 };
 let TUNE_ON = false;
 const BUF = {};
@@ -32,6 +32,7 @@ function wearMaterial(map, z, bbox, axis, sideAxis) {
     uShirtR: { value: new THREE.Vector3(z.shirt[0], z.shirt[1], z.sleeve) }, uShortR: { value: new THREE.Vector2(...z.shorts) },
     uFeet: { value: new THREE.Vector4(z.shoe, z.sock, z.high, z.sole) },
     uSole: { value: lin('#eef0f3') },
+    uShirtSt: { value: 0 }, uShortSt: { value: 0 }, uAcc: { value: lin('#ffffff') }, uAccS: { value: lin('#ffffff') }, uSkinTone: { value: lin(z.skin || '#e9b99c') }, uStripeX: { value: z.stripe || .08 },
     uShirt: { value: lin('#ffffff') }, uSleeve: { value: lin('#ffffff') }, uStripe: { value: lin('#ffffff') }, uStripeOn: { value: 0 },
     uShorts: { value: lin('#1b1c20') }, uShortsOn: { value: 0 }, uShirtOn: { value: 0 },
     uSock: { value: lin('#f4f6fa') }, uHigh: { value: 0 }, uSockOn: { value: 0 },
@@ -43,7 +44,9 @@ function wearMaterial(map, z, bbox, axis, sideAxis) {
     Object.assign(sh.uniforms, U);
     sh.vertexShader = 'varying vec3 vBind, vBindN;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vBind = position; vBindN = normal;');
     sh.fragmentShader = `varying vec3 vBind, vBindN; uniform sampler2D uFace; uniform float uFaceOn, uFSize; uniform vec3 uFC, uFF, uFS, uFU; uniform vec3 uAxis, uSide; uniform float uMin, uLen, uSideC; uniform vec3 uShirtR; uniform vec2 uShortR; uniform vec4 uFeet;
-      uniform vec3 uShirt, uSleeve, uStripe, uShorts, uSock, uShoe, uShoeAcc, uSole; uniform float uStripeOn, uShortsOn, uShirtOn, uHigh, uSockOn, uShoeOn;\n` +
+      uniform vec3 uShirt, uSleeve, uStripe, uShorts, uSock, uShoe, uShoeAcc, uSole; uniform float uStripeOn, uShortsOn, uShirtOn, uHigh, uSockOn, uShoeOn, uShirtSt, uShortSt, uStripeX; uniform vec3 uAcc, uAccS, uSkinTone;
+      float hh(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f); return mix(mix(hh(i), hh(i + vec2(1., 0.)), f.x), mix(hh(i + vec2(0., 1.)), hh(i + vec2(1., 1.)), f.x), f.y); }\n` +
       sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
       {
         vec3 c0 = diffuseColor.rgb;
@@ -61,12 +64,44 @@ function wearMaterial(map, z, bbox, axis, sideAxis) {
         float sleeve = smoothstep(uShirtR.z - .006, uShirtR.z + .006, sd);
         vec3 sc = mix(uShirt, uSleeve, sleeve);
         sc = mix(sc, uStripe, uStripeOn * (1. - sleeve) * (1. - smoothstep(.006, .009, abs(h - (uShirtR.y - .085)))));
+        vec2 q = vec2((dot(vBind, uSide) - uSideC) / uLen, h);
+        float tearM = 0.;
+        if (uShirtSt > .5 && uShirtSt < 1.5) {
+          float n = vn(q * 36. + 3.7), hn = vn(vec2(q.x * 70., 5.));
+          float tear = smoothstep(.80, .84, vn(q * 52. + 1.3)) * (1. - sleeve) * smoothstep(uShirtR.x + .02, uShirtR.x + .06, h);
+          tear = max(tear, 1. - smoothstep(uShirtR.x + .008 + .03 * hn, uShirtR.x + .012 + .03 * hn, h));
+          sc = mix(sc, sc * .55, smoothstep(.74, .8, vn(q * 52. + 1.3)) * (1. - tear) * (1. - sleeve));
+          tearM = tear;
+        } else if (uShirtSt > 1.5 && uShirtSt < 2.5) {
+          tearM = sleeve;
+          sc = mix(sc, uAcc, smoothstep(uShirtR.z * .78, uShirtR.z * .78 + .006, abs(q.x)) * (1. - sleeve));
+          sc = mix(sc, uAcc, 1. - smoothstep(uShirtR.x + .014, uShirtR.x + .018, h));
+        } else if (uShirtSt > 2.5) {
+          float st = step(.5, fract(q.x * 15.));
+          sc = mix(uShirt, uAcc, st);
+          sc = mix(sc, uAcc, sleeve);
+        }
         // ткань футболки: всё нетелесное в зоне футболки, включая затенённые складки и подмышки
         float cloth = (1. - smoothstep(.18, .32, warm)) * smoothstep(.035, .09, l) * (1. - smoothstep(.28, .48, sat));
         diffuseColor.rgb = mix(diffuseColor.rgb, sc * clamp(l / .70, .22, 1.25), cloth * inShirt * uShirtOn);
+        diffuseColor.rgb = mix(diffuseColor.rgb, uSkinTone * clamp(l / .6, .6, 1.15), tearM * cloth * inShirt * uShirtOn);
         // шорты (исходно чёрные): берём складки из яркости
         float inShorts = step(uShortR.x, h) * step(h, uShortR.y);
-        diffuseColor.rgb = mix(diffuseColor.rgb, uShorts * clamp(.55 + l * 9., .5, 1.3), dark * inShorts * uShortsOn);
+        vec3 shc = uShorts; float holeS = 0.;
+        if (uShortSt > .5) {
+          if (uShortSt < 1.5 || uShortSt > 3.5) {
+            shc = uShorts * (.84 + .3 * vn(q * vec2(420., 70.)));
+            shc = mix(shc, uShorts * 1.35, smoothstep(.003, .0, abs(abs(q.x) - uStripeX * .55)) * .8);
+            if (uShortSt > 3.5) { float n2 = vn(q * 34. + 9.1); holeS = smoothstep(.74, .8, n2); shc = mix(shc, uShorts * 1.6, smoothstep(.68, .74, n2) * (1. - holeS)); }
+          } else if (uShortSt < 2.5) {
+            float a = vn(q * 44.), b = vn(q * 30. + 4.2);
+            shc = mix(uShorts, uAccS, smoothstep(.5, .54, a)); shc = mix(shc, uAccS * .5, smoothstep(.56, .6, b));
+          } else {
+            shc = mix(uShorts, uAccS, 1. - smoothstep(.0035, .0055, abs(abs(q.x) - uStripeX)));
+          }
+        }
+        diffuseColor.rgb = mix(diffuseColor.rgb, shc * clamp(.55 + l * 9., .5, 1.3), dark * inShorts * uShortsOn);
+        diffuseColor.rgb = mix(diffuseColor.rgb, uSkinTone * .92, holeS * dark * inShorts * uShortsOn);
         // носки (белые); высокие — поверх кожи до середины голени
         float inSock = step(uFeet.x, h) * step(h, uFeet.y);
         float inHigh = step(uFeet.x, h) * step(h, mix(uFeet.y, uFeet.z, uHigh)) * uHigh;
@@ -364,6 +399,12 @@ function applyLook(P, lo) {
     U.uStripe.value = lin(sh.it.id === 'wr-t7' ? '#ffcc00' : isWhite ? brand : '#ffffff'); U.uStripeOn.value = pro ? 1 : 0;
   }
   U.uShortsOn.value = 1; U.uShorts.value = lin(hexOf(shorts));
+  const so = parseKey(shorts);
+  U.uShirtSt.value = sh.it?.sty || 0; U.uShortSt.value = so.it?.sty || 0;
+  const accKey = (sh.it?.sty ? sh : so.it?.sty ? so : null);
+  if (sh.it?.sty) U.uAcc.value = lin(accOf(sh.it, sh.color));
+  if (so.it?.sty) U.uAccS.value = lin(accOf(so.it, so.color));
+  void accKey;
   if (sf.it) {
     const fHex = hexOf(shoes), wbase = /^w/.test(sf.color), acc = fHex.toLowerCase() === '#f4f6fa' ? (BRANDS[sf.it.bk]?.color || '#1b1c20') : fHex;
     U.uSole.value = lin(wbase ? '#e9ecf1' : '#f2f2f2');
@@ -375,8 +416,76 @@ function applyLook(P, lo) {
   for (const [m, it, key] of [[P.acc.bandLeft, wr.it, lo.wrist], [P.acc.bandRight, wr.it, lo.wrist], [P.acc.head, hd.it, lo.head]]) {
     if (!m) continue; m.visible = !!it; if (it) m.material.color.set(hexOf(key)).convertSRGBToLinear();
   }
+  setCap(P, lo.cap || '');
   const rcfg = { blade: lo.blade || 'cn-b1:FL', fh: lo.fh, bh: lo.bh, grip: lo.grip, tape: lo.tape }, rk = JSON.stringify(rcfg) + JSON.stringify(RK);
   if (P.rkId !== rk) { attachRacket(P, rcfg); P.rkId = rk; }
+}
+
+
+// ───────────── Головные уборы: кепки, шапка, панама — по форме головы модели ─────────────
+// Измеряем голову в системе кости (вершины с весом на кость Head), строим убор в осях «право / вверх / вперёд» и крепим к кости.
+function capFrame(P) {
+  if (P.headInfo) return P.headInfo;
+  const mesh = P.mesh, sk = mesh.skeleton, bone = P.bones.Head, bi = sk.bones.indexOf(bone);
+  const g = mesh.geometry, pos = g.attributes.position, si = g.attributes.skinIndex, sw = g.attributes.skinWeight, v = new THREE.Vector3(), pts = [];
+  for (let i = 0; i < pos.count; i++) {
+    let w = 0; const ix = [si.getX(i), si.getY(i), si.getZ(i), si.getW(i)], wx = [sw.getX(i), sw.getY(i), sw.getZ(i), sw.getW(i)]; for (let k = 0; k < 4; k++) if (ix[k] === bi) w += wx[k];
+    if (w < .45) continue;
+    pts.push(v.fromBufferAttribute(pos, i).applyMatrix4(mesh.bindMatrix).applyMatrix4(sk.boneInverses[bi]).clone());
+  }
+  P.holder.updateMatrixWorld(true);
+  const q = bone.getWorldQuaternion(new THREE.Quaternion()).invert();
+  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(q).normalize(), fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(q).normalize(), right = new THREE.Vector3().crossVectors(up, fwd).normalize();
+  const U = pts.map(p => [p.dot(right), p.dot(up), p.dot(fwd)]);
+  const vTop = Math.max(...U.map(a => a[1])), vBot = Math.min(...U.map(a => a[1])), H = vTop - vBot;
+  const sl = U.filter(a => a[1] > vTop - .32 * H && a[1] < vTop - .18 * H);
+  const uMin = Math.min(...sl.map(a => a[0])), uMax = Math.max(...sl.map(a => a[0])), wMin = Math.min(...sl.map(a => a[2])), wMax = Math.max(...sl.map(a => a[2]));
+  const info = { right, up, fwd, vTop, H, cu: (uMin + uMax) / 2, cw: (wMin + wMax) / 2, rx: (uMax - uMin) / 2, rz: (wMax - wMin) / 2 };
+  return (P.headInfo = info);
+}
+function buildCap(P, style, hex) {
+  const I = capFrame(P), g = new THREE.Group();
+  const col = new THREE.Color(hex).convertSRGBToLinear();
+  const mat = (c = col, r = .85) => new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: 0, side: THREE.DoubleSide });
+  const dark = col.clone().multiplyScalar(.6);
+  const rx = I.rx * 1.07, rz = I.rz * 1.07, H = I.H;
+  const y0 = I.vTop - (style === 'beanie' ? .36 : style === 'bucket' ? .30 : .27) * H;    // нижний край
+  const dome = (h, sx = 1) => { const m = new THREE.Mesh(new THREE.SphereGeometry(1, 40, 20, 0, Math.PI * 2, 0, Math.PI / 2), mat()); m.scale.set(rx * sx * 1.03, h, rz * sx * 1.1); m.position.set(I.cu, y0, I.cw + rz * .06); return m; };
+  const topH = (I.vTop - y0) * 1.22 + .02 * H;
+  if (style === 'bucket') {
+    const crown = new THREE.Mesh(new THREE.CylinderGeometry(rx * 1.0, rx * 1.04, topH * .62, 40, 1, true), mat()); crown.scale.z = rz / rx * 1.08; crown.position.set(I.cu, y0 + topH * .31, I.cw + rz * .05); g.add(crown);
+    const top = new THREE.Mesh(new THREE.CircleGeometry(rx * .98, 40), mat()); top.rotation.x = -Math.PI / 2; top.scale.y = rz / rx * 1.08; top.position.set(I.cu, y0 + topH * .62, I.cw + rz * .05); g.add(top);
+    const brim = new THREE.Mesh(new THREE.CylinderGeometry(rx * 1.4, rx * 1.02, .05 * H, 48, 1, true), mat(dark)); brim.scale.z = rz / rx; brim.position.set(I.cu, y0 - .01 * H, I.cw); g.add(brim);
+  } else {
+    g.add(dome(style === 'beanie' ? topH * .88 : topH, 1));
+    if (style === 'beanie') {
+      const cuff = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, .075 * H, 40, 1, true), mat(dark)); cuff.scale.set(rx * 1.03, 1, rz * 1.03); cuff.position.set(I.cu, y0 + .03 * H, I.cw); g.add(cuff);
+      const pom = new THREE.Mesh(new THREE.SphereGeometry(rx * .16, 16, 12), mat(dark)); pom.position.set(I.cu, I.vTop + topH * .02 + rx * .1, I.cw); g.add(pom);
+    } else {
+      // козырёк: половина эллипса, чуть вниз
+      const shp = new THREE.Shape(); const vr = rx * (style === 'snap' ? 1.0 : .92), vl = rz * (style === 'snap' ? 1.05 : .9);
+      shp.moveTo(-vr, 0); shp.absellipse(0, 0, vr, vl, Math.PI, 0, true); shp.closePath();
+      const vis = new THREE.Mesh(new THREE.ExtrudeGeometry(shp, { depth: .006 * H, bevelEnabled: false, curveSegments: 24 }), mat(dark, .7));
+      vis.rotation.x = Math.PI / 2 - (style === 'snap' ? .02 : .14); vis.position.set(I.cu, y0 + .012 * H, I.cw + rz * .78);
+      // shape лежит в плоскости XY (y — вперёд), поворот кладёт её на горизонталь и направляет вперёд
+      if (style === 'rev') { vis.rotation.z = Math.PI; vis.position.z = I.cw - rz * .78; }
+      g.add(vis);
+      const btn = new THREE.Mesh(new THREE.SphereGeometry(rx * .07, 12, 8), mat(dark)); btn.position.set(I.cu, I.vTop + .012 * H, I.cw); g.add(btn);
+    }
+  }
+  // ориентация: оси группы = (право, вверх, вперёд) кости Head
+  g.matrixAutoUpdate = true;
+  const basis = new THREE.Matrix4().makeBasis(I.right, I.up, I.fwd);
+  const holder = new THREE.Group(); holder.quaternion.setFromRotationMatrix(basis); holder.add(g);
+  holder.traverse(o => { if (o.isMesh) o.castShadow = false; });
+  return holder;
+}
+function setCap(P, key) {
+  if (P.capKey === key) return; P.capKey = key;
+  if (P.capObj) { P.capObj.parent && P.capObj.parent.remove(P.capObj); P.capObj = null; }
+  const { it, color } = parseKey(key || ''); if (!it || it.type !== 'cap') return;
+  P.capObj = buildCap(P, it.cap, colorOf(it, color)?.hex || '#d62839');
+  P.bones.Head.add(P.capObj);
 }
 
 // ───────────── Просмотр: один на экран ─────────────
@@ -407,10 +516,12 @@ export async function mountAvatar(el, opts = {}) {
         if (V.still) { const front = Math.round((V.target - .25) / (Math.PI * 2)) * Math.PI * 2 + .25; V.target += (front - V.target) * .04; } else V.target += .0035;
       }
       V.ry += (V.target - V.ry) * .1; V.zoom += (V.tz - V.zoom) * .1; V.fy += (V.tfy - V.fy) * .1;
+      V.place(); V.R.render(V.scene, V.cam);
+    };
+    V.place = () => {
       V.cur.holder.rotation.y = V.ry;
       const d = 5.1 / V.zoom; V.cam.position.set(0, V.fy + .22 / V.zoom, d); V.cam.lookAt(0, V.fy, 0);
       if (TUNE_ON && !V.tune.full) { const hp = V.cur.bones.RightHand.getWorldPosition(new THREE.Vector3()); V.cam.position.set(hp.x, hp.y + .02, hp.z + V.tune.dist); V.cam.lookAt(hp.x, hp.y - V.tune.dy, hp.z); }
-      V.R.render(V.scene, V.cam);
     };
     loop();
   }
@@ -443,6 +554,8 @@ export async function mountAvatar(el, opts = {}) {
     flip: () => { V.target += Math.PI; V.idle = performance.now(); },
     resize: () => { const w2 = el.clientWidth, h2 = el.clientHeight; V.R.setSize(w2, h2, false); V.cam.aspect = w2 / h2; V.cam.updateProjectionMatrix(); },
     look: lo => applyLook(P, lo || {}),
+    // мгновенный кадр без ожидания анимации (для проверок): зум и вид сразу как заданы
+    shot: () => { V.zoom = V.tz; V.fy = V.tfy; V.ry = V.target; stepPlayer(P, 0); V.place(); V.R.render(V.scene, V.cam); return V.R.domElement; },
     setFace: url => applyFace(P, url || null),
     regrip: () => { P.rkId = null; applyLook(P, opts.loadout || {}); },
     tuneFull: on => { V.tune.full = on; },
@@ -592,7 +705,7 @@ export async function tvWinner(root, { W, score, grip, cue = () => {} }) {
 // ───────────── Иконки формы: вещь крупно на 3D-игроке ─────────────
 // один скрытый рендер на всё приложение, снимки по очереди и в кэше (ключ вещи → jpeg dataURL)
 const SHOT = { R: null, P: null, cache: new Map(), q: Promise.resolve() };
-const SLOT_OF = { shirt: 'shirt', shorts: 'shorts', shoes: 'shoes', socks: 'socks', wrist: 'wrist', head: 'head' };
+const SLOT_OF = { shirt: 'shirt', shorts: 'shorts', shoes: 'shoes', socks: 'socks', wrist: 'wrist', head: 'head', cap: 'cap' };
 function shotFrame(P, type) {
   const b = P.bones, at = n => b[n].getWorldPosition(new THREE.Vector3());
   const mid = (...ns) => ns.map(at).reduce((s, v) => s.add(v), new THREE.Vector3()).multiplyScalar(1 / ns.length);
