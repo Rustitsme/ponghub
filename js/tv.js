@@ -6,6 +6,7 @@ import { koBracket, roundName, standings, pairings, findPairMatch } from './tour
 import { parseKey } from './shop-catalog.js';
 import { unlock, sfx, soundOn } from './sound.js';
 import { media } from './store.js';
+import { makeQr, qrSvg } from './qr.js';
 
 const LS = 'ponghub_tv_token';
 const POLL = 2000;            // как часто спрашиваем текущую игру
@@ -450,11 +451,7 @@ export async function startTV(root, store) {
     const el = document.getElementById('tvx-qr');
     if (!el || T.qr) return;
     try {
-      const src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';
-      if (!window.qrcode) await new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
-      const qr = window.qrcode(0, 'M');
-      qr.addData(`${location.origin}${location.pathname}#/club/${T.data.club.id}`); qr.make();
-      T.qr = qr.createSvgTag({ cellSize: 4, margin: 1, scalable: true });
+      T.qr = qrSvg(await makeQr(`${location.origin}${location.pathname}#/club/${T.data.club.id}`), { margin: 1 });
       document.querySelectorAll('#tvx-qr').forEach(x => { x.innerHTML = T.qr; });
     } catch { /* без QR */ }
   }
