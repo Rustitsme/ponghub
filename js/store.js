@@ -1,7 +1,7 @@
 // Слой данных: Supabase (боевой режим) или localStorage (демо-режим, если база не настроена).
 import { CONFIG } from './config.js';
 import { parseKey, priceOf, SKINS } from './shop-catalog.js';
-import { analyze, playerStats, DEFAULT_SETTINGS } from './engine.js';
+import { analyze, playerStats, DEFAULT_SETTINGS, replayLive } from './engine.js';
 
 const TABLES = ['profiles', 'matches', 'tournaments', 'events', 'challenges', 'live_matches', 'announcements', 'pred_events', 'predictions', 'coin_tx', 'clubs', 'club_members', 'platform'];
 // данные, которые принадлежат клубу (club_id подставляется автоматически)
@@ -41,7 +41,18 @@ async function pickBase() {
 // функции, которым нужен текущий клуб
 const RPC_CID = new Set(['ensure_wallet', 'coin_leaderboard', 'player_predictions']);
 
+// Песочница (?sandbox=1): своя копия приложения в браузере тестировщика — свой клуб и боты, реальная база не трогается
+export const SANDBOX = (() => {
+  try {
+    const q = new URLSearchParams(location.search);
+    if (q.has('sandbox')) localStorage.setItem('ponghub_sandbox', '1');
+    return localStorage.getItem('ponghub_sandbox') === '1';
+  } catch { return false; }
+})();
+export function leaveSandbox() { try { localStorage.removeItem('ponghub_sandbox'); } catch { /* */ } location.href = location.pathname; }
+
 export async function createStore() {
+  if (SANDBOX) return new LocalStore(true);
   if (CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY) {
     const s = new SupaStore();
     await s.connect();
@@ -421,20 +432,88 @@ class SupaStore {
 
 // ───────────────────────── Демо-режим ─────────────────────────
 
-const LS_KEY = 'ponghub_demo_v1';
+const LS_KEY = 'ponghub_demo_v1', SB_KEY = 'ponghub_sandbox_v1';
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Math.random().toString(36).slice(2) + Date.now().toString(36));
 
 class LocalStore {
   mode = 'demo';
   listeners = [];
 
-  constructor() {
-    try { this.db = JSON.parse(localStorage.getItem(LS_KEY)); } catch { this.db = null; }
-    if (!this.db || !this.db.clubs) { this.db = seedDemo(); this.save(); }
+  constructor(sandbox = false) {
+    this.sandbox = sandbox; this.key = sandbox ? SB_KEY : LS_KEY;
+    try { this.db = JSON.parse(localStorage.getItem(this.key)); } catch { this.db = null; }
+    if (!this.db || !this.db.clubs) { this.db = sandbox ? seedSandbox() : seedDemo(); this.save(); }
+    if (sandbox) setTimeout(() => this.botResume(), 1500);
   }
 
-  save() { try { localStorage.setItem(LS_KEY, JSON.stringify(this.db)); } catch { /* приватный режим */ } }
-  reset(opts) { this.db = seedDemo(opts); this.save(); }
+  save() { try { localStorage.setItem(this.key, JSON.stringify(this.db)); } catch { /* приватный режим */ } }
+  reset(opts) { this.db = this.sandbox ? seedSandbox() : seedDemo(opts); this.save(); }
+  notify() { this.save(); this.onChange?.(); }
+
+  // ── боты песочницы ──
+  bots() { return this.db.profiles.filter(p => p.bot); }
+  botMembers(cid = this.cid) { return this.bots().filter(b => this.mem(cid, b.id)?.status === 'active'); }
+  // боты по приглашению отправляют заявки в клуб — по одной, как живые люди
+  botsRequest(cid = this.cid, n = 6) {
+    const free = this.bots().filter(b => !this.mem(cid, b.id)).slice(0, n);
+    free.forEach((b, i) => setTimeout(() => {
+      if (this.mem(cid, b.id)) return;
+      this.db.club_members.push({ club_id: cid, user_id: b.id, role: 'player', status: 'pending', via: 'invite', joined_at: new Date().toISOString() });
+      this.notify();
+    }, 700 + i * 900));
+    return free.length;
+  }
+  botSets(a, b, bestOf = 5, pointsTo = 11) {
+    const sk = id => this.db.profiles.find(p => p.id === id)?.skill ?? 0.5;
+    const need = Math.ceil(bestOf / 2), sets = []; let s1 = 0, s2 = 0;
+    while (s1 < need && s2 < need) {
+      const aw = Math.random() < 0.5 + (sk(a) - sk(b)) * 0.45, lo = Math.random() < 0.2 ? pointsTo - 1 + Math.floor(Math.random() * 3) : Math.floor(Math.random() * (pointsTo - 1));
+      const hi = lo >= pointsTo - 1 ? lo + 2 : pointsTo;
+      sets.push(aw ? [hi, lo] : [lo, hi]); aw ? s1++ : s2++;
+    }
+    return { sets, sets1: s1, sets2: s2, winner_id: s1 > s2 ? a : b, best_of: bestOf, points_to: pointsTo };
+  }
+  // боты сыграли между собой (за последние дни) — у клуба появляются рейтинг, история, серии
+  botsPlay(cid = this.cid, n = 10) {
+    const ids = this.botMembers(cid).map(b => b.id);
+    if (ids.length < 2) throw new Error('Сначала примите в клуб хотя бы двух ботов');
+    for (let k = 0; k < n; k++) {
+      const a = ids[Math.floor(Math.random() * ids.length)]; let b = a; while (b === a) b = ids[Math.floor(Math.random() * ids.length)];
+      const t = new Date(Date.now() - (n - k) * 3.6e6 * (2 + Math.random() * 4)).toISOString();
+      this.db.matches.push({ id: uid(), club_id: cid, kind: 'singles', type: 'free', tournament_id: null, stage: null, grp: null, round: null, slot: null, player1_id: a, player2_id: b,
+        ...this.botSets(a, b, Math.random() < 0.6 ? 5 : 3), status: 'approved', submitted_by: a, played_at: t, created_at: t, note: '' });
+    }
+    this.notify(); return n;
+  }
+  // два бота начинают живую игру: счёт идёт сам, очко за очком; в конце матч попадает в историю
+  botLive(cid = this.cid) {
+    const ids = this.botMembers(cid).map(b => b.id).filter(id => !(this.db.live_matches || []).some(l => l.status === 'live' && [l.player1_id, l.player2_id].includes(id)));
+    if (ids.length < 2) throw new Error('Нужны хотя бы два свободных бота в клубе');
+    const [a, b] = ids.sort(() => Math.random() - 0.5);
+    const l = { id: uid(), club_id: cid, kind: 'singles', type: 'free', player1_id: a, player2_id: b, player3_id: null, player4_id: null, best_of: 3, points_to: 11, rated: true,
+      tournament_id: null, challenge_id: null, first_server: 0, log: [], status: 'live', scorer_id: a, started_by: a, scoring: true, bot: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+    (this.db.live_matches = this.db.live_matches || []).push(l);
+    this.notify(); this.botTick(l.id); return l.id;
+  }
+  botTick(id) {
+    setTimeout(() => {
+      const l = (this.db.live_matches || []).find(x => x.id === id);
+      if (!l || l.status !== 'live' || !this.db.profiles.find(p => p.id === l.scorer_id)?.bot) return;   // счёт взял человек — бот больше не считает
+      const sk = pid => this.db.profiles.find(p => p.id === pid)?.skill ?? 0.5;
+      l.log.push(Math.random() < 0.5 + (sk(l.player1_id) - sk(l.player2_id)) * 0.3 ? 0 : 1); l.updated_at = new Date().toISOString();
+      const g = replayLive(l.log, l.best_of, l.points_to, l.first_server);
+      if (g.winner !== null) {
+        const m = { id: uid(), club_id: l.club_id, kind: 'singles', type: 'free', tournament_id: null, stage: null, grp: null, round: null, slot: null, player1_id: l.player1_id, player2_id: l.player2_id,
+          sets: g.sets, sets1: g.won[0], sets2: g.won[1], winner_id: g.winner === 0 ? l.player1_id : l.player2_id, best_of: l.best_of, points_to: l.points_to, status: 'approved', submitted_by: l.scorer_id,
+          played_at: new Date().toISOString(), created_at: new Date().toISOString(), note: '' };
+        this.db.matches.push(m); Object.assign(l, { status: 'finished', match_id: m.id });
+        (this.db.pred_events || []).filter(e => e.source === 'live' && e.source_id === l.id).forEach(e => { e.match_id = m.id; if (e.status === 'open') e.status = 'closed'; });
+        this.predSettle(e => e.match_id === m.id, m.id); this.notify(); return;
+      }
+      this.notify(); this.botTick(id);
+    }, 1600 + Math.random() * 1400);
+  }
+  botResume() { (this.db.live_matches || []).filter(l => l.bot && l.status === 'live').forEach(l => this.botTick(l.id)); }
 
   async currentUser() {
     const id = this.db.session;
@@ -623,6 +702,9 @@ class LocalStore {
   async insert(table, row) {
     const r = { id: uid(), created_at: new Date().toISOString(), ...(CLUB_TABLES.includes(table) ? { club_id: this.cid } : {}), ...row };
     (this.db[table] = this.db[table] || []).push(r); this.save();
+    // песочница: бот принимает вызов через пару секунд
+    if (this.sandbox && table === 'challenges' && this.db.profiles.find(p => p.id === r.to_id)?.bot)
+      setTimeout(() => { if (r.status === 'pending') { Object.assign(r, { status: 'accepted', responded_at: new Date().toISOString() }); this.notify(); } }, 2500);
     return r;
   }
 
@@ -1020,7 +1102,19 @@ class LocalStore {
   async savePushSub() {}
   async deletePushSub() {}
   async testPush() {}
-  subscribe() {}
+  subscribe(cb) { this.onChange = cb; }
+}
+
+// Песочница: только боты; клуб тестировщик создаёт сам
+function seedSandbox() {
+  const now = Date.now(), day = 864e5;
+  const bots = [['Ace', 'Антон', '🤖', '#2563b8', 0.85], ['Spin_Master', 'Вика', '🌀', '#2a9d8f', 0.8], ['Viper', 'Денис', '🐍', '#12a061', 0.7], ['Rocket', 'Ильдар', '🚀', '#e63946', 0.65],
+    ['Lefty', 'Алина', '🦄', '#c77dff', 0.6], ['Wall', 'Сергей', '🧱', '#8ab4f8', 0.55], ['Smash', 'Артём', '🔥', '#f4a261', 0.5], ['Rookie', 'Максим', '🐣', '#06d6a0', 0.35]];
+  const profiles = bots.map(([nickname, full_name, avatar, color, skill], i) => ({ id: 'bot-' + (i + 1), nickname, full_name, avatar, color, skill, bot: true, role: 'player', status: 'approved',
+    hand: i === 4 ? 'left' : 'right', bio: 'Бот песочницы', initial_rating: null, created_at: new Date(now - 30 * day).toISOString() }));
+  const users = profiles.map(p => ({ id: p.id, email: p.id + '@sandbox.ponghub.app', password: uid() }));
+  return { users, profiles, matches: [], tournaments: [], events: [], challenges: [], audit: [], settings: {}, clubs: [], invites: {}, club_members: [],
+    platform: { migration_done: true, features: { shop: 'all', resale: 'all', avatar: 'all' } }, session: null };
 }
 
 function seedDemo(opts = {}) {

@@ -1567,3 +1567,14 @@ body.av-big { overflow: hidden; }
 .cn-later { display: block; margin: 8px auto 0; background: none; border: 0; color: #a8a99f; font: 600 13px var(--font); cursor: pointer; padding: 8px 14px; }
 .cn-new { margin-left: auto; font: 700 10px var(--font); font-style: normal; letter-spacing: .12em; background: #d4af37; color: #0f1014; padding: 3px 8px; border-radius: 999px; }
 .cn-menu { color: #b8932a; }
+/* песочница */
+.sb-guide { border: 2px dashed color-mix(in srgb, var(--red) 45%, var(--line)); }
+.sb-step { display: grid; grid-template-columns: 26px minmax(0, 1fr); column-gap: 10px; row-gap: 6px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.sb-step:last-of-type { border-bottom: 0; }
+.sb-step > i { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font: 800 13px/1 var(--font); font-style: normal; background: var(--bg2); }
+.sb-step.ok > i { background: #12a061; color: #fff; }
+.sb-step > div { display: flex; flex-direction: column; }
+.sb-step small { color: var(--muted); font-size: 12px; }
+.sb-step.ok b { text-decoration: line-through; opacity: .6; }
+.sb-step .btn { grid-column: 2; justify-self: start; }
+.sb-btns { display: grid; gap: 8px; margin-top: 10px; }
