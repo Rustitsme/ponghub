@@ -379,6 +379,24 @@ Deno.serve(async (req) => {
   }
 
 
+  // push-объявление для создателя: «новая коллекция скинов» — тем, у кого сейчас открыт магазин
+  if (body.action === 'announce') {
+    const adm = await isAdminRequest(req);
+    if (!adm) return json({ error: 'forbidden' }, 403);
+    if (body.kind !== 'collection') return json({ error: 'unknown' }, 400);
+    const { data: feat } = await sb.from('platform').select('value').eq('key', 'features').maybeSingle();
+    let ids: string[] = [];
+    if ((feat?.value?.shop ?? 'all') === 'all') {
+      const { data: ps } = await sb.from('profiles').select('id').eq('status', 'approved');
+      ids = (ps ?? []).map((p: { id: string }) => p.id);
+    } else {
+      const { data: ts } = await sb.from('feature_testers').select('user_id').eq('feature', 'shop');
+      ids = [adm.id, ...(ts ?? []).map((t: { user_id: string }) => t.user_id)];
+    }
+    const sent = await sendPush(ids, { title: '🏆 Новая коллекция скинов', body: 'Чёрно-золотые ракетки, джерси и шорты. Купите за PC или откройте бесплатно за победы и рейтинг.', url: '#/shop', tag: 'collection' });
+    return json({ ok: true, sent, to: ids.length });
+  }
+
   // коллекция скинов: условия (рейтинг, победы, матчи, заработанные PC) проверяем на сервере и сами выдаём открытое
   if (body.action === 'claim_skins') {
     const jwt = req.headers.get('Authorization')?.replace('Bearer ', '') ?? '';

@@ -298,6 +298,12 @@ class SupaStore {
     return data;
   }
 
+  // push-объявление (только создатель): kind = 'collection'
+  async announce(kind) {
+    const { data, error } = await this.sb.functions.invoke('notify', { body: { action: 'announce', kind } });
+    if (error) { let msg = 'Не удалось отправить'; try { const j = await error.context?.json(); if (j?.error) msg = j.error; } catch { /* */ } throw new Error(msg); }
+    return data;
+  }
   // коллекция скинов: сервер считает рейтинг, победы, матчи и заработанные PC и сам выдаёт открытое
   async claimSkins() {
     const { data, error } = await this.sb.functions.invoke('notify', { body: { action: 'claim_skins' } });
@@ -750,6 +756,7 @@ class LocalStore {
     if (league === 'gold' && !d.user_items.some(x => x.user_id === me && x.item_key === 'rw-tape-gold:gold')) d.user_items.push({ user_id: me, item_key: 'rw-tape-gold:gold', source: 'reward', created_at: new Date().toISOString() });
     d.league_rewards.push({ user_id: me, league, item_key: item }); this.save(); return { ok: true };
   }
+  async announce() { return { sent: 0 }; }
   async claimSkins() {
     const d = this.shopDb(), me = this.db.session;
     const pool = d.profiles.filter(p => ['approved', 'archived', 'deleted'].includes(p.status));

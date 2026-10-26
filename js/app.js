@@ -1969,7 +1969,7 @@ function viewMe() {
     predOn() ? '<a class="menu-item" href="#/predict">🎯 <span>Прогнозы</span><span>→</span></a>' : '',
   ])}
   ${group('Мои вещи', [
-    feature('shop') ? `<a class="menu-item" href="#/shop">🛍️ <span>Магазин</span><small class="muted">${fmtC(S.coins)} PC</small></a><a class="menu-item" href="#/racket">🏓 <span>Моя ракетка</span><span>→</span></a>` : '',
+    feature('shop') ? `<a class="menu-item" href="#/shop">🛍️ <span>Магазин</span><small class="muted">${fmtC(S.coins)} PC</small></a><a class="menu-item cn-menu" href="#/shop" data-act="coll-open">🏆 <span>Коллекция</span>${lsGet(CN_KEY.visit) ? '<span>→</span>' : '<i class="cn-new">NEW</i>'}</a><a class="menu-item" href="#/racket">🏓 <span>Моя ракетка</span><span>→</span></a>` : '',
     feature('avatar') ? '<a class="menu-item" href="#/avatar">🧍 <span>Мой игрок</span><span>→</span></a>' : '',
   ])}
   ${isAdmin() ? group('Управление клубом', [
@@ -2406,7 +2406,7 @@ async function renderFounder() {
           const mode = S.ctx?.platform?.features?.[k] ?? 'all';
           return `<div class="pl-row"><div class="pl-top"><span class="rn"><b>${t}</b><small class="muted">${d}</small></span></div>
             <div class="pl-ctl"><span class="badge ${mode === 'all' ? 'ok' : 'warn'}">${mode === 'all' ? 'включено у всех' : 'у вас и тестировщиков'}</span>
-            ${mode === 'all' ? '' : `<button class="btn sm ghost" data-act="feature-testers" data-k="${k}">👥 Тестировщики</button><button class="btn sm primary" data-act="feature-all" data-k="${k}">Включить для всех</button>`}</div></div>`;
+            ${mode === 'all' ? '' : `<button class="btn sm ghost" data-act="feature-testers" data-k="${k}">👥 Тестировщики</button><button class="btn sm primary" data-act="feature-all" data-k="${k}">Включить для всех</button>`}${k === 'shop' ? `<button class="btn sm ghost" data-act="announce-coll">📣 Уведомить о коллекции</button>` : ''}</div></div>`;
         }).join('')}
         <div class="pl-row"><div class="pl-top"><span class="rn"><b>✋ Хват ракетки у 3D-игрока</b><small class="muted">Редактор: как игрок держит ракетку — у всех игроков сразу. Работает с телефона и компьютера.</small></span></div>
           <div class="pl-ctl"><a class="btn sm ghost" href="#/player/grip">Открыть редактор</a></div></div></section>
@@ -2680,6 +2680,7 @@ function viewShop(r) {
   if (!S.shop) return `${shopHeader('shop')}<div class="empty"><span class="spin"></span></div>`;
   if (r.q.get('tab') === 'bonus') return shopHeader('bonus') + bonusBody();
   const reg = SHOP.region, racketRegion = ['cn', 'eu', 'jp'].includes(reg);
+  if (reg === 'skin') lsSet(CN_KEY.visit, '1');
   return `${shopHeader('shop')}
     <div class="sh-chips">${SHOP_REGIONS.map(k => `<button data-act="sh-region" data-v="${k}" class="${k === reg ? 'on' : ''}">${RG_ICON[k]} ${RG[k]}</button>`).join('')}</div>
     <div class="sh-region rh-${reg}"><b>${RG[reg]}</b><small>${RGSUB[reg]}</small></div>
@@ -2687,6 +2688,37 @@ function viewShop(r) {
     ${racketRegion && SHOP.kind === 'rubber' ? `<div class="sh-colors">Цвет: ${RUBBER_COLORS.map(c => `<button data-act="sh-color" data-v="${c.key}" class="${SHOP.color === c.key ? 'on' : ''}" style="background:${c.hex}" aria-label="${c.name}"></button>`).join('')}<span>${colorOf({ colors: RUBBER_COLORS }, SHOP.color).name}${SHOP.color === 'blue' ? ' · +60 PC' : ''}</span></div>` : ''}
     <div class="sh-list" id="sh-list"></div>`;
 }
+// ───────────── Напоминание о коллекции скинов ─────────────
+const CN_KEY = { seen: 'ph_coll_seen', later: 'ph_coll_later', visit: 'ph_coll_visit' };
+function maybeCollectionNotice() {
+  if (!feature('shop') || S.me?.status !== 'approved' || !S.shop || route().name !== 'home') return;
+  if (document.getElementById('cn-overlay') || lsGet(CN_KEY.seen)) return;
+  let later = null; try { later = JSON.parse(lsGet(CN_KEY.later) || 'null'); } catch { /* */ }
+  if (later && (later.n >= 3 || Date.now() - later.at < 864e5)) return;
+  showCollectionNotice().catch(() => {});
+}
+async function showCollectionNotice() {
+  await loadThree().catch(() => {});
+  if (document.getElementById('cn-overlay')) return;
+  const minWear = Math.min(...ITEMS.filter(it => it.skin && ['shirt', 'shorts'].includes(it.type)).map(it => it.price));
+  const tiles = [['skin-b1', 'g', 'Obsidian Gold'], ['skin-b2', 's', 'Mirror Silver'], ['skin-b3', 'b', 'Bronze Forge']];
+  const ov = document.createElement('div'); ov.id = 'cn-overlay'; ov.className = 'cn-ov';
+  ov.innerHTML = `<div class="cn-pop" role="dialog" aria-label="Новая коллекция"><span class="cn-tag">Новинка</span>
+    <h2>Коллекция<br>PongHub</h2><p>Эксклюзивные скины для ракетки и игрока. Только внешний вид, на игру не влияют.</p>
+    <div class="cn-items">${tiles.map(([id, c, n]) => `<div class="cn-sk ${c}" data-id="${id}"><b>${n}</b></div>`).join('')}</div>
+    <div class="cn-how"><div><em>🪙</em><span><b>Купить за PC</b>Ракетки, джерси, шорты: от ${fmtC(minWear)} PC</span></div><div><em>🏆</em><span><b>Или получить бесплатно</b>За рейтинг, победы и сыгранные матчи</span></div></div>
+    <button class="cn-go" type="button" data-cn="go">Смотреть коллекцию</button><button class="cn-later" type="button" data-cn="later">Напомнить позже</button></div>`;
+  // настоящие 3D-снимки ракеток — те же, что в кабинете магазина
+  ov.querySelectorAll('.cn-sk').forEach(el => { const it = byId(el.dataset.id); if (it) { const im = thumb(it, 'FL', true); im.className = 'cn-img'; el.prepend(im); } });
+  const close = () => ov.remove();
+  ov.addEventListener('click', e => {
+    const a = e.target.closest('[data-cn]')?.dataset.cn;
+    if (a === 'go') { lsSet(CN_KEY.seen, '1'); lsSet(CN_KEY.visit, '1'); SHOP.region = 'skin'; close(); location.hash = '#/shop'; }
+    else if (a === 'later' || e.target === ov) { let l = null; try { l = JSON.parse(lsGet(CN_KEY.later) || 'null'); } catch { /* */ } lsSet(CN_KEY.later, JSON.stringify({ n: (l?.n || 0) + 1, at: Date.now() })); close(); }
+  });
+  document.body.appendChild(ov);
+}
+
 // ───────────── Коллекция: скины за достижения ─────────────
 const SKIN_GROUPS = [['🏓 Ракетки', ['blade', 'rubber']], ['👕 Одежда', ['shirt', 'shorts']]];
 const lcFirst = t => t.charAt(0).toLowerCase() + t.slice(1);
@@ -2950,6 +2982,11 @@ const SHOP_ACT = {
   'sh-region': el => { SHOP.region = el.dataset.v; render(); },
   'sh-kind': el => { SHOP.kind = el.dataset.v; render(); },
   'sh-color': el => { SHOP.color = el.dataset.v; render(); },
+  'coll-open': () => { SHOP.region = 'skin'; lsSet(CN_KEY.visit, '1'); },
+  'announce-coll': async el => {
+    if (!(await confirmDialog('Отправить push «Новая коллекция скинов» всем, у кого сейчас открыт магазин (вам и тестировщикам, а после запуска для всех — всем игрокам)?', 'Отправить'))) return;
+    await busy(el, async () => { const r = await S.store.announce('collection'); toast(`Уведомление отправлено: ${r?.sent ?? 0}`); });
+  },
   'sk-back': () => { SHOP.region = 'skin'; location.hash = '#/shop'; },
   'sh-open': el => { const it = byId(el.dataset.id); if (it) openShopItem(it, el.dataset.color || null); },
   'sh-claim': el => busy(el, async () => { const r = await S.store.claimDaily(); S.coins = r.balance; await ensureShop(true); render(); toast(`+${r.amount} PC 🔥`); }),
@@ -4329,6 +4366,7 @@ function fitNicks() {
 addEventListener('resize', () => fitNicks());
 
 function afterRender(r) {
+  maybeCollectionNotice();
   fitNicks();
   document.fonts?.ready.then(fitNicks);
   if (r.name === 'me') renderPushBox();
