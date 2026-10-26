@@ -1359,7 +1359,9 @@ function liveBlock() {
 const minsAgo = iso => Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 60000));
 // приём открыт, пока жив сам матч: игра ещё идёт / вызов принят и не сыгран
 const evAlive = e => e.source === 'live' ? S.data.live.some(l => l.id === e.source_id && l.status === 'live')
-  : e.source === 'challenge' ? S.data.challenges.some(c => c.id === e.source_id && c.status === 'accepted' && !c.match_id) : true;
+  // прогноз «на вызов» живёт, пока эти двое не начали игру (тогда прогнозы — на саму игру)
+  : e.source === 'challenge' ? S.data.challenges.some(c => c.id === e.source_id && c.status === 'accepted' && !c.match_id)
+    && !S.data.live.some(l => l.status === 'live' && [l.player1_id, l.player2_id].sort().join() === [e.player1_id, e.player2_id].sort().join()) : true;
 const evOpen = e => e && e.status === 'open' && (!e.closes_at || Date.now() < Date.parse(e.closes_at)) && evAlive(e);
 const evLeft = e => (e?.closes_at ? Math.max(0, Math.ceil((Date.parse(e.closes_at) - Date.now()) / 60000)) : null);
 

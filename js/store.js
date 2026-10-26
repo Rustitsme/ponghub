@@ -885,6 +885,19 @@ class LocalStore {
       const srcRow = a.src === 'live' ? (this.db.live_matches || []).find(x => x.id === a.src_id) : (this.db.challenges || []).find(x => x.id === a.src_id);
       if (!srcRow) return null;
       const c = Math.min(0.95, Math.max(0.05, a.chance));
+      // игру начали — прогнозы принятого вызова этих же двоих переходят на неё (как миграция 37)
+      if (a.src === 'live' && srcRow.kind !== 'doubles' && !srcRow.tournament_id) {
+        const pair = [srcRow.player1_id, srcRow.player2_id].sort().join();
+        const ce = this.db.pred_events.find(e => e.source === 'challenge' && ['open', 'closed'].includes(e.status) && (this.db.challenges || []).some(x => x.id === e.source_id && x.status === 'accepted' && !x.match_id && [x.from_id, x.to_id].sort().join() === pair));
+        if (ce) {
+          if (ce.player1_id !== srcRow.player1_id) {
+            this.db.predictions.filter(p => p.event_id === ce.id).forEach(p => { p.side = 3 - p.side; });
+            Object.assign(ce, { player1_id: ce.player2_id, player2_id: ce.player1_id, chance1: 1 - ce.chance1, odds1: ce.odds2, odds2: ce.odds1, pool1: ce.pool2, pool2: ce.pool1 });
+          }
+          Object.assign(ce, { source: 'live', source_id: a.src_id, status: 'open', closes_at: srcRow.scoring === false ? new Date(Date.now() + this.predSetting('predWindowMin', 3) * 6e4).toISOString() : null });
+          this.save(); return ce.id;
+        }
+      }
       const ev = { id: uid(), club_id: this.cid, source: a.src, source_id: a.src_id, kind: srcRow.kind || 'singles', player1_id: srcRow.player1_id || srcRow.from_id, player2_id: srcRow.player2_id || srcRow.to_id, player3_id: srcRow.player3_id || null, player4_id: srcRow.player4_id || null,
         tournament_id: srcRow.tournament_id || null, closes_at: srcRow.scoring === false ? new Date(Date.now() + this.predSetting('predWindowMin', 3) * 6e4).toISOString() : null, chance1: c, odds1: Math.min(10, Math.round(100 / c) / 100), odds2: Math.min(10, Math.round(100 / (1 - c)) / 100), status: 'open', bets_count: 0, pool1: 0, pool2: 0, is_test: !!srcRow.is_test, created_by: me, created_at: new Date().toISOString() };
       this.db.pred_events.push(ev); this.save(); return ev.id;
