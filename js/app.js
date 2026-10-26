@@ -2689,6 +2689,7 @@ function viewShop(r) {
 }
 // ───────────── Коллекция: скины за достижения ─────────────
 const SKIN_GROUPS = [['🏓 Ракетки', ['blade', 'rubber']], ['👕 Одежда', ['shirt', 'shorts']]];
+const lcFirst = t => t.charAt(0).toLowerCase() + t.slice(1);
 const skinOpen = it => (S.skin?.unlocked || []).includes(it.id) || ownsAny(it);
 async function loadSkins(force = false) {
   if (!feature('shop')) return null;
@@ -2711,7 +2712,7 @@ function renderSkinList(box) {
   const st = S.skin?.stats, all = ITEMS.filter(it => it.skin), open = all.filter(skinOpen).length;
   box.innerHTML = `<div class="sk-stats card"><b>Ваш прогресс</b><div class="sk-chips">
       <span>⭐ Рейтинг <b>${st ? fmtStat('rating', st.rating) : '…'}</b></span><span>🏆 Победы <b>${st ? st.wins : '…'}</b></span><span>🏓 Матчи <b>${st ? st.matches : '…'}</b></span><span>🪙 Заработано <b>${st ? fmtStat('coins', st.coins) : '…'} PC</b></span></div>
-      <small class="muted">Открыто ${open} из ${all.length}. Скины не продаются — они открываются сами, когда выполнено условие. На игру они не влияют, только внешний вид.</small></div>`;
+      <small class="muted">Открыто ${open} из ${all.length}. Каждый скин можно купить за PC или получить бесплатно, выполнив условие. На игру они не влияют, только внешний вид.</small></div>`;
   for (const [title, types] of SKIN_GROUPS) {
     const items = all.filter(it => types.includes(it.type));
     const h = document.createElement('h4'); h.className = 'sk-h'; h.textContent = title; box.appendChild(h);
@@ -2721,8 +2722,8 @@ function renderSkinList(box) {
       const th = document.createElement('span'); th.className = 'sh-thumb'; th.appendChild(thumbEl(it, it.type === 'blade' ? 'FL' : color));
       const body = document.createElement('span'); body.className = 'sh-body';
       body.innerHTML = `<span class="sh-top"><span><small class="sh-brand">${esc(it.brand)} · ${it.colors.length > 1 ? it.colors.length + ' ' + (it.handles ? 'формы ручки' : 'цвета') : 'эксклюзив'}</small><b class="sh-name">${esc(it.name)}</b></span>
-        <span class="sk-badge ${ok ? 'ok' : ''}">${ok ? '✓ открыто' : '🔒'}</span></span>
-        ${ok ? '' : `<span class="sk-cond">${esc(unlockText(it.unlock))}</span><span class="sk-bar"><i style="width:${pr.pct}%"></i></span><small class="muted">у вас ${esc(pr.text)}</small>`}`;
+        <span class="sk-badge ${ok ? 'ok' : 'price'}">${ok ? '✓ открыто' : fmtC(it.price) + ' PC'}</span></span>
+        ${ok ? '' : `<span class="sk-cond">или бесплатно: ${esc(lcFirst(unlockText(it.unlock)))}</span><span class="sk-bar"><i style="width:${pr.pct}%"></i></span><small class="muted">у вас ${esc(pr.text)}</small>`}`;
       el.append(th, body); box.appendChild(el);
     }
   }
@@ -2763,7 +2764,7 @@ function openShopItem(it, color, mode = 'buy') {
   function draw() {
     const box = document.getElementById('sh-sheet'); if (!box) return;
     const k = keyOf(it, sel), own = owns(k), price = priceOf(it, sel);
-    const skinSpec = it.skin ? [['Условие', unlockText(it.unlock)], ['Статус', skinOpen(it) ? 'Открыто ✓' : 'Закрыто — ' + skinProgress(it).text], ['Тип', 'Эксклюзив · не продаётся']] : null;
+    const skinSpec = it.skin ? [['Бесплатно', unlockText(it.unlock)], ['Статус', skinOpen(it) ? 'Открыто ✓' : 'Не открыто — ' + skinProgress(it).text], ['Цена', fmtC(it.price) + ' PC']] : null;
     const spec = skinSpec ? skinSpec : it.type === 'blade' ? [['Слои', it.layers], ['Материал', it.material], ['Класс', it.cls], ['Вес', it.wt + ' г'], ['Толщина', String(it.th).replace('.', ',') + ' мм'], ['Стиль', STYLE[it.style][0]]]
       : it.type === 'rubber' ? [['Тип', it.rubber], ['Губка', it.sponge], ['Жёсткость губки', it.hard], ['Дуга полёта', it.arc], ['Липкость', it.tack], ['Вес листа', '≈ ' + it.wt + ' г'], ['Цвет', colorOf(it, sel).name]]
       : [['Цвет', colorOf(it, sel)?.name || '—']];
@@ -2773,7 +2774,7 @@ function openShopItem(it, color, mode = 'buy') {
       ${it.handles ? `<div><b class="small">Форма ручки</b><div class="sh-hsel">${it.colors.map(c => `<button data-hk="${c.key}" class="${sel === c.key ? 'on' : ''}">${c.key}<small>${c.extra ? '+' + c.extra : 'база'}</small></button>`).join('')}</div><small class="muted">${esc(colorOf(it, sel).name)}</small></div>`
         : it.colors && it.colors.length > 1 ? `<div class="sh-colors">${it.colors.map(c => `<button data-hk="${c.key}" class="${sel === c.key ? 'on' : ''}" style="background:${c.hex}" aria-label="${esc(c.name)}"></button>`).join('')}<span>${esc(colorOf(it, sel).name)}${colorOf(it, sel).extra ? ` · +${colorOf(it, sel).extra} PC` : ''}</span></div>` : ''}
       <div class="sh-spec">${spec.map(([a, b]) => `<div>${a}<b>${esc(b)}</b></div>`).join('')}</div>
-      <div id="sh-act" class="sh-act"></div>`;
+      <div id="sk-info" class="stack"></div><div id="sh-act" class="sh-act"></div>`;
     const pic = box.querySelector('#sh-pic'), cfg3d = previewCfg(it, k);
     if (window.THREE && cfg3d) { pic.classList.add('sh-3d'); mountViewer(pic, cfg3d, focus ? { apply: focus, zoom: .8 } : { zoom: .8 }); focus = null; }
     else pic.appendChild(thumbEl(it, sel, true));
@@ -2787,16 +2788,16 @@ function openShopItem(it, color, mode = 'buy') {
       }));
       return;
     }
+    const info = box.querySelector('#sk-info');
     if (it.skin) {
       const wearT = ['shirt', 'shorts'].includes(it.type), pr = skinProgress(it);
       if (own) {
         const slot = wearT ? it.type : null, worn = Object.values(S.shop.loadout || {}).includes(k);
         act.innerHTML = `<button class="btn primary full" id="sk-eq">${worn ? 'Уже надето' : wearT ? 'Надеть на игрока' : 'Поставить на ракетку'}</button>`;
         act.querySelector('#sk-eq').onclick = e => wearT ? busy(e.currentTarget, async () => { S.shop.loadout = await S.store.equipItem(slot, k); closeModal(); toast('Надето ✓'); go('#/avatar'); }) : askEquip(it, k, act);
-      } else {
-        act.innerHTML = `<div class="sk-lock"><b>🔒 ${esc(unlockText(it.unlock))}</b><span class="sk-bar"><i style="width:${pr.pct}%"></i></span><small class="muted">у вас ${esc(pr.text)}</small></div>${wearT && feature('avatar') ? `<a class="btn full" href="#/avatar?try=${encodeURIComponent(k)}" data-act="close">👀 Примерить на игроке</a>` : ''}`;
+        return;
       }
-      return;
+      info.innerHTML = `<div class="sk-lock"><b>🆓 Бесплатно: ${esc(lcFirst(unlockText(it.unlock)))}</b><span class="sk-bar"><i style="width:${pr.pct}%"></i></span><small class="muted">у вас ${esc(pr.text)} — или купите ниже за PC</small></div>${wearT && feature('avatar') ? `<a class="btn full" href="#/avatar?try=${encodeURIComponent(k)}" data-act="close">👀 Примерить на игроке</a>` : ''}`;
     }
     if (own) {
       const paid = S.shop.paid?.[k] || 0, back = Math.round(paid * 0.3), worn = Object.values(S.shop.loadout || {}).includes(k);

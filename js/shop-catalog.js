@@ -126,7 +126,7 @@ const EQUIP = { blade: 'blade', rubber: 'side', grip: 'grip', tape: 'tape' };
 
 
 // ───────────── Коллекция: эксклюзивные скины за достижения ─────────────
-// Не продаются: открываются сами, когда выполнено условие (проверяет сервер). Только внешний вид — на игру не влияют.
+// Можно купить за PC (дорого) или открыть бесплатно, когда выполнено условие (проверяет сервер). Только внешний вид — на игру не влияют.
 // unlock: rating — рейтинг клуба, wins — победы, matches — сыгранные матчи, coins — заработанные PC за всё время.
 const UNLOCK_KIND = { rating: ['Рейтинг', n => `${n}`], wins: ['Победы', n => `${n}`], matches: ['Матчи', n => `${n}`], coins: ['Заработать PC', n => n.toLocaleString('ru-RU')] };
 const unlockText = u => !u ? '' : ({ rating: `Достичь рейтинга ${u.n}`, wins: `Выиграть матчей: ${u.n}`, matches: `Сыграть матчей: ${u.n}`, coins: `Заработать ${u.n.toLocaleString('ru-RU')} PC за всё время` })[u.kind];
@@ -153,6 +153,10 @@ const WEAR_SKINS = [
   SK({ id: 'skin-s4', type: 'shorts', name: 'Рваные джинсовые шорты', unlock: { kind: 'wins', n: 40 }, desc: 'Деним с дырами на ногах. За 40 побед.', sty: 4, colors: [C('blue', 'синие', '#3a5a8c'), C('black', 'чёрные', '#2a2c33')] }),
 ];
 const SKINS = [...RACKET_SKINS, ...RUBBER_SKINS, ...WEAR_SKINS];
+// цены: скины можно купить за PC (дорого — это «большая трата») или бесплатно открыть за достижения
+const SKIN_PRICE = { 'skin-b3': 10000, 'skin-b2': 15000, 'skin-b1': 25000, 'skin-r1': 10000, 'skin-r2': 10000,
+  'skin-t1': 4000, 'skin-t2': 6000, 'skin-t3': 8000, 'skin-t4': 5000, 'skin-s1': 4000, 'skin-s2': 6000, 'skin-s3': 7000, 'skin-s4': 9000 };
+for (const it of SKINS) it.price = SKIN_PRICE[it.id] ?? 0;
 ITEMS.push(...SKINS);
 const accOf = (it, color) => it.accMap?.[color] || it.acc || '#ffffff';
 

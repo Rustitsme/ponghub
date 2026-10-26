@@ -1543,3 +1543,4 @@ body.av-big { overflow: hidden; }
 .sk-bar i { display: block; height: 100%; background: linear-gradient(90deg, #e63946, #ffb347); border-radius: 6px; }
 .sk-lock { display: grid; gap: 4px; padding: 12px; border-radius: 14px; background: var(--soft, rgba(22, 60, 120, .07)); }
 .sk-try { font-size: 14px; }
+.sk-badge.price { color: var(--text); font-weight: 800; }
