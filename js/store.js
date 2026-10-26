@@ -46,10 +46,10 @@ export const SANDBOX = (() => {
   try {
     const q = new URLSearchParams(location.search);
     if (q.has('sandbox')) localStorage.setItem('ponghub_sandbox', '1');
+    if (q.has('nosandbox')) localStorage.removeItem('ponghub_sandbox');   // служебная ссылка владельца: вернуться в обычное приложение
     return localStorage.getItem('ponghub_sandbox') === '1';
   } catch { return false; }
 })();
-export function leaveSandbox() { try { localStorage.removeItem('ponghub_sandbox'); } catch { /* */ } location.href = location.pathname; }
 
 export async function createStore() {
   if (SANDBOX) return new LocalStore(true);

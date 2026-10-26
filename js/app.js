@@ -1,4 +1,4 @@
-import { createStore, media, leaveSandbox } from './store.js';
+import { createStore, media } from './store.js';
 import { makeQr, qrSvg, qrPng, drawQr } from './qr.js';
 import { UNLOCK_KIND, unlockText, unlockNow, ITEMS, RG, RGSUB, RUBBER_COLORS, STYLE, EQUIP, LEAGUE_REWARDS, STREAK, STARTER, byId, colorOf, priceOf, keyOf, parseKey } from './shop-catalog.js';
 import { thumb, mountViewer, loadThree, racketShot } from './shop3d.js';
@@ -356,8 +356,7 @@ function sandboxAuth() {
       <label>Как вас называть (ник)<input name="nickname" required minlength="2" maxlength="20" placeholder="Например: Coach" autocomplete="nickname"></label>
       <button class="btn primary big">Начать →</button>
       <p class="muted small center">Регистрация, email и пароль не нужны.</p>
-    </form></div>
-    <button class="btn ghost full" data-act="sb-leave">Выйти из песочницы в обычное приложение</button></div>`;
+    </form></div></div>`;
 }
 function authView(r) {
   if (S.store.sandbox) return sandboxAuth();
@@ -2045,7 +2044,7 @@ function viewMe() {
   ${S.store.sandbox ? `<section class="card"><div class="card-h"><h3>🧪 Песочница</h3></div>
     <p class="muted small">Тестовая копия: ваш клуб и боты живут только на этом устройстве.</p>
     ${sandboxButtons()}
-    <div class="row-btns"><button class="btn ghost" data-act="sb-reset">↺ Начать заново</button><button class="btn ghost" data-act="sb-leave">Выйти из песочницы</button></div></section>`
+    <div class="row-btns"><button class="btn ghost" data-act="sb-reset">↺ Начать заново</button></div></section>`
   : S.store.mode === 'demo' ? `<section class="card"><div class="card-h"><h3>Демо-режим</h3></div>
     <p class="muted small">Сейчас вы вошли как демо-пользователь. Данные хранятся только в этом браузере.</p>
     <div class="row-btns"><button class="btn" data-act="logout">Сменить роль</button><button class="btn ghost" data-act="demo-reset">Сбросить демо-данные</button></div></section>` : ''}
@@ -4031,7 +4030,6 @@ const ACT = {
   'sb-live': el => busy(el, async () => { const id = S.store.botLive(S.club.id); go(`#/live/${id}`); }),
   'sb-hide': () => { lsSet('ponghub_sb_guide', 'hide'); render(); },
   'sb-reset': async () => { if (await confirmDialog('Начать песочницу заново? Ваш тестовый клуб и матчи удалятся.', 'Начать заново', true)) { S.store.reset(); await S.store.signOut(); location.hash = '#/login'; } },
-  'sb-leave': () => leaveSandbox(),
   'demo-reset': async () => { if (await confirmDialog('Вернуть демо-данные к исходным?')) { S.store.reset(); await refresh(); toast('Демо-данные сброшены'); } },
   'add-match': () => openMatchForm(),
   match: el => openMatchDetail(el.dataset.id),
