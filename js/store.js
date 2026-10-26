@@ -288,6 +288,8 @@ class SupaStore {
 
   // ── магазин ──
   shopState() { return this.rpc('shop_state', { cid: this.cid }); }
+  // цены и условия скинов коллекции — из базы (владелец меняет их одним запросом в Supabase)
+  async skinItems() { const { data } = await this.sb.from('shop_items').select('id, price, unlock').not('unlock', 'is', null); return data || []; }
   buyItem(key) { return this.rpc('buy_item', { cid: this.cid, p_key: key }); }
   equipItem(slot, key) { return this.rpc('equip_item', { p_slot: slot, p_key: key }); }
   claimDaily() { return this.rpc('claim_daily', { cid: this.cid }); }
@@ -696,6 +698,7 @@ class LocalStore {
   predSetting(k, d) { return this.db.clubs.find(c => c.id === this.cid)?.settings?.[k] ?? d; }
   async listScreens(cid) { return (this.db.screens || []).filter(s => s.club_id === cid); }
   // ── магазин (демо: та же логика, что в базе) ──
+  async skinItems() { return []; }
   shopDb() { const d = this.db; d.user_items = d.user_items || []; d.daily = d.daily || []; d.league_rewards = d.league_rewards || []; return d; }
   async shopState() {
     const d = this.shopDb(), me = this.db.session, p = d.profiles.find(x => x.id === me);

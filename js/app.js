@@ -2653,6 +2653,8 @@ function ensureThree() {
 async function ensureShop(force = false) {
   if (S.shop && !force) return S.shop;
   try { S.shop = await S.store.shopState(); S.coins = S.shop.balance; } catch (e) { S.shop = null; throw e; }
+  // цены и условия скинов — как в базе (их проверяет и сервер), а не зашитые в приложение
+  try { for (const r of await S.store.skinItems()) { const it = byId(r.id); if (it) { it.price = r.price; if (r.unlock?.kind && r.unlock.n) it.unlock = { kind: r.unlock.kind, n: +r.unlock.n }; } } } catch { /* останутся из приложения */ }
   return S.shop;
 }
 const owns = key => !!S.shop?.items?.includes(key);
