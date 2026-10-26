@@ -2657,7 +2657,7 @@ const owns = key => !!S.shop?.items?.includes(key);
 const ownsAny = it => it.colors ? it.colors.some(c => owns(`${it.id}:${c.key}`)) : owns(it.id);
 const shopBars = it => it.s == null ? '' : `<div class="sh-bars">${[['Скорость', it.s, '#e63946'], ['Вращение', it.w, '#2563b8'], ['Контроль', it.c, '#12a061']].map(([l, v, c]) => `<div class="sh-bar">${l}<i><b style="width:${v * 10}%;background:${c}"></b></i><span>${String(v).replace('.', ',')}</span></div>`).join('')}</div>`;
 const shopTags = it => `<div class="sh-tags"><span class="sh-tag ${STYLE[it.style][1]}">${STYLE[it.style][0]}</span>${it.type === 'blade' ? `<span class="sh-tag">${esc(it.layers)}</span>` : it.type === 'rubber' ? `<span class="sh-tag">${esc(it.rubber)}</span><span class="sh-tag">${esc(it.sponge)}</span>` : ''}</div>`;
-const WEAR_3D = ['shirt', 'shorts', 'shoes', 'socks', 'wrist', 'head', 'cap'];
+const WEAR_3D = ['shirt', 'shorts', 'shoes', 'socks', 'wrist', 'head'];
 const thumbEl = (it, color, big) => {
   const el = thumb(it, color, big); el.classList.add(big ? 'sh-pic-img' : 'sh-thumb-img');
   // форма: сначала рисунок, затем — снимок вещи на 3D-игроке (только у кого открыт 3D-игрок)
@@ -2688,7 +2688,7 @@ function viewShop(r) {
     <div class="sh-list" id="sh-list"></div>`;
 }
 // ───────────── Коллекция: скины за достижения ─────────────
-const SKIN_GROUPS = [['🏓 Ракетки', ['blade', 'rubber']], ['👕 Одежда', ['shirt', 'shorts']], ['🧢 Головные уборы', ['cap']]];
+const SKIN_GROUPS = [['🏓 Ракетки', ['blade', 'rubber']], ['👕 Одежда', ['shirt', 'shorts']]];
 const skinOpen = it => (S.skin?.unlocked || []).includes(it.id) || ownsAny(it);
 async function loadSkins(force = false) {
   if (!feature('shop')) return null;
@@ -2788,7 +2788,7 @@ function openShopItem(it, color, mode = 'buy') {
       return;
     }
     if (it.skin) {
-      const wearT = ['shirt', 'shorts', 'cap'].includes(it.type), pr = skinProgress(it);
+      const wearT = ['shirt', 'shorts'].includes(it.type), pr = skinProgress(it);
       if (own) {
         const slot = wearT ? it.type : null, worn = Object.values(S.shop.loadout || {}).includes(k);
         act.innerHTML = `<button class="btn primary full" id="sk-eq">${worn ? 'Уже надето' : wearT ? 'Надеть на игрока' : 'Поставить на ракетку'}</button>`;
@@ -2963,7 +2963,7 @@ const SHOP_ACT = {
 let AV = null;
 // лицо по селфи отложено: нужна платная нейросеть (Gemini без оплаты не рисует картинки)
 const FACE_ON = false;
-const WEAR = [['shirt', 'Футболка'], ['shorts', 'Шорты'], ['shoes', 'Кроссовки'], ['socks', 'Носки'], ['wrist', 'Напульсники'], ['head', 'Повязка'], ['cap', 'Головной убор']];
+const WEAR = [['shirt', 'Футболка'], ['shorts', 'Шорты'], ['shoes', 'Кроссовки'], ['socks', 'Носки'], ['wrist', 'Напульсники'], ['head', 'Повязка']];
 function viewAvatar(r) {
   const a = r.args[0], grip = a === 'grip', other = a && !grip && a !== S.me.id;
   if (grip && !isFounder()) return viewHome(r);
@@ -4405,3 +4405,6 @@ async function boot() {
 
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js', { scope: './' }).catch(() => {});
 boot();
+
+// iOS: запрет масштабирования щипком (в установленном приложении иначе экран «растягивается» как в браузере)
+['gesturestart', 'gesturechange', 'gestureend'].forEach(ev => document.addEventListener(ev, e => e.preventDefault()));

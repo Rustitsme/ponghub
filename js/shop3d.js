@@ -149,11 +149,6 @@ function thumb(it, color, big = false) {
     const acc = BRANDS[it.bk]?.color || '#333';
     x.fillStyle = light(col.hex) ? acc : 'rgba(255,255,255,.85)'; x.fillRect(-35, 26, 5, 8); x.fillRect(30, 26, 5, 8);
     emblem(x, it.bk, -18, 18, 10, light(col.hex) ? acc : '#fff');
-  } else if (t === 'cap') {
-    x.translate(64, 70); x.shadowColor = 'rgba(10,30,70,.28)'; x.shadowBlur = 9; x.shadowOffsetY = 4;
-    x.fillStyle = col.hex; x.beginPath(); x.moveTo(-40, 8); x.quadraticCurveTo(-40, -42, 0, -44); x.quadraticCurveTo(40, -42, 40, 8); x.closePath(); x.fill();
-    x.shadowColor = 'transparent'; x.fillStyle = shade(col.hex, -40); x.beginPath(); x.ellipse(24, 10, 36, 7, 0, 0, 7); x.fill();
-    x.fillStyle = 'rgba(255,255,255,.2)'; x.beginPath(); x.ellipse(-12, -24, 12, 7, -.5, 0, 7); x.fill();
   } else if (t === 'shoes') {
     x.translate(64, 70);
     x.fillStyle = 'rgba(10,30,70,.18)'; x.beginPath(); x.ellipse(2, 24, 54, 6, 0, 0, 7); x.fill();

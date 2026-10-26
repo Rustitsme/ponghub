@@ -152,14 +152,7 @@ const WEAR_SKINS = [
   SK({ id: 'skin-s3', type: 'shorts', name: 'Камуфляж', unlock: { kind: 'coins', n: 2000 }, desc: 'Военный рисунок: пятна трёх оттенков. За 2 000 заработанных PC.', sty: 2, accMap: { green: '#8a9a55', sand: '#c8b27a', urban: '#8d939c' }, colors: [C('green', 'зелёный', '#4d5b30'), C('sand', 'песочный', '#9c8756'), C('urban', 'городской', '#4a4f57')] }),
   SK({ id: 'skin-s4', type: 'shorts', name: 'Рваные джинсовые шорты', unlock: { kind: 'wins', n: 40 }, desc: 'Деним с дырами на ногах. За 40 побед.', sty: 4, colors: [C('blue', 'синие', '#3a5a8c'), C('black', 'чёрные', '#2a2c33')] }),
 ];
-const CAP_SKINS = [
-  SK({ id: 'skin-c1', type: 'cap', name: 'Бейсболка', unlock: { kind: 'wins', n: 3 }, desc: 'Классическая бейсболка с козырьком. За 3 победы.', cap: 'cap', colors: [C('red', 'красная', '#d62839'), C('black', 'чёрная', '#1b1c20'), C('white', 'белая', '#f4f6fa'), C('blue', 'синяя', '#1f5fc4')] }),
-  SK({ id: 'skin-c2', type: 'cap', name: 'Снепбэк', unlock: { kind: 'wins', n: 10 }, desc: 'Плоский прямой козырёк, уличный стиль. За 10 побед.', cap: 'snap', colors: [C('black', 'чёрный', '#1b1c20'), C('white', 'белый', '#f4f6fa'), C('gold', 'золотой', '#d4af37')] }),
-  SK({ id: 'skin-c3', type: 'cap', name: 'Кепка задом наперёд', unlock: { kind: 'matches', n: 25 }, desc: 'Козырёк назад, как у настоящих уличных игроков. За 25 матчей.', cap: 'rev', colors: [C('navy', 'тёмно-синяя', '#14306b'), C('red', 'красная', '#d62839'), C('green', 'зелёная', '#12a061')] }),
-  SK({ id: 'skin-c4', type: 'cap', name: 'Шапка-бини', unlock: { kind: 'coins', n: 1000 }, desc: 'Тёплая вязаная шапка с отворотом. За 1 000 заработанных PC.', cap: 'beanie', colors: [C('black', 'чёрная', '#1b1c20'), C('grey', 'серая', '#8a8f99'), C('orange', 'оранжевая', '#ff7a00')] }),
-  SK({ id: 'skin-c5', type: 'cap', name: 'Панама', unlock: { kind: 'wins', n: 50 }, desc: 'Широкие поля, лёгкая ткань. За 50 побед.', cap: 'bucket', colors: [C('beige', 'бежевая', '#d8c9a3'), C('black', 'чёрная', '#1b1c20'), C('green', 'зелёная', '#5b6b3a')] }),
-];
-const SKINS = [...RACKET_SKINS, ...RUBBER_SKINS, ...WEAR_SKINS, ...CAP_SKINS];
+const SKINS = [...RACKET_SKINS, ...RUBBER_SKINS, ...WEAR_SKINS];
 ITEMS.push(...SKINS);
 const accOf = (it, color) => it.accMap?.[color] || it.acc || '#ffffff';
 

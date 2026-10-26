@@ -416,77 +416,10 @@ function applyLook(P, lo) {
   for (const [m, it, key] of [[P.acc.bandLeft, wr.it, lo.wrist], [P.acc.bandRight, wr.it, lo.wrist], [P.acc.head, hd.it, lo.head]]) {
     if (!m) continue; m.visible = !!it; if (it) m.material.color.set(hexOf(key)).convertSRGBToLinear();
   }
-  setCap(P, lo.cap || '');
   const rcfg = { blade: lo.blade || 'cn-b1:FL', fh: lo.fh, bh: lo.bh, grip: lo.grip, tape: lo.tape }, rk = JSON.stringify(rcfg) + JSON.stringify(RK);
   if (P.rkId !== rk) { attachRacket(P, rcfg); P.rkId = rk; }
 }
 
-
-// ───────────── Головные уборы: кепки, шапка, панама — по форме головы модели ─────────────
-// Измеряем голову в системе кости (вершины с весом на кость Head), строим убор в осях «право / вверх / вперёд» и крепим к кости.
-function capFrame(P) {
-  if (P.headInfo) return P.headInfo;
-  const mesh = P.mesh, sk = mesh.skeleton, bone = P.bones.Head, bi = sk.bones.indexOf(bone);
-  const g = mesh.geometry, pos = g.attributes.position, si = g.attributes.skinIndex, sw = g.attributes.skinWeight, v = new THREE.Vector3(), pts = [];
-  for (let i = 0; i < pos.count; i++) {
-    let w = 0; const ix = [si.getX(i), si.getY(i), si.getZ(i), si.getW(i)], wx = [sw.getX(i), sw.getY(i), sw.getZ(i), sw.getW(i)]; for (let k = 0; k < 4; k++) if (ix[k] === bi) w += wx[k];
-    if (w < .45) continue;
-    pts.push(v.fromBufferAttribute(pos, i).applyMatrix4(mesh.bindMatrix).applyMatrix4(sk.boneInverses[bi]).clone());
-  }
-  P.holder.updateMatrixWorld(true);
-  const q = bone.getWorldQuaternion(new THREE.Quaternion()).invert();
-  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(q).normalize(), fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(q).normalize(), right = new THREE.Vector3().crossVectors(up, fwd).normalize();
-  const U = pts.map(p => [p.dot(right), p.dot(up), p.dot(fwd)]);
-  const vTop = Math.max(...U.map(a => a[1])), vBot = Math.min(...U.map(a => a[1])), H = vTop - vBot;
-  const sl = U.filter(a => a[1] > vTop - .32 * H && a[1] < vTop - .18 * H);
-  const uMin = Math.min(...sl.map(a => a[0])), uMax = Math.max(...sl.map(a => a[0])), wMin = Math.min(...sl.map(a => a[2])), wMax = Math.max(...sl.map(a => a[2]));
-  const info = { right, up, fwd, vTop, H, cu: (uMin + uMax) / 2, cw: (wMin + wMax) / 2, rx: (uMax - uMin) / 2, rz: (wMax - wMin) / 2 };
-  return (P.headInfo = info);
-}
-function buildCap(P, style, hex) {
-  const I = capFrame(P), g = new THREE.Group();
-  const col = new THREE.Color(hex).convertSRGBToLinear();
-  const mat = (c = col, r = .85) => new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: 0, side: THREE.DoubleSide });
-  const dark = col.clone().multiplyScalar(.6);
-  const rx = I.rx * 1.07, rz = I.rz * 1.07, H = I.H;
-  const y0 = I.vTop - (style === 'beanie' ? .36 : style === 'bucket' ? .30 : .27) * H;    // нижний край
-  const dome = (h, sx = 1) => { const m = new THREE.Mesh(new THREE.SphereGeometry(1, 40, 20, 0, Math.PI * 2, 0, Math.PI / 2), mat()); m.scale.set(rx * sx * 1.03, h, rz * sx * 1.1); m.position.set(I.cu, y0, I.cw + rz * .06); return m; };
-  const topH = (I.vTop - y0) * 1.22 + .02 * H;
-  if (style === 'bucket') {
-    const crown = new THREE.Mesh(new THREE.CylinderGeometry(rx * 1.0, rx * 1.04, topH * .62, 40, 1, true), mat()); crown.scale.z = rz / rx * 1.08; crown.position.set(I.cu, y0 + topH * .31, I.cw + rz * .05); g.add(crown);
-    const top = new THREE.Mesh(new THREE.CircleGeometry(rx * .98, 40), mat()); top.rotation.x = -Math.PI / 2; top.scale.y = rz / rx * 1.08; top.position.set(I.cu, y0 + topH * .62, I.cw + rz * .05); g.add(top);
-    const brim = new THREE.Mesh(new THREE.CylinderGeometry(rx * 1.4, rx * 1.02, .05 * H, 48, 1, true), mat(dark)); brim.scale.z = rz / rx; brim.position.set(I.cu, y0 - .01 * H, I.cw); g.add(brim);
-  } else {
-    g.add(dome(style === 'beanie' ? topH * .88 : topH, 1));
-    if (style === 'beanie') {
-      const cuff = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, .075 * H, 40, 1, true), mat(dark)); cuff.scale.set(rx * 1.03, 1, rz * 1.03); cuff.position.set(I.cu, y0 + .03 * H, I.cw); g.add(cuff);
-      const pom = new THREE.Mesh(new THREE.SphereGeometry(rx * .16, 16, 12), mat(dark)); pom.position.set(I.cu, I.vTop + topH * .02 + rx * .1, I.cw); g.add(pom);
-    } else {
-      // козырёк: половина эллипса, чуть вниз
-      const shp = new THREE.Shape(); const vr = rx * (style === 'snap' ? 1.0 : .92), vl = rz * (style === 'snap' ? 1.05 : .9);
-      shp.moveTo(-vr, 0); shp.absellipse(0, 0, vr, vl, Math.PI, 0, true); shp.closePath();
-      const vis = new THREE.Mesh(new THREE.ExtrudeGeometry(shp, { depth: .006 * H, bevelEnabled: false, curveSegments: 24 }), mat(dark, .7));
-      vis.rotation.x = Math.PI / 2 - (style === 'snap' ? .02 : .14); vis.position.set(I.cu, y0 + .012 * H, I.cw + rz * .78);
-      // shape лежит в плоскости XY (y — вперёд), поворот кладёт её на горизонталь и направляет вперёд
-      if (style === 'rev') { vis.rotation.z = Math.PI; vis.position.z = I.cw - rz * .78; }
-      g.add(vis);
-      const btn = new THREE.Mesh(new THREE.SphereGeometry(rx * .07, 12, 8), mat(dark)); btn.position.set(I.cu, I.vTop + .012 * H, I.cw); g.add(btn);
-    }
-  }
-  // ориентация: оси группы = (право, вверх, вперёд) кости Head
-  g.matrixAutoUpdate = true;
-  const basis = new THREE.Matrix4().makeBasis(I.right, I.up, I.fwd);
-  const holder = new THREE.Group(); holder.quaternion.setFromRotationMatrix(basis); holder.add(g);
-  holder.traverse(o => { if (o.isMesh) o.castShadow = false; });
-  return holder;
-}
-function setCap(P, key) {
-  if (P.capKey === key) return; P.capKey = key;
-  if (P.capObj) { P.capObj.parent && P.capObj.parent.remove(P.capObj); P.capObj = null; }
-  const { it, color } = parseKey(key || ''); if (!it || it.type !== 'cap') return;
-  P.capObj = buildCap(P, it.cap, colorOf(it, color)?.hex || '#d62839');
-  P.bones.Head.add(P.capObj);
-}
 
 // ───────────── Просмотр: один на экран ─────────────
 let V = null;
@@ -705,7 +638,7 @@ export async function tvWinner(root, { W, score, grip, cue = () => {} }) {
 // ───────────── Иконки формы: вещь крупно на 3D-игроке ─────────────
 // один скрытый рендер на всё приложение, снимки по очереди и в кэше (ключ вещи → jpeg dataURL)
 const SHOT = { R: null, P: null, cache: new Map(), q: Promise.resolve() };
-const SLOT_OF = { shirt: 'shirt', shorts: 'shorts', shoes: 'shoes', socks: 'socks', wrist: 'wrist', head: 'head', cap: 'cap' };
+const SLOT_OF = { shirt: 'shirt', shorts: 'shorts', shoes: 'shoes', socks: 'socks', wrist: 'wrist', head: 'head' };
 function shotFrame(P, type) {
   const b = P.bones, at = n => b[n].getWorldPosition(new THREE.Vector3());
   const mid = (...ns) => ns.map(at).reduce((s, v) => s.add(v), new THREE.Vector3()).multiplyScalar(1 / ns.length);
