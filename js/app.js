@@ -375,7 +375,7 @@ function authView(r) {
       <label>Email<input name="email" type="email" required autocomplete="email"></label>
       <label>Пароль<input name="password" type="password" required minlength="6" autocomplete="new-password"></label>
       <button class="btn primary big">Зарегистрироваться</button>
-      <p class="muted small center">${lsGet('ponghub_join') ? 'После регистрации заявка в клуб, куда вас пригласили, отправится сама.' : lsGet('ponghub_after')?.includes('/tournament/') ? 'После регистрации сразу откроется турнир — останется нажать «Записаться».' : 'После регистрации вы сможете вступить в клуб по приглашению, найти клуб или создать свой.'}</p>
+      <p class="muted small center">${lsGet('ponghub_join') ? 'После регистрации заявка в клуб, куда вас пригласили, отправится сама.' : lsGet('ponghub_after')?.includes('/tournament/') ? 'После регистрации сразу откроется турнир — останется нажать «Записаться».' : 'После регистрации вы сможете вступить в клуб по приглашению или найти клуб.'}</p>
       <a href="#/login" class="link center">Уже есть аккаунт? Войти</a>
     </form>`;
   else if (mode === 'forgot') form = `
@@ -2164,7 +2164,8 @@ function viewClubs() {
     <section class="card"><div class="card-h"><h3>🔍&nbsp; Найти клуб</h3></div>
       <input type="search" data-input="dir-search" placeholder="Город, адрес, название или ID клуба" autocomplete="off">
       <div id="dir-box" class="dir-box"><div class="muted small">Загружаю…</div></div></section>
-    <div class="row-btns"><a class="btn" href="#/map">🗺 Клубы на карте</a><a class="btn primary" href="#/newclub">＋ Создать клуб</a></div>
+    <div class="row-btns"><a class="btn" href="#/map">🗺 Клубы на карте</a>${feature('newclub') ? '<a class="btn primary" href="#/newclub">＋ Создать клуб</a>' : ''}</div>
+    ${feature('newclub') ? '' : '<p class="muted small center">Создание новых клубов пока закрыто. Вступайте в существующие — по приглашению или через поиск.</p>'}
     ${isFounder() ? '<a class="card menu-item" href="#/founder">🛡 <span>Платформа PongHub</span><span>→</span></a>' : ''}
     ${S.club ? '' : '<button class="btn ghost full danger-text" data-act="logout">Выйти из аккаунта</button>'}`);
 }
@@ -2207,6 +2208,10 @@ function clubForm(c = {}, edit = false) {
 }
 
 function viewNewClub() {
+  if (!feature('newclub')) return bare(`<div class="page-h"><h1>Новый клуб</h1></div>
+    <section class="card stack center"><b>Создание новых клубов пока закрыто</b>
+    <p class="muted small">Скоро откроем. А пока можно вступить в существующий клуб: по приглашению от друга или найти клуб рядом.</p>
+    <a class="btn primary" href="#/clubs">Найти клуб</a></section>`, '#/clubs');
   return bare(`<div class="page-h"><h1>Новый клуб</h1></div>
     <p class="muted small">Создать клуб может любой — бесплатно. Вы станете его владельцем: принимаете участников, подтверждаете результаты, проводите турниры.</p>
     <form class="card stack" data-form="new-club">${clubForm()}</form>`, '#/clubs');
@@ -2448,11 +2453,12 @@ async function renderFounder() {
         <p class="muted small">Новые функции сначала видны только вам и тестировщикам, которых вы выберете. Проверьте их — и включите для всех.</p>
         ${[['shop', '🛍️ Магазин и новая экономика', 'Магазин, моя ракетка, бонус дня, +15 за матч, призы турниров, награды за лиги. При включении для всех: балансы × 0,3, старт 300 PC, ставка до 300, еженедельные +100 отменяются.'],
            ['resale', '♻️ Продажа вещей', 'Купленное в магазине можно продать обратно за 30% от цены покупки. Стартовое основание и награды не продаются.'],
+           ['newclub', '🏗️ Создание новых клубов', 'Кнопка «Создать клуб» есть у вас и у тестировщиков. У остальных её нет: они могут вступать в существующие клубы. Откройте для всех, когда будете готовы, и закройте обратно в любой момент. Уже созданные клубы не затрагиваются.'],
            ['avatar', '🧍 3D-игрок', 'Свой 3D-игрок: парень или девушка, форма из магазина, ракетка в руке, жесты. Виден в профиле. Хват ракетки настраивается в редакторе ниже.']].map(([k, t, d]) => {
           const mode = S.ctx?.platform?.features?.[k] ?? 'all';
           return `<div class="pl-row"><div class="pl-top"><span class="rn"><b>${t}</b><small class="muted">${d}</small></span></div>
             <div class="pl-ctl"><span class="badge ${mode === 'all' ? 'ok' : 'warn'}">${mode === 'all' ? 'включено у всех' : 'у вас и тестировщиков'}</span>
-            ${mode === 'all' ? '' : `<button class="btn sm ghost" data-act="feature-testers" data-k="${k}">👥 Тестировщики</button><button class="btn sm primary" data-act="feature-all" data-k="${k}">Включить для всех</button>`}${k === 'shop' ? `<button class="btn sm ghost" data-act="announce-coll">📣 Уведомить о коллекции</button>` : ''}</div></div>`;
+            ${mode === 'all' ? (k === 'newclub' ? `<button class="btn sm danger ghost" data-act="feature-close" data-k="${k}">Закрыть для всех</button>` : '') : `<button class="btn sm ghost" data-act="feature-testers" data-k="${k}">👥 Тестировщики</button><button class="btn sm primary" data-act="feature-all" data-k="${k}">${k === 'newclub' ? 'Открыть для всех' : 'Включить для всех'}</button>`}${k === 'shop' ? `<button class="btn sm ghost" data-act="announce-coll">📣 Уведомить о коллекции</button>` : ''}</div></div>`;
         }).join('')}
         <div class="pl-row"><div class="pl-top"><span class="rn"><b>✋ Хват ракетки у 3D-игрока</b><small class="muted">Редактор: как игрок держит ракетку — у всех игроков сразу. Работает с телефона и компьютера.</small></span></div>
           <div class="pl-ctl"><a class="btn sm ghost" href="#/player/grip">Открыть редактор</a></div></div></section>
@@ -2473,7 +2479,7 @@ function openClubMenu() {
     <div class="menu">
       <a class="menu-item" href="#/invite">✉️ <span>${isAdmin() ? 'Пригласить в клуб' : 'Пригласить друга в клуб'}</span></a>
       <a class="menu-item" href="#/clubs">🔍 <span>Вступить или найти клуб</span></a>
-      <a class="menu-item" href="#/newclub">＋ <span>Создать клуб</span></a>
+      ${feature('newclub') ? '<a class="menu-item" href="#/newclub">＋ <span>Создать клуб</span></a>' : ''}
       <a class="menu-item" href="#/map">🗺 <span>Клубы на карте</span></a>
       ${isFounder() ? '<a class="menu-item" href="#/founder">🛡 <span>Платформа PongHub</span></a>' : ''}
     </div>`);
@@ -2567,7 +2573,7 @@ const CLUB_ACT = {
   'av-noface': async el => { await busy(el, async () => { await S.store.faceCall({ reset: true }); S.ctx.me.face = null; AV?.ctl?.setFace(null); }); render(); },
   'av-wear': async el => { await busy(el, async () => { await S.store.equipItem(el.dataset.slot, el.dataset.k || null); await ensureShop(true); }); AV?.ctl?.look(S.shop?.loadout); render(); },
   'feature-testers': async el => {
-    const k = el.dataset.k, title = { shop: 'Магазин', resale: 'Продажа вещей', avatar: '3D-игрок' }[k] || k;
+    const k = el.dataset.k, title = { shop: 'Магазин', resale: 'Продажа вещей', avatar: '3D-игрок', newclub: 'Создание клубов' }[k] || k;
     let found = [], testers = [];
     const row = (u, on) => `<div class="pl-row"><div class="pl-top"><span class="rn"><b>${esc(u.nickname)}</b><small class="muted">${esc(u.full_name || '')}${u.clubs ? ' · ' + esc(u.clubs) : ''}</small></span></div>
       <div class="pl-ctl"><button class="btn xs ${on ? 'ghost' : 'primary'}" data-ts="${u.id}" data-on="${on ? 0 : 1}">${on ? 'Убрать' : 'Дать доступ'}</button></div></div>`;
@@ -2589,9 +2595,13 @@ const CLUB_ACT = {
   },
   'feature-all': async el => {
     const k = el.dataset.k;
-    const warn = k === 'shop' ? 'Включить магазин и новую экономику для всех? Балансы всех игроков пересчитаются × 0,3, стартовый баланс станет 300 PC. Отменить пересчёт нельзя.' : 'Включить для всех?';
+    const warn = k === 'newclub' ? 'Открыть создание клубов для всех? Любой зарегистрированный человек сможет создать свой клуб. Закрыть обратно можно в любой момент.' : k === 'shop' ? 'Включить магазин и новую экономику для всех? Балансы всех игроков пересчитаются × 0,3, стартовый баланс станет 300 PC. Отменить пересчёт нельзя.' : 'Включить для всех?';
     if (!(await confirmDialog(warn, 'Включить для всех'))) return;
     await busy(el, async () => { await S.store.rpc('founder_set_feature', { fname: k, mode: 'all' }); await reload(); render(); toast('Включено для всех 🚀'); });
+  },
+  'feature-close': async el => {
+    if (!(await confirmDialog('Закрыть создание клубов для всех, кроме вас и тестировщиков? Уже созданные клубы останутся.', 'Закрыть', true))) return;
+    await busy(el, async () => { await S.store.rpc('founder_set_feature', { fname: el.dataset.k, mode: 'founder' }); await reload(); render(); toast('Закрыто. Доступ только у вас и тестировщиков'); });
   },
   'screen-remove': async el => {
     if (!(await confirmDialog('Отключить это табло? Чтобы вернуть, понадобится новый код с телевизора.', 'Отключить', true))) return;
@@ -2675,6 +2685,7 @@ const CLUB_FORMS = {
   'screen-pair': async (f, fd) => { await S.store.rpc('screen_pair', { cid: S.club.id, p_code: fd.get('code'), p_name: fd.get('name').trim() || null }); f.reset(); await renderScreens(); toast('Табло подключено 📺'); },
   'join-code': async (f, fd) => { await openInvite(fd.get('code').trim()); },
   'new-club': async (f, fd) => {
+    if (!feature('newclub')) throw new Error('Создание новых клубов пока закрыто. Скоро откроем');
     const cid = await S.store.createClub(clubFields(fd));
     lsSet('ponghub_club', cid);
     await reload();
