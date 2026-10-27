@@ -237,11 +237,11 @@ function woodCanvas(x, w, h, base, seed, dark = 1) {
 }
 // цветовые гаммы личной ракетки «Founder»: base — фон, waves — цвета волн, line — тонкая сетка, halo — ореол (центр → край), edge — кромка слоёв
 const FOUNDER_THEMES = {
-  aurum: { base: '#070503', waves: ['#6b4a08', '#ffd75a', '#a8780c', '#fff0b0'], line: 'rgba(255,225,140,.85)', halo: ['rgba(255,210,90,.95)', 'rgba(255,150,30,.55)', 'rgba(255,120,0,.2)'], edge: '#ffd24a', spark: ['#ffd24a', '#ff9a1a', '#fff0b0'] },
+  aurum: { base: '#070503', waves: ['#6b4a08', '#ffd75a', '#a8780c', '#fff0b0'], line: 'rgba(255,225,140,.85)', halo: ['rgba(255,210,90,.95)', 'rgba(255,150,30,.55)', 'rgba(255,120,0,.2)'], edge: '#ffd24a', spark: ['#ffd24a', '#ff9a1a', '#fff0b0'], dots: ['#e8a400', '#ffc928', '#ff9a1a'] },
   glacier: { base: '#04070d', waves: ['#5aa8e8', '#ffffff', '#8cc8ff', '#e6f6ff'], line: 'rgba(200,235,255,.85)', halo: ['rgba(190,235,255,.95)', 'rgba(80,170,255,.55)', 'rgba(60,120,255,.2)'], edge: '#d8f0ff', spark: ['#d8f0ff', '#6fb8ff', '#ffffff'] },
   crimson: { base: '#080304', waves: ['#7a0f1f', '#ff3b4f', '#b3122a', '#ff8a96'], line: 'rgba(255,170,160,.8)', halo: ['rgba(255,70,80,.95)', 'rgba(220,20,50,.55)', 'rgba(160,0,30,.2)'], edge: '#ff5a66', spark: ['#ff5a66', '#ff9a1a', '#ffd0c0'] },
   emerald: { base: '#030806', waves: ['#0b6b4a', '#3dffb0', '#12a37a', '#b8ffe2'], line: 'rgba(170,255,220,.8)', halo: ['rgba(80,255,180,.95)', 'rgba(20,200,130,.55)', 'rgba(0,150,100,.2)'], edge: '#5affc0', spark: ['#5affc0', '#12a37a', '#d8fff0'] },
-  platinum: { base: '#060606', waves: ['#6e7480', '#ffffff', '#a4aab6', '#f2f4f8'], line: 'rgba(235,238,245,.85)', halo: ['rgba(255,255,255,.9)', 'rgba(190,200,220,.5)', 'rgba(150,160,190,.18)'], edge: '#f4f6fa', spark: ['#ffffff', '#bfd0ff', '#e8eefc'] },
+  platinum: { base: '#060606', waves: ['#6e7480', '#ffffff', '#a4aab6', '#f2f4f8'], line: 'rgba(235,238,245,.85)', halo: ['rgba(255,255,255,.9)', 'rgba(190,200,220,.5)', 'rgba(150,160,190,.18)'], edge: '#f4f6fa', spark: ['#ffffff', '#bfd0ff', '#e8eefc'], dots: ['#8d9bb5', '#b7c2d6', '#6f7f9c'] },
   amethyst: { base: '#07040d', waves: ['#4b1fa8', '#b080ff', '#7a3df0', '#e2ccff'], line: 'rgba(220,195,255,.8)', halo: ['rgba(190,130,255,.95)', 'rgba(130,60,255,.55)', 'rgba(90,30,220,.2)'], edge: '#c8a0ff', spark: ['#c8a0ff', '#7a3df0', '#f0e6ff'] },
 };
 // материал отделки: roughness / metalness / clearcoat — у «лаковых» и карбоновых свои, без шлифовки
@@ -501,23 +501,18 @@ function buildRacket(cfg, q = 1, live = false) {
     inner.add(tm);
   }
 
-  // живой «огонь» вокруг основания «Founder»: пульсирующий светящийся контур и искры, которые летят от края (только в живом 3D, габариты ракетки не раздувают)
+  // живые искры вокруг основания «Founder», которые летят от края (только в живом 3D, габариты ракетки не раздувают)
   if (live && FM?.em && cfg.only !== 'rubber' && !hex) {
     const TH = FOUNDER_THEMES[bl.look.theme] || FOUNDER_THEMES.aurum, fx = new THREE.Group();
-    const outer = headShape(false, -.3), inner0 = headShape(false, -.05), ring = new THREE.Shape(outer.getPoints(96));
-    ring.holes.push(new THREE.Path(inner0.getPoints(96).reverse()));
-    const ringMat = new THREE.MeshBasicMaterial({ color: TH.spark[0], transparent: true, opacity: .2, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-    fx.add(new THREE.Mesh(new THREE.ShapeGeometry(ring, 48), ringMat));
-    const dot = canvasTex(64, 64, (x, w, h) => { const g = x.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(.35, 'rgba(255,255,255,.55)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, w, h); });
+    const dot = canvasTex(64, 64, (x, w, h) => { const g = x.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(.55, 'rgba(255,255,255,.95)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, w, h); });
     const pts = headShape(false).getPoints(90), N = 90, ps = [];
     for (let i = 0; i < N; i++) {
-      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: dot, color: TH.spark[i % TH.spark.length], transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: dot, color: (TH.dots || TH.spark)[i % (TH.dots || TH.spark).length], transparent: true, depthWrite: false }));
       const k = pts[Math.floor(i / N * pts.length) % pts.length]; const L = Math.hypot(k.x, k.y) || 1;
       ps.push({ sp, x: k.x, y: k.y, nx: k.x / L, ny: k.y / L, ph: (i * .6180339) % 1, v: .35 + (i * .37 % 1) * .45, z: ((i * .73) % 1 - .5) * .9 }); fx.add(sp);
     }
     inner.userData.fx = fx;
     inner.userData.tick = t => {
-      ringMat.opacity = .16 + Math.sin(t * 3.1) * .06 + Math.sin(t * 7.3) * .03;
       for (const q of ps) {
         const a = (t * q.v + q.ph) % 1, d = .15 + a * 2.6;
         q.sp.position.set(q.x + q.nx * d + Math.sin(t * 2 + q.ph * 9) * .25 * a, q.y + q.ny * d + a * 1.2, q.z);
@@ -679,12 +674,12 @@ export function mountViewer(el, cfg, opts = {}) {
     // по высоте — длина ракетки, по ширине — ширина головки при любом повороте вокруг ручки (+ запас на наклон)
     const box = new THREE.Box3().setFromObject(v.inner), sz = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
     const tv = Math.tan(THREE.MathUtils.degToRad(v.camera.fov / 2)), th = tv * v.camera.aspect, wide = Math.hypot(sz.x, sz.z);
-    v.fitD = Math.max(sz.y * 1.08 / 2 / tv, wide * 1.08 / 2 / th) + wide / 2; v.inner.position.sub(c);
+    const mg = v.inner.userData.fx ? (innerWidth >= 900 ? 1.2 : 1.17) : 1.08;   // у светящейся ракетки больше места под искры
+    v.fitD = Math.max(sz.y * mg / 2 / tv, wide * mg / 2 / th) + wide / 2; v.inner.position.sub(c); if (v.inner.userData.fx) v.inner.position.y -= sz.y * .03;
   }
   if (v.inner.userData.fx) v.inner.add(v.inner.userData.fx);   // огонь «Founder» — после расчёта габаритов, чтобы ракетка не уменьшалась
   }
   v.onSide = opts.onSide || null;
-  el.classList.toggle('rk-dark', !!v.inner?.userData.fx);   // светящейся ракетке нужен тёмный фон
   if (opts.zoom) v.zoom = opts.zoom;
   if (opts.apply) { v.anim = { slot: opts.apply, t: 0 }; v.target.y = opts.apply === 'bh' ? Math.PI + .35 : opts.apply === 'grip' ? .6 : .35; v.target.x = opts.apply === 'grip' ? .35 : -.18; }
   let last = null;
