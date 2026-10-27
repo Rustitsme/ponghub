@@ -1,4 +1,4 @@
-import { createStore, media } from './store.js';
+import { createStore, media, SANDBOX_HOSTED } from './store.js';
 import { makeQr, qrSvg, qrPng, drawQr } from './qr.js';
 import { UNLOCK_KIND, unlockText, unlockNow, ITEMS, RG, RGSUB, RUBBER_COLORS, STYLE, EQUIP, LEAGUE_REWARDS, STREAK, STARTER, byId, colorOf, priceOf, keyOf, parseKey } from './shop-catalog.js';
 import { thumb, mountViewer, loadThree, racketShot } from './shop3d.js';
@@ -929,7 +929,7 @@ const tWhen = t => {
   if (!at) return 'дата уточняется';
   return at.toLocaleString('ru-RU', { weekday: 'short', day: 'numeric', month: 'long', ...(t.starts_at ? { hour: '2-digit', minute: '2-digit' } : {}) });
 };
-const tourLink = (t, code) => `${location.origin}${location.pathname}#/tournament/${t.id}?club=${S.club.id}${code ? '&code=' + encodeURIComponent(code) : ''}`;
+const tourLink = (t, code) => `${linkBase()}#/tournament/${t.id}?club=${S.club.id}${code ? '&code=' + encodeURIComponent(code) : ''}`;
 function signupBtn(t, cls = '') {
   const on = tReg(t).includes(S.me.id);
   return `<button class="btn ${on ? '' : 'primary'} ${cls}" data-act="t-signup" data-t="${t.id}" data-on="${on ? 0 : 1}">${on ? '✓ Вы записаны · отменить' : '✍️ Записаться'}</button>`;
@@ -952,7 +952,7 @@ function viewTournamentOpen(t) {
   ${can && (t.pending_reg || []).length ? `<a href="#/admin/reqs" class="alert info">⏳ Записались по QR и ждут вступления в клуб (${t.pending_reg.length}): ${t.pending_reg.map(id => esc(P(id).nickname)).join(', ')}. Примите заявку — и игрок сразу в списке участников →</a>` : ''}
   ${reg.length ? `<div class="chips people">${reg.map(id => `<a href="#/player/${id}" class="chip">${ava(P(id), 'xs')} ${esc(P(id).nickname)}</a>`).join('')}</div>` : '<div class="empty small">Пока никто не записался — будьте первым!</div>'}
   ${can ? `<section class="card"><div class="card-h"><h3>📲 QR-код турнира</h3></div>
-    <p class="muted small">Ведёт прямо на этот турнир: игрок наводит камеру и записывается. Новичок регистрируется и записывается сразу — заявка в клуб уходит сама, а после вашего «Принять» он автоматически в списке участников.</p>
+    <p class="muted small">${S.store.sandbox ? '🧪 Образец: в песочнице этот QR ведёт только в песочницу. ' : ''}Ведёт прямо на этот турнир: игрок наводит камеру и записывается. Новичок регистрируется и записывается сразу — заявка в клуб уходит сама, а после вашего «Принять» он автоматически в списке участников.</p>
     <div class="t-qr" id="t-qr" data-t="${t.id}"></div>
  <div class="row-btns t-qr-btns"><button class="btn" data-act="t-qr-svg" data-t="${t.id}">⬇️ SVG (для дизайна)</button><button class="btn" data-act="t-qr-png" data-t="${t.id}">⬇️ PNG 3000×3000</button></div>
     <button class="btn primary full" data-act="t-poster" data-t="${t.id}">🖨 Плакат турнира А4</button>
@@ -1808,7 +1808,7 @@ async function sharePlayer(id, noPhoto = false) {
   // фото с чужого сервера могло «испачкать» холст — тогда рисуем заново с эмодзи
   if (!blob && photo) return sharePlayer(id, true);
   if (!blob) return toast('Не удалось сделать картинку', 'err');
-  const link = `${location.origin}${location.pathname}#/player/${id}${S.club ? '?club=' + S.club.id : ''}`;
+  const link = `${linkBase()}#/player/${id}${S.club ? '?club=' + S.club.id : ''}`;
   const text = `${p.nickname} — ${fmtR(r)} в рейтинге «${club}», ${lg.name}. Вызови на матч: ${link}`;
   const file = new File([blob], 'ponghub-player.png', { type: 'image/png' });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -2056,8 +2056,10 @@ function viewMe() {
 // ───────────── Клубы ─────────────
 const ROLE_LABEL = { owner: '👑 владелец', helper: '✍️ помощник', player: 'игрок' };
 const clubPlace = c => [c.city, c.address].filter(Boolean).map(esc).join(' · ');
-const inviteLink = code => `${location.origin}${location.pathname}#/join/${code}`;
-const appLink = () => `${location.origin}${location.pathname}#/register`;
+// в песочнице все ссылки и QR ведут только в песочницу: настоящая регистрация и настоящие клубы недоступны
+const linkBase = () => `${location.origin}${location.pathname}${S.store?.sandbox && !SANDBOX_HOSTED ? '?sandbox=1' : ''}`;
+const inviteLink = code => `${linkBase()}#/join/${code}`;
+const appLink = () => S.store?.sandbox ? linkBase() : `${linkBase()}#/register`;
 const KAZAN = [55.7963, 49.1088];
 
 function loadScript(src) {
@@ -2290,7 +2292,7 @@ function viewInvite(r) {
   return `<div class="page-h"><a href="#/me" class="back">← Профиль</a></div>
     ${r.q.get('new') ? `<section class="hero table-card club-hero"><h2>Клуб создан 🎉</h2><p>${esc(c.name)}${c.city ? ' · ' + esc(c.city) : ''}</p></section>` : '<div class="page-h"><h1>Пригласить в клуб</h1></div>'}
     <p class="muted small">По ссылке или QR-коду «Вступить в клуб» человек регистрируется — и заявка в ваш клуб уходит сама, код вводить не нужно. В клуб он попадёт, когда вы её примете (вкладка «Заявки»). Код — для тех, кто уже скачал приложение.</p>
-    ${S.store.sandbox ? `<section class="card sb-guide"><div class="card-h"><h3>🧪 Песочница</h3></div><p class="muted small">Ссылка и QR ниже — настоящие, но в песочнице по ним никто не придёт. Отправьте приглашение ботам: они зарегистрируются и пришлют заявки.</p><button class="btn primary full" data-act="sb-bots">🤖 Пригласить ботов</button></section>` : ''}
+    ${S.store.sandbox ? `<section class="card sb-guide"><div class="card-h"><h3>🧪 Песочница</h3></div><p class="muted small">Это образец. В песочнице ссылка и QR ведут только в песочницу, а не в настоящее приложение: по ним нельзя ни зарегистрироваться, ни вступить в настоящий клуб. Отправьте приглашение ботам, и они пришлют заявки.</p><button class="btn primary full" data-act="sb-bots">🤖 Пригласить ботов</button></section>` : ''}
     <section class="card stack" id="invite-box"><div class="muted small">Загружаю приглашение…</div></section>
     <section class="card"><div class="card-h"><h3>ID клуба для поиска</h3><span class="badge">${esc(c.code)}</span></div>
       <p class="muted small">По этому ID клуб находят в поиске и подают заявку — её подтверждаете вы.</p></section>
@@ -2313,9 +2315,9 @@ async function renderInvite() {
         <div class="row-btns"><button class="btn primary" data-act="share-invite" data-link="${esc(link)}">Поделиться</button><button class="btn" data-act="copy" data-text="${esc(link)}">Скопировать</button></div></div>
       <div><b class="small">Код приглашения</b><div class="invite-code">${esc(code)}</div></div>
       <div class="inv-qrs">
-        <div class="inv-qr"><b>🏓 Вступить в клуб</b><small class="muted">регистрация + заявка в «${esc(S.club.name)}»</small><div id="qr" class="qr-box"></div>
+        <div class="inv-qr"><b>🏓 Вступить в клуб</b><small class="muted">${S.store.sandbox ? 'образец, ведёт только в песочницу' : `регистрация + заявка в «${esc(S.club.name)}»`}</small><div id="qr" class="qr-box"></div>
           <div class="row-btns"><button class="btn sm" data-act="inv-qr" data-k="club" data-f="svg">⬇️ SVG</button><button class="btn sm" data-act="inv-qr" data-k="club" data-f="png">⬇️ PNG</button></div></div>
-        <div class="inv-qr"><b>📲 Только приложение</b><small class="muted">регистрация в PongHub, без клуба</small><div id="qr-app" class="qr-box"></div>
+        <div class="inv-qr"><b>📲 Только приложение</b><small class="muted">${S.store.sandbox ? 'образец, ведёт только в песочницу' : 'регистрация в PongHub, без клуба'}</small><div id="qr-app" class="qr-box"></div>
           <div class="row-btns"><button class="btn sm" data-act="inv-qr" data-k="app" data-f="svg">⬇️ SVG</button><button class="btn sm" data-act="inv-qr" data-k="app" data-f="png">⬇️ PNG</button></div></div>
       </div>
       <a class="btn full" href="#/print">🖨 Плакат и домики для столов</a>
@@ -3214,7 +3216,7 @@ function viewPlay(r) {
 // QR ведут только в этот клуб: плакат — ссылка-приглашение (заявка уходит сама после регистрации),
 // домик — «Игра за столом» этого клуба (с кодом приглашения, чтобы новичок сразу подал заявку).
 const tablesN = () => Math.max(1, Math.min(12, +(lsGet('ponghub_tables') || 1)));
-const tableLink = (n, code) => `${location.origin}${location.pathname}#/play/${S.club.id}/${n}${code ? '?code=' + encodeURIComponent(code) : ''}`;
+const tableLink = (n, code) => `${linkBase()}#/play/${S.club.id}/${n}${code ? '?code=' + encodeURIComponent(code) : ''}`;
 function posterSheet() {
   return `<div class="prn-a4"><div class="prn-in prn-poster">
     <div class="prn-logo"><img src="${logo()}" alt="">PONGHUB</div>
@@ -3236,6 +3238,7 @@ function viewPrint() {
   const n = tablesN();
   return `<div class="page-h"><a href="#/me" class="back">← Профиль</a></div><h1>Печать для клуба</h1>
     <p class="muted small">QR-коды ведут только в «${esc(S.club.name)}». Печатайте на А4, масштаб 100%, без полей.</p>
+    ${S.store.sandbox ? '<div class="alert info">🧪 Образец для показа. В песочнице QR-коды ведут только в песочницу, а не в настоящее приложение.</div>' : ''}
     <section class="card"><div class="card-h"><h3>📣 Рекламный плакат</h3></div>
       <p class="muted small">Человек наводит камеру → регистрируется → заявка в клуб уходит сама. Вам придёт уведомление — примите её во вкладке «Заявки».</p>
       <div class="prn-prev">${posterSheet()}</div>
@@ -4169,6 +4172,7 @@ const FORMS = {
     const nickname = fd.get('nickname').trim();
     if (!(await S.store.nicknameAvailable(nickname))) throw new Error('Такой ник уже у бота — выберите другой');
     await S.store.signUp({ email: `me-${Date.now()}@sandbox.ponghub.app`, password: String(Math.random()), nickname, full_name: nickname });
+    lsSet('ponghub_join', ''); lsSet('ponghub_after', '');
     location.hash = '#/newclub';
   },
   register: async (f, fd) => {

@@ -4,4 +4,6 @@
 export const CONFIG = {
   SUPABASE_URL: 'https://iprhrrmejvhkkyqogiyn.supabase.co',
   SUPABASE_ANON_KEY: 'sb_publishable_Qh-4DSD8azE69_LERTRSqQ_MvFKVgrY',
+  // Отдельный адрес песочницы (в имени должно быть слово sandbox). Пока пусто — песочница открывается по ?sandbox=1 на этом же адресе.
+  SANDBOX_URL: '',
 };

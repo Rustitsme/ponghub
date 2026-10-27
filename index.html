@@ -22,6 +22,7 @@
         document.getElementById('l-icon').href = 'icons/table.svg';
         document.getElementById('l-apple').href = 'icons/table-apple.png';
       }
+      if (localStorage.getItem('ponghub_sandbox') === '1' || /[?&]sandbox\b/.test(location.search) || /(^|[.-])sandbox([.-]|$)/i.test(location.hostname)) document.getElementById('l-manifest').href = 'manifest-sandbox.webmanifest';
       var t = localStorage.getItem('ponghub_theme');
       if (t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.dataset.theme = 'dark';
     } catch (e) {}
