@@ -2783,7 +2783,7 @@ const thumbEl = (it, color, big) => {
 };
 
 function shopHeader(tab) {
-  return `<div class="page-h"><h1>🛍️ Магазин</h1><span class="sh-hbtns"><a href="#/inventory" class="btn sm">🎒 Инвентарь</a><a href="#/racket" class="btn sm">🏓 Ракетка</a></span></div>
+  return `<div class="page-h"><h1>🛍️ Магазин</h1></div><div class="sh-hbtns"><a href="#/inventory" class="btn sm">🎒 Мой инвентарь</a><a href="#/racket" class="btn sm">🏓 Моя ракетка</a></div>
     <section class="hero table-card sh-hero"><div><small>Ваш счёт в этом клубе</small><div class="big-num">${fmtC(S.coins)} <span class="pc">PC</span></div></div>
       <div class="seg sh-seg"><a href="#/shop" class="${tab === 'shop' ? 'on' : ''}">Товары</a><a href="#/shop?tab=bonus" class="${tab === 'bonus' ? 'on' : ''}">Бонусы${S.shop && !S.shop.streak.claimed ? ' <i class="dot inline">1</i>' : ''}</a></div></section>`;
 }
@@ -2818,7 +2818,7 @@ function invGroups() {
 }
 function viewInventory() {
   ensureThree();
-  const head = `<div class="page-h"><h1>🎒 Мой инвентарь</h1><span class="sh-hbtns"><a href="#/shop" class="btn sm">🛍️ Магазин</a><a href="#/racket" class="btn sm">🏓 Ракетка</a></span></div>`;
+  const head = `<div class="page-h"><h1>🎒 Мой инвентарь</h1></div><div class="sh-hbtns"><a href="#/shop" class="btn sm">🛍️ Магазин</a><a href="#/racket" class="btn sm">🏓 Моя ракетка</a></div>`;
   if (!S.shop) return `${head}<div class="empty"><span class="spin"></span></div>`;
   const gr = invGroups(), total = gr.reduce((n, g) => n + g.list.length, 0);
   return `${head}<p class="muted small">Всё, что у вас уже есть, — в одном месте. Нажмите на вещь, чтобы надеть её или посмотреть в 3D.</p>

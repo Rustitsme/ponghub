@@ -1593,7 +1593,9 @@ body.av-big { overflow: hidden; }
 .gift-it small { color: #a8a99f; font-size: 12.5px; }
 
 /* инвентарь */
-.sh-hbtns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.sh-hbtns { display: flex; gap: 8px; margin: -2px 0 12px; }
+.sh-hbtns + .hero, .sh-hbtns + p { margin-top: 0; }
+.page-h:has(+ .sh-hbtns) h1 { white-space: nowrap; }
 .inv-sec { margin: 14px 0 6px; }
 .inv-h { margin: 0 0 8px; font-size: 16px; display: flex; gap: 6px; align-items: baseline; }
 .inv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
