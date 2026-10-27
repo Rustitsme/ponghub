@@ -708,7 +708,31 @@ class LocalStore {
     this.save();
   }
 
+  // как на сервере (миграция 42): не больше N игр подряд с одним соперником, дальше нужно сыграть с кем-то другим
+  repeatBlockedLocal(cid, a, b) {
+    const club = this.db.clubs.find(c => c.id === cid), raw = club?.settings?.repeatLimit;
+    const lim = raw === undefined || raw === null || raw === '' ? 2 : +raw;
+    if (!(lim > 0) || !a || !b || a === b || this.db.club_members.filter(m => m.club_id === cid && m.status === 'active').length < 3) return null;
+    for (const [me, other] of [[a, b], [b, a]]) {
+      const last = this.db.matches.filter(m => m.club_id === cid && m.kind !== 'doubles' && !m.tournament_id && !m.is_test && ['approved', 'pending'].includes(m.status) && (m.player1_id === me || m.player2_id === me))
+        .sort((x, y) => Date.parse(y.played_at) - Date.parse(x.played_at) || Date.parse(y.created_at || 0) - Date.parse(x.created_at || 0)).slice(0, lim)
+        .filter(m => (m.player1_id === me ? m.player2_id : m.player1_id) === other);
+      if (last.length >= lim) return { who: me, lim };
+    }
+    return null;
+  }
+  repeatGuard(table, row) {
+    if ((table !== 'live_matches' && table !== 'matches') || row.kind === 'doubles' || row.tournament_id || row.is_test || ['owner', 'helper'].includes(this.role(this.cid))) return;
+    const pair = x => [x.player1_id, x.player2_id].sort().join();
+    if (table === 'matches' && (this.db.live_matches || []).some(l => l.club_id === this.cid && l.status === 'live' && pair(l) === pair(row))) return;
+    const r = this.repeatBlockedLocal(this.cid, row.player1_id, row.player2_id);
+    if (!r) return;
+    const w = r.lim % 10 === 1 && r.lim % 100 !== 11 ? 'раз' : r.lim % 10 >= 2 && r.lim % 10 <= 4 && (r.lim % 100 < 12 || r.lim % 100 > 14) ? 'раза' : 'раз';
+    throw new Error(`Игрок «${this.db.profiles.find(p => p.id === r.who)?.nickname}» уже сыграл с этим соперником ${r.lim} ${w} подряд. Сначала нужно сыграть с кем-то другим.`);
+  }
+
   async insert(table, row) {
+    this.repeatGuard(table, row);
     const r = { id: uid(), created_at: new Date().toISOString(), ...(CLUB_TABLES.includes(table) ? { club_id: this.cid } : {}), ...row };
     (this.db[table] = this.db[table] || []).push(r); this.save();
     // песочница: бот принимает вызов через пару секунд
