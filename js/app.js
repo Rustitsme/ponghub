@@ -2821,7 +2821,7 @@ function skinProgress(it) {
   return { now, pct, text: st ? `${fmtStat(u.kind, now)} из ${fmtStat(u.kind, u.n)}` : S.skin ? 'пока не удалось проверить' : 'проверяю…' };
 }
 function renderSkinList(box) {
-  const st = S.skin?.stats, all = ITEMS.filter(it => it.skin), open = all.filter(skinOpen).length;
+  const st = S.skin?.stats, all = ITEMS.filter(it => it.skin && (!it.gift || ownsAny(it))), open = all.filter(skinOpen).length;
   box.innerHTML = `<div class="sk-stats card"><b>Ваш прогресс</b><div class="sk-chips">
       <span>⭐ Рейтинг <b>${st ? fmtStat('rating', st.rating) : '…'}</b></span><span>🏆 Победы <b>${st ? st.wins : '…'}</b></span><span>🏓 Матчи <b>${st ? st.matches : '…'}</b></span><span>🪙 Заработано <b>${st ? fmtStat('coins', st.coins) : '…'} PC</b></span></div>
       <small class="muted">Открыто ${open} из ${all.length}. Каждый скин можно купить за PC или получить бесплатно, выполнив условие. На игру они не влияют, только внешний вид.</small></div>`;
@@ -2845,7 +2845,7 @@ function renderShopList() {
   if (!box) return;
   const reg = SHOP.region, racketRegion = ['cn', 'eu', 'jp'].includes(reg);
   if (reg === 'skin') { renderSkinList(box); return; }
-  const list = ITEMS.filter(it => it.region === reg && !it.reward && (!racketRegion || it.type === SHOP.kind));
+  const list = ITEMS.filter(it => it.region === reg && !it.reward && (!it.gift || ownsAny(it)) && (!racketRegion || it.type === SHOP.kind));
   for (const it of list) {
     const color = it.type === 'rubber' ? SHOP.color : null;
     const own = it.type === 'rubber' ? owns(keyOf(it, color)) : it.handles ? ownsAny(it) : false;
