@@ -1,4 +1,4 @@
-import { createStore, media } from './store.js';
+import { createStore, media, SANDBOX_HOSTED } from './store.js';
 import { makeQr, qrSvg, qrPng, drawQr } from './qr.js';
 import { UNLOCK_KIND, unlockText, unlockNow, ITEMS, RG, RGSUB, RUBBER_COLORS, STYLE, EQUIP, LEAGUE_REWARDS, STREAK, STARTER, byId, colorOf, priceOf, keyOf, parseKey } from './shop-catalog.js';
 import { thumb, mountViewer, loadThree, racketShot } from './shop3d.js';
@@ -2057,7 +2057,7 @@ function viewMe() {
 const ROLE_LABEL = { owner: '👑 владелец', helper: '✍️ помощник', player: 'игрок' };
 const clubPlace = c => [c.city, c.address].filter(Boolean).map(esc).join(' · ');
 // в песочнице все ссылки и QR ведут только в песочницу: настоящая регистрация и настоящие клубы недоступны
-const linkBase = () => `${location.origin}${location.pathname}${S.store?.sandbox ? '?sandbox=1' : ''}`;
+const linkBase = () => `${location.origin}${location.pathname}${S.store?.sandbox && !SANDBOX_HOSTED ? '?sandbox=1' : ''}`;
 const inviteLink = code => `${linkBase()}#/join/${code}`;
 const appLink = () => S.store?.sandbox ? linkBase() : `${linkBase()}#/register`;
 const KAZAN = [55.7963, 49.1088];

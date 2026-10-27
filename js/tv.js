@@ -451,7 +451,7 @@ export async function startTV(root, store) {
     const el = document.getElementById('tvx-qr');
     if (!el || T.qr) return;
     try {
-      T.qr = qrSvg(await makeQr(`${location.origin}${location.pathname}${localStorage.getItem('ponghub_sandbox') === '1' ? '?sandbox=1' : ''}#/club/${T.data.club.id}`), { margin: 1 });
+      T.qr = qrSvg(await makeQr(`${location.origin}${location.pathname}${localStorage.getItem('ponghub_sandbox') === '1' && !/(^|[.-])sandbox([.-]|$)/i.test(location.hostname) ? '?sandbox=1' : ''}#/club/${T.data.club.id}`), { margin: 1 });
       document.querySelectorAll('#tvx-qr').forEach(x => { x.innerHTML = T.qr; });
     } catch { /* без QR */ }
   }

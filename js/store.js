@@ -42,12 +42,20 @@ async function pickBase() {
 const RPC_CID = new Set(['ensure_wallet', 'coin_leaderboard', 'player_predictions']);
 
 // Песочница (?sandbox=1): своя копия приложения в браузере тестировщика — свой клуб и боты, реальная база не трогается
+// Песочница живёт на отдельном адресе, в имени которого есть слово sandbox (например ponghub-sandbox.vercel.app).
+// Там это всегда песочница: убрать что-то из ссылки нельзя, а localStorage у адреса свой, отдельный от настоящего приложения.
+const HOST_SANDBOX = (() => { try { return /(^|[.-])sandbox([.-]|$)/i.test(location.hostname); } catch { return false; } })();
+export const SANDBOX_HOSTED = HOST_SANDBOX;
 export const SANDBOX = (() => {
   try {
+    if (HOST_SANDBOX) return true;
     const q = new URLSearchParams(location.search);
+    const local = /^(localhost|127\.|\[::1\])/.test(location.hostname);
+    // на настоящем адресе ссылка ?sandbox=1 перенаправляет на отдельный адрес песочницы (если он задан в config.js)
+    if (q.has('sandbox') && CONFIG.SANDBOX_URL && !local) { location.replace(CONFIG.SANDBOX_URL); return false; }
     if (q.has('sandbox')) localStorage.setItem('ponghub_sandbox', '1');
     if (q.has('nosandbox')) localStorage.removeItem('ponghub_sandbox');   // служебная ссылка владельца: вернуться в обычное приложение
-    return localStorage.getItem('ponghub_sandbox') === '1';
+    return localStorage.getItem('ponghub_sandbox') === '1' && (!CONFIG.SANDBOX_URL || local);
   } catch { return false; }
 })();
 
