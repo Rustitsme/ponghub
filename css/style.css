@@ -1606,5 +1606,3 @@ body.av-big { overflow: hidden; }
 .inv-on, .inv-gift { font-style: normal; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px; margin-top: 3px; }
 .inv-on { background: #12a061; color: #fff; } .inv-gift { background: #f3e3a6; color: #5a4300; }
 
-/* ракетка «Founder» в живом 3D: тёмный фон, чтобы огонь было видно */
-.rk-dark { background: radial-gradient(90% 75% at 50% 40%, #262a38 0%, #0c0d14 100%) !important; }
