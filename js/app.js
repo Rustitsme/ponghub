@@ -247,7 +247,7 @@ function render() {
   else if (!S.club && r.name === 'tournament' && r.q.get('club')) html = bare(viewTournament(r));
   else if (!S.club) html = S.ctx.me.legacy && !S.ctx.platform?.migration_done && !isFounder() ? waitView() : viewClubs(r);
   else {
-    const views = { shop: r => feature('shop') ? viewShop(r) : viewHome(r), racket: () => feature('shop') ? viewRacket() : viewHome(), avatar: r => feature('avatar') ? viewAvatar(r) : viewHome(r), invite: viewInvite, clubedit: viewClubEdit, home: viewHome, rating: viewRating, players: viewPlayers, matches: viewMatches, player: viewPlayer, h2h: viewH2H, tournaments: viewTournaments, tournament: viewTournament, calendar: viewCalendar, admin: viewAdmin, rules: viewRules, me: viewMe, help: viewHelp, seasons: viewSeasons, live: viewLive, inbox: viewInbox, predict: viewPredict, play: viewPlay, tables: viewPrint, print: viewPrint };
+    const views = { shop: r => feature('shop') ? viewShop(r) : viewHome(r), racket: () => feature('shop') ? viewRacket() : viewHome(), inventory: () => feature('shop') ? viewInventory() : viewHome(), avatar: r => feature('avatar') ? viewAvatar(r) : viewHome(r), invite: viewInvite, clubedit: viewClubEdit, home: viewHome, rating: viewRating, players: viewPlayers, matches: viewMatches, player: viewPlayer, h2h: viewH2H, tournaments: viewTournaments, tournament: viewTournament, calendar: viewCalendar, admin: viewAdmin, rules: viewRules, me: viewMe, help: viewHelp, seasons: viewSeasons, live: viewLive, inbox: viewInbox, predict: viewPredict, play: viewPlay, tables: viewPrint, print: viewPrint };
     const v = views[r.name] || viewHome;
     html = shell(r, v(r));
   }
@@ -2029,7 +2029,7 @@ function viewMe() {
     predOn() ? '<a class="menu-item" href="#/predict">🎯 <span>Прогнозы</span><span>→</span></a>' : '',
   ])}
   ${group('Мои вещи', [
-    feature('shop') ? `<a class="menu-item" href="#/shop">🛍️ <span>Магазин</span><small class="muted">${fmtC(S.coins)} PC</small></a><a class="menu-item cn-menu" href="#/shop" data-act="coll-open">🏆 <span>Коллекция</span>${lsGet(CN_KEY.visit) ? '<span>→</span>' : '<i class="cn-new">NEW</i>'}</a><a class="menu-item" href="#/racket">🏓 <span>Моя ракетка</span><span>→</span></a>` : '',
+    feature('shop') ? `<a class="menu-item" href="#/shop">🛍️ <span>Магазин</span><small class="muted">${fmtC(S.coins)} PC</small></a><a class="menu-item cn-menu" href="#/shop" data-act="coll-open">🏆 <span>Коллекция</span>${lsGet(CN_KEY.visit) ? '<span>→</span>' : '<i class="cn-new">NEW</i>'}</a><a class="menu-item" href="#/inventory">🎒 <span>Мой инвентарь</span><span>→</span></a><a class="menu-item" href="#/racket">🏓 <span>Моя ракетка</span><span>→</span></a>` : '',
     feature('avatar') ? '<a class="menu-item" href="#/avatar">🧍 <span>Мой игрок</span><span>→</span></a>' : '',
   ])}
   ${isAdmin() ? group('Управление клубом', [
@@ -2757,7 +2757,7 @@ let threeAsked = false;
 function ensureThree() {
   if (window.THREE || threeAsked) return;
   threeAsked = true;
-  loadThree().then(() => { if (['shop', 'racket', 'player'].includes(route().name)) render(); }).catch(() => {});
+  loadThree().then(() => { if (['shop', 'racket', 'player', 'inventory'].includes(route().name)) render(); }).catch(() => {});
 }
 async function ensureShop(force = false) {
   if (S.shop && !force) return S.shop;
@@ -2783,7 +2783,7 @@ const thumbEl = (it, color, big) => {
 };
 
 function shopHeader(tab) {
-  return `<div class="page-h"><h1>🛍️ Магазин</h1><a href="#/racket" class="btn sm">🏓 Моя ракетка</a></div>
+  return `<div class="page-h"><h1>🛍️ Магазин</h1><span class="sh-hbtns"><a href="#/inventory" class="btn sm">🎒 Инвентарь</a><a href="#/racket" class="btn sm">🏓 Ракетка</a></span></div>
     <section class="hero table-card sh-hero"><div><small>Ваш счёт в этом клубе</small><div class="big-num">${fmtC(S.coins)} <span class="pc">PC</span></div></div>
       <div class="seg sh-seg"><a href="#/shop" class="${tab === 'shop' ? 'on' : ''}">Товары</a><a href="#/shop?tab=bonus" class="${tab === 'bonus' ? 'on' : ''}">Бонусы${S.shop && !S.shop.streak.claimed ? ' <i class="dot inline">1</i>' : ''}</a></div></section>`;
 }
@@ -2800,6 +2800,49 @@ function viewShop(r) {
     ${racketRegion ? `<div class="seg"><button data-act="sh-kind" data-v="blade" class="${SHOP.kind === 'blade' ? 'on' : ''}">Основания</button><button data-act="sh-kind" data-v="rubber" class="${SHOP.kind === 'rubber' ? 'on' : ''}">Накладки</button></div>` : ''}
     ${racketRegion && SHOP.kind === 'rubber' ? `<div class="sh-colors">Цвет: ${RUBBER_COLORS.map(c => `<button data-act="sh-color" data-v="${c.key}" class="${SHOP.color === c.key ? 'on' : ''}" style="background:${c.hex}" aria-label="${c.name}"></button>`).join('')}<span>${colorOf({ colors: RUBBER_COLORS }, SHOP.color).name}${SHOP.color === 'blue' ? ' · +60 PC' : ''}</span></div>` : ''}
     <div class="sh-list" id="sh-list"></div>`;
+}
+
+// ───────────── Мой инвентарь: всё, что уже куплено или подарено, по категориям ─────────────
+const INV = { cat: 'all' };
+const INV_CATS = [['blade', '🏓', 'Ракетки', ['blade']], ['rubber', '🟥', 'Накладки', ['rubber']], ['grip', '🧤', 'Ручки и ленты', ['grip', 'tape']], ['ball', '⚪', 'Мячи', ['ball']],
+  ['acc', '🎒', 'Аксессуары', ['case', 'head', 'wrist']], ['wear', '👕', 'Одежда', ['shirt', 'shorts', 'socks', 'cap']], ['shoes', '👟', 'Обувь', ['shoes']]];
+function invGroups() {
+  const worn = new Set(Object.values(S.shop?.loadout || {})), seen = new Map();
+  for (const k of S.shop?.items || []) {
+    const { it, color } = parseKey(k); if (!it) continue;
+    const id = it.type === 'blade' && it.handles ? it.id : k;   // у основания формы ручки — одна карточка
+    const cur = seen.get(id);
+    if (!cur || (worn.has(k) && !cur.worn)) seen.set(id, { it, color: color || null, k, worn: worn.has(k) });
+  }
+  return INV_CATS.map(([key, icon, name, types]) => ({ key, icon, name, list: [...seen.values()].filter(x => types.includes(x.it.type)).sort((a, b) => (b.worn - a.worn) || a.it.name.localeCompare(b.it.name, 'ru')) }));
+}
+function viewInventory() {
+  ensureThree();
+  const head = `<div class="page-h"><h1>🎒 Мой инвентарь</h1><span class="sh-hbtns"><a href="#/shop" class="btn sm">🛍️ Магазин</a><a href="#/racket" class="btn sm">🏓 Ракетка</a></span></div>`;
+  if (!S.shop) return `${head}<div class="empty"><span class="spin"></span></div>`;
+  const gr = invGroups(), total = gr.reduce((n, g) => n + g.list.length, 0);
+  return `${head}<p class="muted small">Всё, что у вас уже есть, — в одном месте. Нажмите на вещь, чтобы надеть её или посмотреть в 3D.</p>
+    <div class="sh-chips"><button data-act="inv-cat" data-v="all" class="${INV.cat === 'all' ? 'on' : ''}">Всё · ${total}</button>${gr.filter(g => g.list.length).map(g => `<button data-act="inv-cat" data-v="${g.key}" class="${INV.cat === g.key ? 'on' : ''}">${g.icon} ${g.name} · ${g.list.length}</button>`).join('')}</div>
+    <div id="inv-list"></div>`;
+}
+function renderInventory() {
+  const box = document.getElementById('inv-list'); if (!box) return;
+  box.innerHTML = '';
+  const gr = invGroups().filter(g => g.list.length && (INV.cat === 'all' || INV.cat === g.key));
+  if (!gr.length) { box.innerHTML = '<div class="empty">Здесь пока пусто. <a href="#/shop" class="link">Загляните в магазин →</a></div>'; return; }
+  for (const g of gr) {
+    const sec = document.createElement('section'); sec.className = 'inv-sec';
+    sec.innerHTML = `<h3 class="inv-h">${g.icon} ${g.name} <small class="muted">${g.list.length}</small></h3><div class="inv-grid"></div>`;
+    const grid = sec.querySelector('.inv-grid');
+    for (const { it, color, worn } of g.list) {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'inv-it' + (worn ? ' on' : ''); b.dataset.act = 'sh-open'; b.dataset.id = it.id; if (color) b.dataset.color = color;
+      const th = document.createElement('span'); th.className = 'inv-th'; th.appendChild(thumbEl(it, color)); b.appendChild(th);
+      const col = it.colors && !(it.type === 'blade' && it.handles) ? colorOf(it, color)?.name : '';
+      b.insertAdjacentHTML('beforeend', `<b>${esc(it.name)}</b><small class="muted">${esc(col || it.brand || '')}</small>${worn ? '<i class="inv-on">надето</i>' : it.gift ? '<i class="inv-gift">🎁 подарок</i>' : ''}`);
+      grid.appendChild(b);
+    }
+    box.appendChild(sec);
+  }
 }
 // ───────────── Подарок от создателя: уведомление с той самой ракеткой ─────────────
 let giftAt = 0;
@@ -3126,6 +3169,7 @@ const SHOP_ACT = {
     await busy(el, async () => { const r = await S.store.announce('collection'); toast(`Уведомление отправлено: ${r?.sent ?? 0}`); });
   },
   'sk-back': () => { SHOP.region = 'skin'; location.hash = '#/shop'; },
+  'inv-cat': el => { INV.cat = el.dataset.v; render(); },
   'sh-open': el => { const it = byId(el.dataset.id); if (it) openShopItem(it, el.dataset.color || null); },
   'sh-claim': el => busy(el, async () => { const r = await S.store.claimDaily(); S.coins = r.balance; await ensureShop(true); render(); toast(`+${r.amount} PC 🔥`); }),
   'sh-reward': el => openRewardPicker(el.dataset.v),
@@ -4532,6 +4576,7 @@ function afterRender(r) {
   if (r.name === 'admin' && r.args[0] === 'log') renderAudit();
   if (r.name === 'admin' && r.args[0] === 'data') renderBackups();
   if (r.name === 'admin' && r.args[0] === 'screens') renderScreens();
+  if (r.name === 'inventory') { if (!S.shop && feature('shop')) ensureShop().then(render).catch(e => toast(e.message, 'err')); else renderInventory(); }
   if (r.name === 'shop') { if (!S.shop && feature('shop')) ensureShop().then(render).catch(e => toast(e.message, 'err')); else { renderShopList(); if (SHOP.region === 'skin') loadSkins().then(() => { if (route().name === 'shop' && SHOP.region === 'skin') renderShopList(); }); } }
   if (r.name === 'racket') { if (!S.shop && feature('shop')) ensureShop().then(render).catch(e => toast(e.message, 'err')); else mountRacket(); }
   if (r.name === 'player' && feature('shop')) { ensureThree(); mountPlayerRackets(); }

@@ -1591,3 +1591,15 @@ body.av-big { overflow: hidden; }
 .gift-img { width: 70%; max-width: 230px; height: auto; filter: drop-shadow(0 8px 14px rgba(0, 0, 0, .55)); }
 .gift-it b { font: 800 20px var(--display, inherit); letter-spacing: .04em; text-transform: uppercase; }
 .gift-it small { color: #a8a99f; font-size: 12.5px; }
+
+/* инвентарь */
+.sh-hbtns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.inv-sec { margin: 14px 0 6px; }
+.inv-h { margin: 0 0 8px; font-size: 16px; display: flex; gap: 6px; align-items: baseline; }
+.inv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+.inv-it { position: relative; border: 1px solid var(--line); border-radius: 16px; background: var(--card, #fff); padding: 6px 6px 9px; display: grid; justify-items: center; gap: 1px; text-align: center; cursor: pointer; font: inherit; color: inherit; }
+.inv-it.on { border-color: var(--accent, #2f6fd1); box-shadow: 0 0 0 2px rgba(47, 111, 209, .16); }
+.inv-th { display: block; width: 100%; aspect-ratio: 1; } .inv-th img, .inv-th canvas { width: 100%; height: 100%; object-fit: contain; }
+.inv-it b { font-size: 12.5px; line-height: 1.15; } .inv-it small { font-size: 11px; }
+.inv-on, .inv-gift { font-style: normal; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px; margin-top: 3px; }
+.inv-on { background: #12a061; color: #fff; } .inv-gift { background: #f3e3a6; color: #5a4300; }
