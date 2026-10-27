@@ -235,6 +235,8 @@ function woodCanvas(x, w, h, base, seed, dark = 1) {
   }
   for (let i = 0; i < 6; i++) { const cx = rnd() * w, cy = rnd() * h; const g = x.createRadialGradient(cx, cy, 2, cx, cy, 30 + rnd() * 40); g.addColorStop(0, 'rgba(110,60,20,.10)'); g.addColorStop(1, 'rgba(110,60,20,0)'); x.fillStyle = g; x.fillRect(0, 0, w, h); }
 }
+// материал отделки: roughness / metalness / clearcoat — у «лаковых» и карбоновых свои, без шлифовки
+const FIN_MAT = { jet: { r: .08, m: .1, cc: 1, ccr: .02, e: .3 }, twill: { r: .32, m: .35, cc: 1, ccr: .08 }, forged: { r: .38, m: .3, cc: .9, ccr: .12 }, titanium: { r: .34, m: 1, cc: .5, ccr: .3 }, pearl: { r: .12, m: .2, cc: 1, ccr: .03 } };
 // металлические отделки скинов: чёрно-золотая, серебро, бронза, золотая фольга, блёстки
 function metalCanvas(x, w, h, kind, base) {
   const G = (stops, ang = 0.8) => { const g = x.createLinearGradient(0, 0, w * Math.cos(ang), h * Math.sin(ang) + h * .2); stops.forEach(([o, c]) => g.addColorStop(o, c)); x.fillStyle = g; x.fillRect(0, 0, w, h); };
@@ -242,7 +244,31 @@ function metalCanvas(x, w, h, kind, base) {
   else if (kind === 'bronze') G([[0, '#6b3f1d'], [.3, '#d19a64'], [.55, '#9a5f2c'], [.8, '#e0b27a'], [1, '#6b3f1d']]);
   else if (kind === 'gold') G([[0, '#8a6a12'], [.25, '#ffe08a'], [.5, '#c9a227'], [.75, '#fff0b3'], [1, '#9a7714']]);
   else if (kind === 'goldblack') { x.fillStyle = '#121216'; x.fillRect(0, 0, w, h); const g = x.createLinearGradient(0, 0, w, h); g.addColorStop(0, 'rgba(212,175,55,.0)'); g.addColorStop(.5, 'rgba(212,175,55,.22)'); g.addColorStop(1, 'rgba(212,175,55,0)'); x.fillStyle = g; x.fillRect(0, 0, w, h); x.strokeStyle = '#d4af37'; x.lineWidth = 3; for (let i = -h; i < w + h; i += 46) { x.globalAlpha = .75; x.beginPath(); x.moveTo(i, h); x.lineTo(i + h, 0); x.stroke(); } x.globalAlpha = 1; }
+  else if (kind === 'jet') { const g = x.createLinearGradient(0, 0, w, h); g.addColorStop(0, '#000000'); g.addColorStop(.5, '#16171c'); g.addColorStop(1, '#030304'); x.fillStyle = g; x.fillRect(0, 0, w, h); }
+  else if (kind === 'twill') {   // карбон «саржа 2×2»: диагональное плетение
+    x.fillStyle = '#0c0d10'; x.fillRect(0, 0, w, h); const c = 12;
+    for (let i = 0; i < w / c + 2; i++) for (let j = 0; j < h / c + 2; j++) {
+      const ph = (i + j) % 4, hi = ph < 2;
+      const g = hi ? x.createLinearGradient(i * c, j * c, i * c + c, j * c) : x.createLinearGradient(i * c, j * c, i * c, j * c + c);
+      g.addColorStop(0, hi ? '#2c2f37' : '#16181d'); g.addColorStop(.5, hi ? '#4a4e59' : '#23262d'); g.addColorStop(1, hi ? '#23262d' : '#0d0e11');
+      x.fillStyle = g; x.fillRect(i * c, j * c, c - 1, c - 1);
+    }
+  }
+  else if (kind === 'forged') {  // кованый карбон: хаотичные «чешуйки» волокна
+    x.fillStyle = '#101114'; x.fillRect(0, 0, w, h); let r = 77; const rnd = () => (r = (r * 9301 + 49297) % 233280) / 233280;
+    for (let i = 0; i < 520; i++) { const cx = rnd() * w, cy = rnd() * h, a = rnd() * Math.PI, l = 14 + rnd() * 46, t = 5 + rnd() * 14, v = 18 + Math.floor(rnd() * 38);
+      x.save(); x.translate(cx, cy); x.rotate(a); x.fillStyle = `rgba(${v},${v + 2},${v + 8},${.55 + rnd() * .4})`; x.beginPath(); x.moveTo(-l, 0); x.lineTo(-l * .3, -t); x.lineTo(l, -t * .2); x.lineTo(l * .5, t); x.lineTo(-l * .6, t * .6); x.closePath(); x.fill(); x.restore(); }
+    const sh = x.createLinearGradient(0, 0, w, h); sh.addColorStop(0, 'rgba(255,255,255,.10)'); sh.addColorStop(.5, 'rgba(255,255,255,0)'); sh.addColorStop(1, 'rgba(255,255,255,.06)'); x.fillStyle = sh; x.fillRect(0, 0, w, h);
+  }
+  else if (kind === 'titanium') { // шлифованный анодированный титан
+    G([[0, '#4c5565'], [.3, '#8d97aa'], [.55, '#5d6779'], [.8, '#a7b0c2'], [1, '#4f5868']]);
+    for (let i = 0; i < 1400; i++) { x.fillStyle = Math.random() < .5 ? `rgba(255,255,255,${Math.random() * .09})` : `rgba(10,15,30,${Math.random() * .12})`; x.fillRect(0, Math.random() * h, w, 1); }
+  }
+  else if (kind === 'pearl') {   // белая керамика с перламутром
+    const g = x.createLinearGradient(0, 0, w, h); g.addColorStop(0, '#f7f4ef'); g.addColorStop(.35, '#efe8f0'); g.addColorStop(.65, '#e8f0f2'); g.addColorStop(1, '#f6efe6'); x.fillStyle = g; x.fillRect(0, 0, w, h);
+  }
   else { x.fillStyle = base; x.fillRect(0, 0, w, h); }
+  if (FIN_MAT[kind]) return;     // у этих отделок своя фактура — без шлифовки
   // шлифовка + блики
   for (let i = 0; i < 260; i++) { x.fillStyle = `rgba(255,255,255,${Math.random() * .07})`; x.fillRect(Math.random() * w, Math.random() * h, 1 + Math.random() * 90, 1); }
   if (kind === 'glitter') for (let i = 0; i < 2600; i++) { x.fillStyle = `rgba(255,255,255,${.3 + Math.random() * .7})`; const r = .6 + Math.random() * 2; x.fillRect(Math.random() * w, Math.random() * h, r, r); }
@@ -309,9 +335,9 @@ function buildRacket(cfg, q = 1) {
   const seq = bl.look.ply.length === 3 ? [0, 2, 1, 2, 1, 2, 0].map(i => bl.look.ply[i]) : [0, 1, 0, 1, 0].map(i => bl.look.ply[i]);
   const plyTex = canvasTex(8, 256, (x, w, h) => { const hh = h / seq.length; seq.forEach((c, i) => { x.fillStyle = c; x.fillRect(0, i * hh, w, hh + 1); x.fillStyle = 'rgba(60,30,10,.25)'; x.fillRect(0, i * hh, w, 1); }); });
   plyTex.wrapT = THREE.ClampToEdgeWrapping; plyTex.repeat.set(1, 1 / (T + .06)); plyTex.offset.set(0, .03 / (T + .06));
-  const fin = bl.look.finish;
+  const fin = bl.look.finish, FM = FIN_MAT[fin];
   const faceTex = canvasTex(R(512), R(512), (x, w, h) => fin ? metalCanvas(x, w, h, fin, bl.look.face) : woodCanvas(x, w, h, bl.look.face, bl.price), { repeat: true });
-  const bladeMat = [new THREE.MeshPhysicalMaterial({ map: faceTex, roughness: fin ? .22 : .55, metalness: fin ? .85 : 0, clearcoat: fin ? 1 : .25, clearcoatRoughness: fin ? .15 : .5 }), new THREE.MeshStandardMaterial({ map: plyTex, roughness: .7 })];
+  const bladeMat = [new THREE.MeshPhysicalMaterial({ map: faceTex, roughness: FM ? FM.r : fin ? .22 : .55, metalness: FM ? FM.m : fin ? .85 : 0, clearcoat: FM ? FM.cc : fin ? 1 : .25, clearcoatRoughness: FM ? FM.ccr : fin ? .15 : .5, envMapIntensity: FM?.e ?? 1 }), new THREE.MeshStandardMaterial({ map: plyTex, roughness: .7 })];
   if (cfg.only !== 'rubber') inner.add(new THREE.Mesh(bladeGeo, bladeMat));
   // ── ручка: стержень + две щёчки с расширением книзу (FL) и выпуклой «короной»
   const HTOP = -6.15, HBOT = HAND === 'CS' ? -13.1 : -16.3;
@@ -345,7 +371,7 @@ function buildRacket(cfg, q = 1) {
       if (grip.it.id === 'acc-g1') for (let i = 0; i < 2500; i++) { x.fillStyle = `rgba(255,255,255,${Math.random() * .12})`; x.fillRect(Math.random() * w, Math.random() * h, 2, 2); }
     }, { repeat: true });
     cheekMat = new THREE.MeshStandardMaterial({ map: wrap, roughness: grip.it.id === 'acc-g3' ? .45 : .9 });
-  } else cheekMat = new THREE.MeshPhysicalMaterial({ map: cheekWood, roughness: fin ? .25 : .45, metalness: fin ? .8 : 0, clearcoat: fin ? 1 : .5, clearcoatRoughness: .3 });
+  } else cheekMat = new THREE.MeshPhysicalMaterial({ map: cheekWood, roughness: FM ? FM.r : fin ? .25 : .45, metalness: FM ? FM.m : fin ? .8 : 0, clearcoat: FM ? FM.cc : fin ? 1 : .5, clearcoatRoughness: FM ? FM.ccr : .3, envMapIntensity: FM?.e ?? 1 });
   for (const sgn of cfg.only === 'rubber' ? [] : [1, -1]) {
     const cg = new THREE.ExtrudeGeometry(cheekShape(), { depth: CT, bevelEnabled: true, bevelThickness: CB, bevelSize: .2, bevelSegments: 6, curveSegments: 48 });
     setCapUV(cg, 6);

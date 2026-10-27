@@ -2470,6 +2470,9 @@ async function renderFounder() {
         <label>В какой клуб<select id="hist-club">${opts}</select></label>
         <button class="btn primary" data-act="founder-history">Перенести всю историю в этот клуб</button></section>` : ''}
       ${!st.migration_done && !legacyRows && clubs.length ? '<section class="card"><p class="muted small">Истории до клубов нет — переносить нечего.</p></section>' : ''}
+      <section class="card stack"><div class="card-h"><h3>🎁 Подарки</h3></div>
+        <p class="muted small">Эксклюзивные ракетки: их нет в магазине и их нельзя заработать. Выберите ракетку и игрока — ему придёт уведомление с этой ракеткой. Забрать подарок обратно тоже можно.</p>
+        <button class="btn primary" data-act="gift-open">Подарить ракетку</button></section>
       <section class="card stack"><div class="card-h"><h3>🚀 Обновления</h3></div>
         <p class="muted small">Новые функции сначала видны только вам и тестировщикам, которых вы выберете. Проверьте их — и включите для всех.</p>
         ${[['shop', '🛍️ Магазин и новая экономика', 'Магазин, моя ракетка, бонус дня, +15 за матч, призы турниров, награды за лиги. При включении для всех: балансы × 0,3, старт 300 PC, ставка до 300, еженедельные +100 отменяются.'],
@@ -2613,6 +2616,36 @@ const CLUB_ACT = {
       <label>Найти игрока<input id="ts-q" placeholder="Ник или имя" autocomplete="off"></label>
       <div id="ts-found" class="stack"></div></div>`, () => { load(); search(''); });
     setTimeout(() => { const q = document.getElementById('ts-q'); if (q) { let t; q.oninput = () => { clearTimeout(t); t = setTimeout(() => search(q.value.trim()), 250); }; } }, 50);
+  },
+  'gift-open': async () => {
+    await loadThree().catch(() => {});
+    const gifts = ITEMS.filter(i => i.gift); let cur = gifts[0].id, found = [], owners = [];
+    const item = () => byId(cur);
+    const row = (u, has) => `<div class="pl-row"><div class="pl-top"><span class="rn"><b>${esc(u.nickname)}</b><small class="muted">${esc(u.full_name || '')}${u.clubs ? ' · ' + esc(u.clubs) : ''}</small></span></div>
+      <div class="pl-ctl"><button class="btn xs ${has ? 'ghost' : 'primary'}" data-gf="${u.id}" data-has="${has ? 1 : 0}">${has ? 'Забрать' : 'Подарить'}</button></div></div>`;
+    function drawPick() {
+      const box = document.getElementById('gf-pick'); if (!box) return; box.innerHTML = '';
+      for (const g of gifts) { const b = document.createElement('button'); b.type = 'button'; b.className = 'gf-opt' + (g.id === cur ? ' on' : ''); b.append(thumbEl(g, 'FL', true)); b.insertAdjacentHTML('beforeend', `<b>${esc(g.name)}</b>`); b.onclick = () => { cur = g.id; drawPick(); loadOwners(); }; box.appendChild(b); }
+    }
+    function bind(box) { box.querySelectorAll('[data-gf]').forEach(b => b.onclick = () => busy(b, async () => {
+      const has = b.dataset.has === '1';
+      if (has) { if (!(await confirmDialog(`Забрать «${item().name}»? Если она надета, у игрока вернётся стартовое основание.`, 'Забрать', true))) return; await S.store.rpc('founder_revoke_gift', { uid: b.dataset.gf, item: cur }); }
+      else await S.store.rpc('founder_gift_item', { uid: b.dataset.gf, item: cur });
+      await loadOwners(); toast(has ? 'Подарок забран' : `Отправлено: ${item().name} 🎁`);
+    })); }
+    async function loadOwners() {
+      owners = await S.store.rpc('founder_gift_owners', { item: cur }) || [];
+      const box = document.getElementById('gf-owners'); if (!box) return;
+      box.innerHTML = owners.length ? `<div class="gf-h">Уже подарено · ${owners.length}</div>` + owners.map(u => row(u, true)).join('') : '<p class="muted small">Эту ракетку пока никому не дарили.</p>';
+      bind(box); drawFound();
+    }
+    function drawFound() { const box = document.getElementById('gf-found'); if (!box) return; const ids = new Set(owners.map(o => o.id)); box.innerHTML = found.filter(u => !ids.has(u.id)).map(u => row(u, false)).join(''); bind(box); }
+    async function search(q) { found = await S.store.rpc('founder_search_users', { q }) || []; drawFound(); }
+    openModal(`<div class="stack"><h3>🎁 Подарить ракетку</h3>
+      <p class="muted small">1. Выберите ракетку. 2. Найдите игрока и нажмите «Подарить» — ему придёт уведомление именно с этой ракеткой.</p>
+      <div class="gf-pick" id="gf-pick"></div><div id="gf-owners" class="stack"></div>
+      <label>Найти игрока<input id="gf-q" placeholder="Ник или имя" autocomplete="off"></label><div id="gf-found" class="stack"></div></div>`, () => { drawPick(); loadOwners(); search(''); });
+    setTimeout(() => { const q = document.getElementById('gf-q'); if (q) { let t; q.oninput = () => { clearTimeout(t); t = setTimeout(() => search(q.value.trim()), 250); }; } }, 50);
   },
   'feature-all': async el => {
     const k = el.dataset.k;
@@ -2768,6 +2801,30 @@ function viewShop(r) {
     ${racketRegion && SHOP.kind === 'rubber' ? `<div class="sh-colors">Цвет: ${RUBBER_COLORS.map(c => `<button data-act="sh-color" data-v="${c.key}" class="${SHOP.color === c.key ? 'on' : ''}" style="background:${c.hex}" aria-label="${c.name}"></button>`).join('')}<span>${colorOf({ colors: RUBBER_COLORS }, SHOP.color).name}${SHOP.color === 'blue' ? ' · +60 PC' : ''}</span></div>` : ''}
     <div class="sh-list" id="sh-list"></div>`;
 }
+// ───────────── Подарок от создателя: уведомление с той самой ракеткой ─────────────
+let giftAt = 0;
+async function maybeGiftNotice() {
+  if (S.me?.status !== 'approved' || document.getElementById('gift-overlay') || Date.now() - giftAt < 30000) return;
+  giftAt = Date.now();
+  let list = []; try { list = await S.store.rpc('my_gifts') || []; } catch { return; }
+  const items = list.map(g => byId(g.item_id)).filter(Boolean);
+  if (!items.length || document.getElementById('gift-overlay')) return;
+  await loadThree().catch(() => {});
+  await ensureShop(true).catch(() => {});
+  const ov = document.createElement('div'); ov.id = 'gift-overlay'; ov.className = 'cn-ov';
+  ov.innerHTML = `<div class="cn-pop gift-pop" role="dialog" aria-label="Подарок"><span class="cn-tag">Подарок</span>
+    <h2>${items.length > 1 ? 'Вам подарили<br>ракетки' : 'Вам подарили<br>ракетку'}</h2><p>Эксклюзив от создателя PongHub. Таких нет в магазине.</p>
+    <div class="gift-items">${items.map(it => `<div class="gift-it" data-id="${it.id}"><b>${esc(it.name)}</b><small>${esc(it.material)}</small></div>`).join('')}</div>
+    <button class="cn-go" type="button" data-gift="go">Посмотреть</button><button class="cn-later" type="button" data-gift="close">Закрыть</button></div>`;
+  ov.querySelectorAll('.gift-it').forEach(el => { const it = byId(el.dataset.id); const im = thumb(it, 'FL', true); im.className = 'gift-img'; el.prepend(im); });
+  const close = () => { ov.remove(); S.store.rpc('gifts_seen').catch(() => {}); };
+  ov.addEventListener('click', e => {
+    const a = e.target.closest('[data-gift]')?.dataset.gift;
+    if (a === 'go') { close(); if (feature('shop')) { SHOP.region = 'skin'; location.hash = '#/shop'; } else toast('Ракетка уже в вашей коллекции — она появится, когда откроется магазин'); }
+    else if (a === 'close' || e.target === ov) close();
+  });
+  document.body.appendChild(ov);
+}
 // ───────────── Напоминание о коллекции скинов ─────────────
 const CN_KEY = { seen: 'ph_coll_seen', later: 'ph_coll_later', visit: 'ph_coll_visit' };
 function maybeCollectionNotice() {
@@ -2817,11 +2874,12 @@ async function loadSkins(force = false) {
 }
 const fmtStat = (k, v) => k === 'rating' ? String(Math.round(v * 10) / 10).replace('.', ',') : Math.round(v).toLocaleString('ru-RU');
 function skinProgress(it) {
+  if (!it.unlock) return { now: 0, pct: 100, text: '' };
   const st = S.skin?.stats, u = it.unlock, now = st ? unlockNow(u, st) : 0, pct = Math.max(0, Math.min(100, now / u.n * 100));
   return { now, pct, text: st ? `${fmtStat(u.kind, now)} из ${fmtStat(u.kind, u.n)}` : S.skin ? 'пока не удалось проверить' : 'проверяю…' };
 }
 function renderSkinList(box) {
-  const st = S.skin?.stats, all = ITEMS.filter(it => it.skin), open = all.filter(skinOpen).length;
+  const st = S.skin?.stats, all = ITEMS.filter(it => it.skin && (!it.gift || ownsAny(it))), open = all.filter(skinOpen).length;
   box.innerHTML = `<div class="sk-stats card"><b>Ваш прогресс</b><div class="sk-chips">
       <span>⭐ Рейтинг <b>${st ? fmtStat('rating', st.rating) : '…'}</b></span><span>🏆 Победы <b>${st ? st.wins : '…'}</b></span><span>🏓 Матчи <b>${st ? st.matches : '…'}</b></span><span>🪙 Заработано <b>${st ? fmtStat('coins', st.coins) : '…'} PC</b></span></div>
       <small class="muted">Открыто ${open} из ${all.length}. Каждый скин можно купить за PC или получить бесплатно, выполнив условие. На игру они не влияют, только внешний вид.</small></div>`;
@@ -2845,7 +2903,7 @@ function renderShopList() {
   if (!box) return;
   const reg = SHOP.region, racketRegion = ['cn', 'eu', 'jp'].includes(reg);
   if (reg === 'skin') { renderSkinList(box); return; }
-  const list = ITEMS.filter(it => it.region === reg && !it.reward && (!racketRegion || it.type === SHOP.kind));
+  const list = ITEMS.filter(it => it.region === reg && !it.reward && (!it.gift || ownsAny(it)) && (!racketRegion || it.type === SHOP.kind));
   for (const it of list) {
     const color = it.type === 'rubber' ? SHOP.color : null;
     const own = it.type === 'rubber' ? owns(keyOf(it, color)) : it.handles ? ownsAny(it) : false;
@@ -2876,7 +2934,7 @@ function openShopItem(it, color, mode = 'buy') {
   function draw() {
     const box = document.getElementById('sh-sheet'); if (!box) return;
     const k = keyOf(it, sel), own = owns(k), price = priceOf(it, sel);
-    const skinSpec = it.skin ? [['Бесплатно', unlockText(it.unlock)], ['Статус', skinOpen(it) ? 'Открыто ✓' : 'Не открыто — ' + skinProgress(it).text], ['Цена', fmtC(it.price) + ' PC']] : null;
+    const skinSpec = it.skin ? [it.gift ? ['Получено', 'Подарок от создателя PongHub'] : ['Бесплатно', unlockText(it.unlock)], ['Статус', skinOpen(it) ? 'Открыто ✓' : 'Не открыто — ' + skinProgress(it).text], ['Цена', fmtC(it.price) + ' PC']] : null;
     const spec = skinSpec ? skinSpec : it.type === 'blade' ? [['Слои', it.layers], ['Материал', it.material], ['Класс', it.cls], ['Вес', it.wt + ' г'], ['Толщина', String(it.th).replace('.', ',') + ' мм'], ['Стиль', STYLE[it.style][0]]]
       : it.type === 'rubber' ? [['Тип', it.rubber], ['Губка', it.sponge], ['Жёсткость губки', it.hard], ['Дуга полёта', it.arc], ['Липкость', it.tack], ['Вес листа', '≈ ' + it.wt + ' г'], ['Цвет', colorOf(it, sel).name]]
       : [['Цвет', colorOf(it, sel)?.name || '—']];
@@ -4466,6 +4524,7 @@ addEventListener('resize', () => fitNicks());
 
 function afterRender(r) {
   maybeCollectionNotice();
+  maybeGiftNotice();
   fitNicks();
   document.fonts?.ready.then(fitNicks);
   if (r.name === 'me') renderPushBox();

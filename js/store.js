@@ -950,6 +950,26 @@ class LocalStore {
       this.needFounder(); const t = this.db.feature_testers = (this.db.feature_testers || []).filter(x => !(x.feature === a.fname && x.user_id === a.uid));
       if (a.on_) t.push({ feature: a.fname, user_id: a.uid }); this.save(); return t.filter(x => x.feature === a.fname).length;
     }
+    // демо: подарки создателя (эксклюзивные основания skin-g*)
+    if (name === 'founder_gift_item' || name === 'founder_revoke_gift' || name === 'founder_gift_owners') {
+      this.needFounder(); const d = this.shopDb(); d.item_gifts = d.item_gifts || []; const has = u => d.user_items.some(x => x.user_id === u && x.item_key.startsWith(a.item + ':'));
+      if (!/^skin-g/.test(a.item || '')) throw new Error('Такого подарка нет');
+      if (name === 'founder_gift_owners') return d.profiles.filter(p => d.user_items.some(x => x.user_id === p.id && x.item_key.startsWith(a.item + ':') && x.source === 'gift')).map(p => ({ id: p.id, nickname: p.nickname, full_name: p.full_name, clubs: '' }));
+      if (name === 'founder_gift_item') {
+        const fresh = !has(a.uid);
+        for (const h of ['FL', 'ST', 'AN', 'CS']) if (!d.user_items.some(x => x.user_id === a.uid && x.item_key === `${a.item}:${h}`)) d.user_items.push({ user_id: a.uid, item_key: `${a.item}:${h}`, price: 0, source: 'gift', created_at: new Date().toISOString() });
+        if (fresh) d.item_gifts.push({ id: uid(), user_id: a.uid, item_id: a.item, seen: false });
+        this.save(); return fresh;
+      }
+      d.user_items = d.user_items.filter(x => !(x.user_id === a.uid && x.item_key.startsWith(a.item + ':') && x.source === 'gift'));
+      const pr = d.profiles.find(x => x.id === a.uid); for (const k of Object.keys(pr?.loadout || {})) if (String(pr.loadout[k]).startsWith(a.item + ':')) { if (k === 'blade') pr.loadout[k] = 'cn-b1:FL'; else delete pr.loadout[k]; }
+      d.item_gifts = d.item_gifts.filter(x => !(x.user_id === a.uid && x.item_id === a.item)); this.save(); return null;
+    }
+    if (name === 'my_gifts' || name === 'gifts_seen') {
+      const d = this.shopDb(); d.item_gifts = d.item_gifts || []; const me = this.db.session, mine = d.item_gifts.filter(x => x.user_id === me && !x.seen);
+      if (name === 'my_gifts') return mine.map(x => ({ id: x.id, item_id: x.item_id }));
+      mine.forEach(x => { x.seen = true; }); this.save(); return null;
+    }
     if (name === 'founder_set_grip') { this.needFounder(); this.db.platform.grip = a.p; this.save(); return a.p; }
     if (name === 'tournament_public' || name === 'tournament_join') {
       const t = this.db.tournaments.find(x => x.id === a.tid), me = this.db.session;
