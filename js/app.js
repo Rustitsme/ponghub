@@ -298,7 +298,7 @@ function shell(r, body) {
     <nav class="side-nav">
       ${side('home', 'Главная', '🏠')}${side('players', 'Игроки', '👥', ['player'])}${side('tournaments', 'Турниры', '🏆', ['tournament'])}
       ${side('rating', 'Рейтинг', '📊', ['seasons'])}${side('matches', 'Матчи', '📋', ['h2h'])}${predOn() ? side('predict', 'Прогнозы', '🎯') : ''}${side('calendar', 'Календарь', '📅', [], '', 'ico')}
-      ${feature('shop') || feature('avatar') ? '<hr>' : ''}${feature('shop') ? side('shop', 'Магазин', '🛍️') + side('racket', 'Моя ракетка', '🏓') : ''}${feature('avatar') ? side('avatar', 'Мой игрок', '🧍') : ''}
+      ${feature('shop') || feature('avatar') ? '<hr>' : ''}${feature('shop') ? `<a href="#/shop" class="side-i ${r.name === 'shop' && SHOP.region !== 'skin' ? 'on' : ''}" title="Магазин" data-act="shop-open"><span>🛍️</span><b>Магазин</b></a><a href="#/shop" class="side-i ${r.name === 'shop' && SHOP.region === 'skin' ? 'on' : ''}" title="Коллекция" data-act="coll-open"><span>🏆</span><b>Коллекция</b></a>` + side('inventory', 'Мой инвентарь', '🎒') + side('racket', 'Моя ракетка', '🏓') : ''}${feature('avatar') ? side('avatar', 'Мой игрок', '🧍') : ''}
       ${side('inbox', 'Уведомления', '🔔', [], n ? `<i class="dot inline">${n}</i>` : '', 'ico side-bell')}
       <hr>${side('me', 'Профиль', '👤', [], '', 'ico')}${isAdmin() ? side('admin', 'Управление', '🛠️', ['rules', 'invite', 'print', 'clubedit'], pc.total ? `<i class="dot inline">${pc.total}</i>` : '', 'ico') : ''}
     </nav>
@@ -3163,7 +3163,8 @@ const SHOP_ACT = {
   'sh-region': el => { SHOP.region = el.dataset.v; render(); },
   'sh-kind': el => { SHOP.kind = el.dataset.v; render(); },
   'sh-color': el => { SHOP.color = el.dataset.v; render(); },
-  'coll-open': () => { SHOP.region = 'skin'; lsSet(CN_KEY.visit, '1'); },
+  'shop-open': () => { if (SHOP.region === 'skin') { SHOP.region = 'cn'; if (route().name === 'shop') render(); } },
+  'coll-open': () => { SHOP.region = 'skin'; lsSet(CN_KEY.visit, '1'); if (route().name === 'shop') render(); },
   'announce-coll': async el => {
     if (!(await confirmDialog('Отправить push «Новая коллекция скинов» всем, у кого сейчас открыт магазин (вам и тестировщикам, а после запуска для всех — всем игрокам)?', 'Отправить'))) return;
     await busy(el, async () => { const r = await S.store.announce('collection'); toast(`Уведомление отправлено: ${r?.sent ?? 0}`); });
