@@ -1808,7 +1808,7 @@ async function sharePlayer(id, noPhoto = false) {
   // фото с чужого сервера могло «испачкать» холст — тогда рисуем заново с эмодзи
   if (!blob && photo) return sharePlayer(id, true);
   if (!blob) return toast('Не удалось сделать картинку', 'err');
-  const link = `${location.origin}${location.pathname}#/player/${id}${S.club ? '?club=' + S.club.id : ''}`;
+  const link = `${linkBase()}#/player/${id}${S.club ? '?club=' + S.club.id : ''}`;
   const text = `${p.nickname} — ${fmtR(r)} в рейтинге «${club}», ${lg.name}. Вызови на матч: ${link}`;
   const file = new File([blob], 'ponghub-player.png', { type: 'image/png' });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
