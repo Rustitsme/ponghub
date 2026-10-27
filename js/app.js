@@ -1690,10 +1690,29 @@ function suggestOpponents(n = 3) {
     .map(p => { const d = idleDays(last, p.id); return { p, d, k: Math.abs(ratingOf(p.id) - r) + (d == null || d > 30 ? 100 : 0) }; })
     .sort((a, b) => a.k - b.k).slice(0, n);
 }
+// Не больше N игр подряд с одним соперником (защита от накрутки). Считаем свободные одиночные игры; возвращает, кто из двоих упёрся в лимит
+const repCache = new WeakMap();
+function repeatBlocked(a, b) {
+  const lim = settings().repeatLimit ?? 2;
+  if (!(lim > 0) || !S.data || isEditor() || !a || !b || a === b) return null;
+  if (S.data.profiles.filter(p => p.status === 'approved').length < 3) return null;
+  let c = repCache.get(S.data.matches);
+  if (!c || c.lim !== lim) {
+    const list = S.data.matches.filter(m => m.kind !== 'doubles' && !m.tournament_id && ['approved', 'pending'].includes(m.status))
+      .sort((x, y) => Date.parse(y.played_at) - Date.parse(x.played_at) || Date.parse(y.created_at || 0) - Date.parse(x.created_at || 0));
+    const by = new Map();
+    for (const m of list) for (const [me, opp] of [[m.player1_id, m.player2_id], [m.player2_id, m.player1_id]]) { const l = by.get(me) || []; if (l.length < lim) { l.push(opp); by.set(me, l); } }
+    c = { lim, by }; repCache.set(S.data.matches, c);
+  }
+  for (const [me, other] of [[a, b], [b, a]]) { const l = c.by.get(me) || []; if (l.length >= lim && l.every(o => o === other)) return me; }
+  return null;
+}
+const repeatMsg = who => { const lim = settings().repeatLimit ?? 2; return `${who === S.me.id ? 'Вы уже сыграли' : `Игрок «${P(who).nickname}» уже сыграл`} с этим соперником ${lim} ${plural(lim, 'раз', 'раза', 'раз')} подряд. Сначала нужно сыграть с кем-то другим.`; };
 function challengeBtn(id) {
   if (id === S.me.id) return '<span class="pl-me">это вы</span>';
   const c = openChallenge(id);
   if (c) return `<span class="pl-ch">${c.status === 'accepted' ? '⚔️ к столу' : c.from_id === S.me.id ? '⏳ вызван' : '⚔️ вызывает вас'}</span>`;
+  if (repeatBlocked(S.me.id, id)) return `<button class="btn sm" disabled title="Сначала сыграйте с кем-то другим">⏸ Нужен другой соперник</button>`;
   return `<button class="btn sm primary" data-act="challenge" data-id="${id}">⚔️ Вызвать</button>`;
 }
 // напоминание на главной: давно не играли — вызовите кого-нибудь
@@ -3387,6 +3406,8 @@ function viewAdmin(r) {
       ${f('seasonMinMatches', 'Матчей для борьбы за титул сезона', 'Минимум матчей за месяц, чтобы стать чемпионом', 1)}
       <hr><b class="small">🏓 Напоминания</b>
       <label class="switch"><input type="checkbox" name="remindIdle" ${s.remindIdle !== false ? 'checked' : ''}><i></i><span>Напоминать тем, кто давно не играл (через 14, 30 и 60 дней), и предлагать соперника для вызова</span></label>
+      <hr><b class="small">🔁 Повторные игры</b>
+      ${f('repeatLimit', 'Игр подряд с одним соперником, максимум', 'Потом каждому из двоих нужно сыграть с кем-то другим. 0 — без ограничения. Не действует на турниры, парные игры и на игры владельца и помощников.', 1)}
       <hr><b class="small">🎯 Прогнозы на матчи</b>
       <label class="switch"><input type="checkbox" name="predEnabled" ${s.predEnabled ? 'checked' : ''}><i></i><span>Включены</span></label>
       ${f('predStart', 'Стартовый баланс, PC', 'Сколько пинг-коинов получает каждый в начале', 50)}
@@ -3621,6 +3642,7 @@ function openMatchForm(opts = {}) {
     const err = msg => { $modal.querySelector('.mf-err').textContent = msg; return false; };
     if (checkPlayers(err) !== true) return;
     const dbl = st.kind === 'doubles';
+    if (!dbl && !(fx.tournament_id || m0?.tournament_id) && st.type !== 'tournament') { const w = repeatBlocked(st.p1, st.p2); if (w) return err(repeatMsg(w)); }
     const row = {
       kind: st.kind, type: (fx.tournament_id || m0?.tournament_id) ? 'tournament' : dbl ? 'free' : st.type,
       player1_id: st.p1, player2_id: st.p2, player3_id: dbl ? st.p3 : null, player4_id: dbl ? st.p4 : null,
@@ -3667,6 +3689,7 @@ function openMatchForm(opts = {}) {
       if (s1 < need && s2 < need) return err(`Матч не доигран: нужно ${need} ${plural(need, 'победа', 'победы', 'побед')} в партиях`);
     }
     if (!st.date) return err('Укажите дату');
+    if (!dbl && !m0 && !fx.liveId && !(fx.tournament_id || m0?.tournament_id) && st.type !== 'tournament' && !S.data.live.some(l => l.status === 'live' && [l.player1_id, l.player2_id].sort().join() === [st.p1, st.p2].sort().join())) { const w = repeatBlocked(st.p1, st.p2); if (w) return err(repeatMsg(w)); }
     const row = {
       player1_id: st.p1, player2_id: st.p2, type: (fx.tournament_id || m0?.tournament_id) ? 'tournament' : st.type,
       tournament_id: fx.tournament_id ?? m0?.tournament_id ?? null,
@@ -3976,6 +3999,7 @@ const ACT = {
   'tb-n': el => { lsSet('ponghub_tables', String(Math.max(1, Math.min(12, +el.dataset.v)))); render(); },
   'pq-start': el => busy(el, async () => {
     if (!PLAY.opp) throw new Error('Выберите соперника');
+    { const w = repeatBlocked(S.me.id, PLAY.opp); if (w) throw new Error(repeatMsg(w)); }
     const row = { kind: 'singles', type: 'free', player1_id: S.me.id, player2_id: PLAY.opp, player3_id: null, player4_id: null, best_of: PLAY.bestOf, points_to: 11, rated: true,
       tournament_id: null, stage: null, grp: null, round: null, slot: null, challenge_id: null, first_server: 0, log: [], status: 'live', scorer_id: S.me.id, started_by: S.me.id,
       scoring: el.dataset.s === '1', table_no: +el.dataset.t, ...testFlag() };
@@ -3999,7 +4023,7 @@ const ACT = {
       type: l.type, tournament_id: l.tournament_id, stage: l.stage, grp: l.grp, round: l.round, slot: l.slot, best_of: l.best_of, points_to: l.points_to,
       challengeId: l.challenge_id, liveId: l.id } });
   },
-  challenge: el => openChallengeForm(el.dataset.id),
+  challenge: el => { const w = repeatBlocked(S.me.id, el.dataset.id); if (w) return toast(repeatMsg(w), 'err'); openChallengeForm(el.dataset.id); },
   'share-player': el => busy(el, () => sharePlayer(el.dataset.id)),
   badge: el => { const b = S.badges?.[+el.dataset.i]; if (b) openModal(`<div class="center stack"><div class="bdg-big">${b.icon}</div><h3>${esc(b.name)}</h3><p class="muted">${esc(b.desc)}</p><button class="btn primary" data-act="close">Понятно</button></div>`); },
   'ch-accept': el => busy(el, async () => {
@@ -4201,6 +4225,7 @@ const FORMS = {
     s.predEnabled = !!fd.get('predEnabled');
     s.remindIdle = !!fd.get('remindIdle');
     for (const k of ['predStart', 'predMin', 'predMax', 'predWindowMin']) s[k] = Math.round(+fd.get(k) || 0);
+    s.repeatLimit = Math.max(0, Math.round(+fd.get('repeatLimit') || 0));
     if (!(s.spread > 0)) throw new Error('Масштаб должен быть больше нуля');
     s.marginBonus = !!fd.get('marginBonus');
     s.clubName = fd.get('clubName').trim() || 'PongHub';
