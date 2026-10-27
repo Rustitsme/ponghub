@@ -674,8 +674,8 @@ export function mountViewer(el, cfg, opts = {}) {
     // по высоте — длина ракетки, по ширине — ширина головки при любом повороте вокруг ручки (+ запас на наклон)
     const box = new THREE.Box3().setFromObject(v.inner), sz = box.getSize(new THREE.Vector3()), c = box.getCenter(new THREE.Vector3());
     const tv = Math.tan(THREE.MathUtils.degToRad(v.camera.fov / 2)), th = tv * v.camera.aspect, wide = Math.hypot(sz.x, sz.z);
-    const mg = v.inner.userData.fx ? (innerWidth >= 900 ? 1.34 : 1.3) : 1.08;   // у светящейся ракетки больше места под искры
-    v.fitD = Math.max(sz.y * mg / 2 / tv, wide * mg / 2 / th) + wide / 2; v.inner.position.sub(c); if (v.inner.userData.fx) v.inner.position.y -= sz.y * .05;
+    const mg = v.inner.userData.fx ? (innerWidth >= 900 ? 1.2 : 1.17) : 1.08;   // у светящейся ракетки больше места под искры
+    v.fitD = Math.max(sz.y * mg / 2 / tv, wide * mg / 2 / th) + wide / 2; v.inner.position.sub(c); if (v.inner.userData.fx) v.inner.position.y -= sz.y * .03;
   }
   if (v.inner.userData.fx) v.inner.add(v.inner.userData.fx);   // огонь «Founder» — после расчёта габаритов, чтобы ракетка не уменьшалась
   }
