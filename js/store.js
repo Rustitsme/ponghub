@@ -582,6 +582,7 @@ class LocalStore {
   }
 
   async createClub(c) {
+    if (this.db.platform?.features?.newclub === 'founder' && !this.founder() && !(this.db.feature_testers || []).some(t => t.feature === 'newclub' && t.user_id === this.db.session)) throw new Error('Создание новых клубов пока закрыто. Скоро откроем');
     const id = uid();
     this.db.clubs.push({ id, code: 'PH-' + this.code(4), name: c.name.trim(), city: c.city || null, address: c.address || null, lat: c.lat ?? null, lng: c.lng ?? null, description: c.description || null, visible: c.visible !== false, blocked: false, owner_id: this.db.session, settings: {}, created_at: new Date().toISOString() });
     this.db.invites[id] = this.code(8);
@@ -1244,5 +1245,5 @@ function seedDemo(opts = {}) {
     club_members.push({ club_id: 'demo-club', user_id: p.id, role: p.role === 'admin' ? 'owner' : p.role === 'editor' ? 'helper' : 'player', status: p.status === 'pending' ? 'pending' : 'active', initial_rating: p.initial_rating });
   });
   club_members.push({ club_id: 'demo-club2', user_id: 'demo-4', role: 'player', status: 'active' });
-  return { users, profiles, matches: [...matches, ...xm], tournaments, events, challenges, audit: [], settings: {}, clubs, invites, club_members, platform: { migration_done: true, features: { shop: 'founder', resale: 'founder', avatar: 'founder' } }, session: null };
+  return { users, profiles, matches: [...matches, ...xm], tournaments, events, challenges, audit: [], settings: {}, clubs, invites, club_members, platform: { migration_done: true, features: { newclub: 'founder', shop: 'founder', resale: 'founder', avatar: 'founder' } }, session: null };
 }
