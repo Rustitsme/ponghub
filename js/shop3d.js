@@ -236,7 +236,7 @@ function woodCanvas(x, w, h, base, seed, dark = 1) {
   for (let i = 0; i < 6; i++) { const cx = rnd() * w, cy = rnd() * h; const g = x.createRadialGradient(cx, cy, 2, cx, cy, 30 + rnd() * 40); g.addColorStop(0, 'rgba(110,60,20,.10)'); g.addColorStop(1, 'rgba(110,60,20,0)'); x.fillStyle = g; x.fillRect(0, 0, w, h); }
 }
 // материал отделки: roughness / metalness / clearcoat — у «лаковых» и карбоновых свои, без шлифовки
-const FIN_MAT = { jet: { r: .08, m: .1, cc: 1, ccr: .02, e: .3 }, twill: { r: .32, m: .35, cc: 1, ccr: .08 }, forged: { r: .38, m: .3, cc: .9, ccr: .12 }, titanium: { r: .34, m: 1, cc: .5, ccr: .3 }, pearl: { r: .12, m: .2, cc: 1, ccr: .03 } };
+const FIN_MAT = { jet: { r: .08, m: .1, cc: 1, ccr: .02, e: .3 }, twill: { r: .32, m: .35, cc: 1, ccr: .08 }, forged: { r: .38, m: .3, cc: .9, ccr: .12 }, titanium: { r: .34, m: 1, cc: .5, ccr: .3 }, pearl: { r: .12, m: .2, cc: 1, ccr: .03 }, founder: { r: .16, m: .65, cc: 1, ccr: .03, em: .85 } };
 // металлические отделки скинов: чёрно-золотая, серебро, бронза, золотая фольга, блёстки
 function metalCanvas(x, w, h, kind, base) {
   const G = (stops, ang = 0.8) => { const g = x.createLinearGradient(0, 0, w * Math.cos(ang), h * Math.sin(ang) + h * .2); stops.forEach(([o, c]) => g.addColorStop(o, c)); x.fillStyle = g; x.fillRect(0, 0, w, h); };
@@ -263,6 +263,19 @@ function metalCanvas(x, w, h, kind, base) {
   else if (kind === 'titanium') { // шлифованный анодированный титан
     G([[0, '#4c5565'], [.3, '#8d97aa'], [.55, '#5d6779'], [.8, '#a7b0c2'], [1, '#4f5868']]);
     for (let i = 0; i < 1400; i++) { x.fillStyle = Math.random() < .5 ? `rgba(255,255,255,${Math.random() * .09})` : `rgba(10,15,30,${Math.random() * .12})`; x.fillRect(0, Math.random() * h, w, 1); }
+  }
+  else if (kind === 'founder') {  // голографическая «призма»: радужные волны, золотая сетка и искры; светится сама
+    x.fillStyle = '#07050f'; x.fillRect(0, 0, w, h); let r = 4242; const rnd = () => (r = (r * 9301 + 49297) % 233280) / 233280;
+    x.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 8; i++) {
+      const g = x.createLinearGradient(0, 0, w, h); [0, .25, .5, .75, 1].forEach((o, j) => g.addColorStop(o, `hsla(${(i * 47 + j * 75) % 360},100%,58%,.55)`));
+      x.strokeStyle = g; x.lineWidth = 30 - i * 2.2; x.beginPath();
+      for (let X = -10; X <= w + 10; X += 8) { const Y = h * (i + .5) / 8 + Math.sin(X / w * Math.PI * 2 + i * .85) * h * .075; X === -10 ? x.moveTo(X, Y) : x.lineTo(X, Y); }
+      x.stroke();
+    }
+    x.globalCompositeOperation = 'source-over';
+    x.strokeStyle = 'rgba(255,214,90,.9)'; x.lineWidth = 1.6; for (let i = -h; i < w + h; i += 36) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i + h, h); x.stroke(); }
+    for (let i = 0; i < 520; i++) { x.fillStyle = `rgba(255,255,255,${.35 + rnd() * .65})`; const q = .6 + rnd() * 2.2; x.fillRect(rnd() * w, rnd() * h, q, q); }
   }
   else if (kind === 'pearl') {   // белая керамика с перламутром
     const g = x.createLinearGradient(0, 0, w, h); g.addColorStop(0, '#f7f4ef'); g.addColorStop(.35, '#efe8f0'); g.addColorStop(.65, '#e8f0f2'); g.addColorStop(1, '#f6efe6'); x.fillStyle = g; x.fillRect(0, 0, w, h);
@@ -294,8 +307,8 @@ function headShape(hex, inset = 0) {
   return s;
 }
 // накладка: та же голова, но внизу вырез дугой под «корону» ручки
-function rubberShape(hex) {
-  const s = headShape(hex, 0.02);
+function rubberShape(hex, inset = 0.02) {
+  const s = headShape(hex, inset);
   if (hex) return s;
   const pts = s.getPoints(120).filter(p => p.y > -6.35);
   const o = new THREE.Shape();
@@ -337,7 +350,12 @@ function buildRacket(cfg, q = 1) {
   plyTex.wrapT = THREE.ClampToEdgeWrapping; plyTex.repeat.set(1, 1 / (T + .06)); plyTex.offset.set(0, .03 / (T + .06));
   const fin = bl.look.finish, FM = FIN_MAT[fin];
   const faceTex = canvasTex(R(512), R(512), (x, w, h) => fin ? metalCanvas(x, w, h, fin, bl.look.face) : woodCanvas(x, w, h, bl.look.face, bl.price), { repeat: true });
-  const bladeMat = [new THREE.MeshPhysicalMaterial({ map: faceTex, roughness: FM ? FM.r : fin ? .22 : .55, metalness: FM ? FM.m : fin ? .85 : 0, clearcoat: FM ? FM.cc : fin ? 1 : .25, clearcoatRoughness: FM ? FM.ccr : fin ? .15 : .5, envMapIntensity: FM?.e ?? 1 }), new THREE.MeshStandardMaterial({ map: plyTex, roughness: .7 })];
+  const bladeMat = [new THREE.MeshPhysicalMaterial({ map: faceTex, roughness: FM ? FM.r : fin ? .22 : .55, metalness: FM ? FM.m : fin ? .85 : 0, clearcoat: FM ? FM.cc : fin ? 1 : .25, clearcoatRoughness: FM ? FM.ccr : fin ? .15 : .5, envMapIntensity: FM?.e ?? 1, ...(FM?.em ? { emissive: '#ffffff', emissiveMap: faceTex, emissiveIntensity: FM.em } : {}) }), new THREE.MeshStandardMaterial({ map: plyTex, roughness: .7, ...(FM?.em ? { emissive: '#ffffff', emissiveMap: plyTex, emissiveIntensity: 1 } : {}) })];
+  // сияние вокруг ракетки «Founder»: радужный ореол, который видно на любом фоне
+  if (FM?.em && cfg.only !== 'rubber') {
+    const halo = new THREE.Mesh(new THREE.PlaneGeometry(34, 38), new THREE.MeshBasicMaterial({ map: canvasTex(256, 256, (x, w, h) => { x.clearRect(0, 0, w, h); const g = x.createRadialGradient(w / 2, h * .44, w * .1, w / 2, h * .44, w * .46); [[0, 'rgba(255,214,90,0)'], [.22, 'rgba(255,196,50,.95)'], [.5, 'rgba(255,40,210,.6)'], [.8, 'rgba(40,190,255,.25)'], [1, 'rgba(0,0,0,0)']].forEach(([o, c]) => g.addColorStop(o, c)); x.fillStyle = g; x.fillRect(0, 0, w, h); }), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    halo.position.set(0, -1.4, 0); halo.renderOrder = -1; inner.add(halo);
+  }
   if (cfg.only !== 'rubber') inner.add(new THREE.Mesh(bladeGeo, bladeMat));
   // ── ручка: стержень + две щёчки с расширением книзу (FL) и выпуклой «короной»
   const HTOP = -6.15, HBOT = HAND === 'CS' ? -13.1 : -16.3;
@@ -371,7 +389,7 @@ function buildRacket(cfg, q = 1) {
       if (grip.it.id === 'acc-g1') for (let i = 0; i < 2500; i++) { x.fillStyle = `rgba(255,255,255,${Math.random() * .12})`; x.fillRect(Math.random() * w, Math.random() * h, 2, 2); }
     }, { repeat: true });
     cheekMat = new THREE.MeshStandardMaterial({ map: wrap, roughness: grip.it.id === 'acc-g3' ? .45 : .9 });
-  } else cheekMat = new THREE.MeshPhysicalMaterial({ map: cheekWood, roughness: FM ? FM.r : fin ? .25 : .45, metalness: FM ? FM.m : fin ? .8 : 0, clearcoat: FM ? FM.cc : fin ? 1 : .5, clearcoatRoughness: FM ? FM.ccr : .3, envMapIntensity: FM?.e ?? 1 });
+  } else cheekMat = new THREE.MeshPhysicalMaterial({ ...(FM?.em ? { emissive: '#ffffff', emissiveMap: cheekWood, emissiveIntensity: FM.em } : {}), map: cheekWood, roughness: FM ? FM.r : fin ? .25 : .45, metalness: FM ? FM.m : fin ? .8 : 0, clearcoat: FM ? FM.cc : fin ? 1 : .5, clearcoatRoughness: FM ? FM.ccr : .3, envMapIntensity: FM?.e ?? 1 });
   for (const sgn of cfg.only === 'rubber' ? [] : [1, -1]) {
     const cg = new THREE.ExtrudeGeometry(cheekShape(), { depth: CT, bevelEnabled: true, bevelThickness: CB, bevelSize: .2, bevelSegments: 6, curveSegments: 48 });
     setCapUV(cg, 6);
@@ -407,7 +425,7 @@ function buildRacket(cfg, q = 1) {
   for (const side of cfg.only === 'blade' ? [] : ['fh', 'bh'].filter(sd => cfg[sd])) {
     const { it, color } = parseKey(cfg[side]);
     const col = colorOf(it, color);
-    const shape = rubberShape(hex);
+    const shape = rubberShape(hex, FM?.em ? .5 : undefined);   // у «Founder» вокруг накладок остаётся видна светящаяся рамка основания
     const SP = it.sp ? 0.17 : 0.05, TS = 0.07; // губка, верхний лист
     const sponge = new THREE.ExtrudeGeometry(shape, { depth: SP, bevelEnabled: false, curveSegments: 96 });
     const topG = new THREE.ExtrudeGeometry(shape, { depth: TS, bevelEnabled: true, bevelThickness: .015, bevelSize: .012, bevelSegments: 2, curveSegments: 96 });
