@@ -237,12 +237,12 @@ function woodCanvas(x, w, h, base, seed, dark = 1) {
 }
 // цветовые гаммы личной ракетки «Founder»: base — фон, waves — цвета волн, line — тонкая сетка, halo — ореол (центр → край), edge — кромка слоёв
 const FOUNDER_THEMES = {
-  aurum: { base: '#070503', waves: ['#6b4a08', '#ffd75a', '#a8780c', '#fff0b0'], line: 'rgba(255,225,140,.85)', halo: ['rgba(255,210,90,.95)', 'rgba(255,150,30,.55)', 'rgba(255,120,0,.2)'], edge: '#ffd24a' },
-  glacier: { base: '#04070d', waves: ['#5aa8e8', '#ffffff', '#8cc8ff', '#e6f6ff'], line: 'rgba(200,235,255,.85)', halo: ['rgba(190,235,255,.95)', 'rgba(80,170,255,.55)', 'rgba(60,120,255,.2)'], edge: '#d8f0ff' },
-  crimson: { base: '#080304', waves: ['#7a0f1f', '#ff3b4f', '#b3122a', '#ff8a96'], line: 'rgba(255,170,160,.8)', halo: ['rgba(255,70,80,.95)', 'rgba(220,20,50,.55)', 'rgba(160,0,30,.2)'], edge: '#ff5a66' },
-  emerald: { base: '#030806', waves: ['#0b6b4a', '#3dffb0', '#12a37a', '#b8ffe2'], line: 'rgba(170,255,220,.8)', halo: ['rgba(80,255,180,.95)', 'rgba(20,200,130,.55)', 'rgba(0,150,100,.2)'], edge: '#5affc0' },
-  platinum: { base: '#060606', waves: ['#6e7480', '#ffffff', '#a4aab6', '#f2f4f8'], line: 'rgba(235,238,245,.85)', halo: ['rgba(255,255,255,.9)', 'rgba(190,200,220,.5)', 'rgba(150,160,190,.18)'], edge: '#f4f6fa' },
-  amethyst: { base: '#07040d', waves: ['#4b1fa8', '#b080ff', '#7a3df0', '#e2ccff'], line: 'rgba(220,195,255,.8)', halo: ['rgba(190,130,255,.95)', 'rgba(130,60,255,.55)', 'rgba(90,30,220,.2)'], edge: '#c8a0ff' },
+  aurum: { base: '#070503', waves: ['#6b4a08', '#ffd75a', '#a8780c', '#fff0b0'], line: 'rgba(255,225,140,.85)', halo: ['rgba(255,210,90,.95)', 'rgba(255,150,30,.55)', 'rgba(255,120,0,.2)'], edge: '#ffd24a', spark: ['#ffd24a', '#ff9a1a', '#fff0b0'] },
+  glacier: { base: '#04070d', waves: ['#5aa8e8', '#ffffff', '#8cc8ff', '#e6f6ff'], line: 'rgba(200,235,255,.85)', halo: ['rgba(190,235,255,.95)', 'rgba(80,170,255,.55)', 'rgba(60,120,255,.2)'], edge: '#d8f0ff', spark: ['#d8f0ff', '#6fb8ff', '#ffffff'] },
+  crimson: { base: '#080304', waves: ['#7a0f1f', '#ff3b4f', '#b3122a', '#ff8a96'], line: 'rgba(255,170,160,.8)', halo: ['rgba(255,70,80,.95)', 'rgba(220,20,50,.55)', 'rgba(160,0,30,.2)'], edge: '#ff5a66', spark: ['#ff5a66', '#ff9a1a', '#ffd0c0'] },
+  emerald: { base: '#030806', waves: ['#0b6b4a', '#3dffb0', '#12a37a', '#b8ffe2'], line: 'rgba(170,255,220,.8)', halo: ['rgba(80,255,180,.95)', 'rgba(20,200,130,.55)', 'rgba(0,150,100,.2)'], edge: '#5affc0', spark: ['#5affc0', '#12a37a', '#d8fff0'] },
+  platinum: { base: '#060606', waves: ['#6e7480', '#ffffff', '#a4aab6', '#f2f4f8'], line: 'rgba(235,238,245,.85)', halo: ['rgba(255,255,255,.9)', 'rgba(190,200,220,.5)', 'rgba(150,160,190,.18)'], edge: '#f4f6fa', spark: ['#ffffff', '#bfd0ff', '#e8eefc'] },
+  amethyst: { base: '#07040d', waves: ['#4b1fa8', '#b080ff', '#7a3df0', '#e2ccff'], line: 'rgba(220,195,255,.8)', halo: ['rgba(190,130,255,.95)', 'rgba(130,60,255,.55)', 'rgba(90,30,220,.2)'], edge: '#c8a0ff', spark: ['#c8a0ff', '#7a3df0', '#f0e6ff'] },
 };
 // материал отделки: roughness / metalness / clearcoat — у «лаковых» и карбоновых свои, без шлифовки
 const FIN_MAT = { jet: { r: .08, m: .1, cc: 1, ccr: .02, e: .3 }, twill: { r: .32, m: .35, cc: 1, ccr: .08 }, forged: { r: .38, m: .3, cc: .9, ccr: .12 }, titanium: { r: .34, m: 1, cc: .5, ccr: .3 }, pearl: { r: .12, m: .2, cc: 1, ccr: .03 }, founder: { r: .16, m: .65, cc: 1, ccr: .03, em: .85 } };
@@ -346,7 +346,7 @@ function buildEnv(renderer) {
   return pm.fromScene(env, 0.03).texture;
 }
 // cfg: { blade:'id:FL', fh, bh, grip, tape, only:'rubber'|'blade' } · q — разрешение текстур
-function buildRacket(cfg, q = 1) {
+function buildRacket(cfg, q = 1, live = false) {
   const inner = new THREE.Group(); inner.position.y = 3.6;
   const bk = parseKey(cfg.blade), bl = bk.it, hex = !!bl.look.hex, HAND = bk.color || 'FL';
   const R = n => Math.round(n * q);
@@ -361,12 +361,6 @@ function buildRacket(cfg, q = 1) {
   const fin = bl.look.finish, FM = FIN_MAT[fin];
   const faceTex = canvasTex(R(512), R(512), (x, w, h) => fin ? metalCanvas(x, w, h, fin, bl.look.face, bl.look.theme) : woodCanvas(x, w, h, bl.look.face, bl.price), { repeat: true });
   const bladeMat = [new THREE.MeshPhysicalMaterial({ map: faceTex, roughness: FM ? FM.r : fin ? .22 : .55, metalness: FM ? FM.m : fin ? .85 : 0, clearcoat: FM ? FM.cc : fin ? 1 : .25, clearcoatRoughness: FM ? FM.ccr : fin ? .15 : .5, envMapIntensity: FM?.e ?? 1, ...(FM?.em ? { emissive: '#ffffff', emissiveMap: faceTex, emissiveIntensity: FM.em } : {}) }), new THREE.MeshStandardMaterial({ map: plyTex, roughness: .7, ...(FM?.em ? { emissive: '#ffffff', emissiveMap: plyTex, emissiveIntensity: 1 } : {}) })];
-  // сияние вокруг ракетки «Founder»: радужный ореол, который видно на любом фоне
-  if (FM?.em && cfg.only !== 'rubber') {
-    const HT = (FOUNDER_THEMES[bl.look.theme] || FOUNDER_THEMES.aurum).halo;
-    const halo = new THREE.Mesh(new THREE.PlaneGeometry(34, 38), new THREE.MeshBasicMaterial({ map: canvasTex(256, 256, (x, w, h) => { x.clearRect(0, 0, w, h); const g = x.createRadialGradient(w / 2, h * .44, w * .1, w / 2, h * .44, w * .46); [[0, 'rgba(0,0,0,0)'], [.22, HT[0]], [.5, HT[1]], [.8, HT[2]], [1, 'rgba(0,0,0,0)']].forEach(([o, c]) => g.addColorStop(o, c)); x.fillStyle = g; x.fillRect(0, 0, w, h); }), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
-    halo.position.set(0, -1.4, 0); halo.renderOrder = -1; inner.add(halo);
-  }
   if (cfg.only !== 'rubber') inner.add(new THREE.Mesh(bladeGeo, bladeMat));
   // ── ручка: стержень + две щёчки с расширением книзу (FL) и выпуклой «короной»
   const HTOP = -6.15, HBOT = HAND === 'CS' ? -13.1 : -16.3;
@@ -506,6 +500,31 @@ function buildRacket(cfg, q = 1) {
     const tm = new THREE.Mesh(tg, new THREE.MeshPhysicalMaterial({ map: tex, side: THREE.DoubleSide, roughness: metal ? .28 : kind === 'neon' ? .45 : .38, metalness: metal ? .75 : 0, clearcoat: .7, clearcoatRoughness: .25 }));
     inner.add(tm);
   }
+
+  // живой «огонь» вокруг основания «Founder»: пульсирующий светящийся контур и искры, которые летят от края (только в живом 3D, габариты ракетки не раздувают)
+  if (live && FM?.em && cfg.only !== 'rubber' && !hex) {
+    const TH = FOUNDER_THEMES[bl.look.theme] || FOUNDER_THEMES.aurum, fx = new THREE.Group();
+    const outer = headShape(false, -.3), inner0 = headShape(false, -.05), ring = new THREE.Shape(outer.getPoints(96));
+    ring.holes.push(new THREE.Path(inner0.getPoints(96).reverse()));
+    const ringMat = new THREE.MeshBasicMaterial({ color: TH.spark[0], transparent: true, opacity: .2, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+    fx.add(new THREE.Mesh(new THREE.ShapeGeometry(ring, 48), ringMat));
+    const dot = canvasTex(64, 64, (x, w, h) => { const g = x.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(.35, 'rgba(255,255,255,.55)'); g.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(0, 0, w, h); });
+    const pts = headShape(false).getPoints(90), N = 90, ps = [];
+    for (let i = 0; i < N; i++) {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: dot, color: TH.spark[i % TH.spark.length], transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+      const k = pts[Math.floor(i / N * pts.length) % pts.length]; const L = Math.hypot(k.x, k.y) || 1;
+      ps.push({ sp, x: k.x, y: k.y, nx: k.x / L, ny: k.y / L, ph: (i * .6180339) % 1, v: .35 + (i * .37 % 1) * .45, z: ((i * .73) % 1 - .5) * .9 }); fx.add(sp);
+    }
+    inner.userData.fx = fx;
+    inner.userData.tick = t => {
+      ringMat.opacity = .16 + Math.sin(t * 3.1) * .06 + Math.sin(t * 7.3) * .03;
+      for (const q of ps) {
+        const a = (t * q.v + q.ph) % 1, d = .15 + a * 2.6;
+        q.sp.position.set(q.x + q.nx * d + Math.sin(t * 2 + q.ph * 9) * .25 * a, q.y + q.ny * d + a * 1.2, q.z);
+        q.sp.scale.setScalar((1 - a) * .95 + .12); q.sp.material.opacity = Math.pow(1 - a, 1.4) * .95;
+      }
+    };
+  }
   return inner;
 }
 // ── картинки для карточек: снимок той же 3D-модели ──
@@ -637,6 +656,7 @@ export function mountViewer(el, cfg, opts = {}) {
         v.inner.children.forEach(m => { if (m.userData.side === v.anim.slot) { m.position.z = m.userData.baseZ + (m.userData.side === 'fh' ? 1 : -1) * (1 - e) * 7; m.scale.setScalar(.9 + .1 * e); } });
         if (v.anim.t >= 1) v.anim = null;
       }
+      v.inner?.userData.tick?.(performance.now() / 1000);
       v.renderer.render(v.scene, v.camera);
     };
     loop();
@@ -651,7 +671,7 @@ export function mountViewer(el, cfg, opts = {}) {
   if (!same) {
   v.ck = ck;
   if (v.group) { v.scene.remove(v.group); v.group.traverse(o => { o.geometry?.dispose?.(); [].concat(o.material || []).forEach(m => { m.map?.dispose?.(); m.dispose?.(); }); }); }
-  v.group = new THREE.Group(); v.inner = buildRacket(cfg); v.group.add(v.inner); v.scene.add(v.group);
+  v.group = new THREE.Group(); v.inner = buildRacket(cfg, 1, true); v.group.add(v.inner); v.scene.add(v.group);
   v.onSide = opts.onSide || null;
   // opts.fit: ракетка целиком в рамке при любом повороте (камера по описанной сфере), без приближения
   v.tilt = opts.fit ? .4 : 1.3; v.fitD = 0;
@@ -661,8 +681,10 @@ export function mountViewer(el, cfg, opts = {}) {
     const tv = Math.tan(THREE.MathUtils.degToRad(v.camera.fov / 2)), th = tv * v.camera.aspect, wide = Math.hypot(sz.x, sz.z);
     v.fitD = Math.max(sz.y * 1.08 / 2 / tv, wide * 1.08 / 2 / th) + wide / 2; v.inner.position.sub(c);
   }
+  if (v.inner.userData.fx) v.inner.add(v.inner.userData.fx);   // огонь «Founder» — после расчёта габаритов, чтобы ракетка не уменьшалась
   }
   v.onSide = opts.onSide || null;
+  el.classList.toggle('rk-dark', !!v.inner?.userData.fx);   // светящейся ракетке нужен тёмный фон
   if (opts.zoom) v.zoom = opts.zoom;
   if (opts.apply) { v.anim = { slot: opts.apply, t: 0 }; v.target.y = opts.apply === 'bh' ? Math.PI + .35 : opts.apply === 'grip' ? .6 : .35; v.target.x = opts.apply === 'grip' ? .35 : -.18; }
   let last = null;
