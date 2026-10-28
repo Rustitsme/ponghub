@@ -3475,20 +3475,23 @@ function labPlayer(id) {
   const A0 = analyze(pool, S.data.matches, { ...st, decayEnabled: false }), A4 = analyze(pool, S.data.matches, plain(4)), A2 = analyze(pool, S.data.matches, plain(2));
   const nick = x => esc(S.data.profiles.find(p => p.id === x)?.nickname || '—');
   const sg = v => (v > 0 ? '+' : '') + v.toFixed(2);
-  const rows = []; const sum = [0, 0, 0];
+  const cell = v => `<td class="${v < 0 ? 'down' : 'up'}">${sg(v)}</td>`;
+  const rows = []; const sum = [0, 0, 0, 0, 0, 0];
   for (const m of A0.played) {
     if (m.player1_id !== id && m.player2_id !== id) continue;
     const opp = m.player1_id === id ? m.player2_id : m.player1_id, win = m.winner_id === id;
-    const d = [A0, A4, A2].map(A => A.md.get(m.id)?.delta[id] ?? 0); d.forEach((v, i) => { sum[i] += v; });
+    const d = [A0, A4, A2].flatMap(A => { const x = A.md.get(m.id)?.delta || {}; return [x[id] ?? 0, x[opp] ?? 0]; }); d.forEach((v, i) => { sum[i] += v; });
     const b = A4.md.get(m.id)?.before || {};
     const sc = m.player1_id === id ? `${m.sets1}:${m.sets2}` : `${m.sets2}:${m.sets1}`;
-    rows.push(`<tr><td class="l">${fmtDate(m.played_at)}</td><td class="l">${nick(opp)} <small class="muted">${(b[opp] ?? 0).toFixed(1)}</small></td><td>${(b[id] ?? 0).toFixed(1)}</td><td>${sc}</td><td class="${win ? 'up' : 'down'}">${win ? 'победа' : 'поражение'}</td>${d.map(v => `<td class="${v < 0 ? 'down' : 'up'}">${sg(v)}</td>`).join('')}</tr>`);
+    rows.push(`<tr><td class="l">${fmtDate(m.played_at)}</td><td class="l">${nick(opp)} <small class="muted">${(b[opp] ?? 0).toFixed(1)}</small></td><td>${(b[id] ?? 0).toFixed(1)}</td><td>${sc} ${win ? '✓' : '✗'}</td>${d.map(cell).join('')}</tr>`);
   }
   if (!rows.length) return '<p class="muted small">У этого игрока пока нет матчей.</p>';
-  return `<div class="tbl-wrap"><table class="tbl"><thead><tr><th class="l">Дата</th><th class="l">Соперник (его рейтинг)</th><th>Ваш рейтинг</th><th>Счёт</th><th>Исход</th><th>Сейчас</th><th>Эло K=4</th><th>Эло K=2</th></tr></thead><tbody>${rows.join('')}
-    <tr class="me"><td class="l" colspan="5">Итого за ${rows.length} матч.</td>${sum.map(v => `<td>${sg(v)}</td>`).join('')}</tr>
-    <tr class="me"><td class="l" colspan="5">Рейтинг в конце</td>${[A0, A4, A2].map(A => `<td>${(A.rating.get(id) ?? 0).toFixed(1)}</td>`).join('')}</tr></tbody></table></div>
-    <p class="muted small">Рейтинги соперников и ваш в таблице — по варианту «Эло K=4». «Сейчас» — по формуле клуба. K — «ставка» матча: у равных соперников победитель получает K/2, проигравший отдаёт столько же.</p>`;
+  const sysTh = n => `<th colspan="2">${n}</th>`;
+  return `<div class="tbl-wrap"><table class="tbl"><thead><tr><th class="l" rowspan="2">Дата</th><th class="l" rowspan="2">Соперник (его рейтинг)</th><th rowspan="2">Ваш рейтинг</th><th rowspan="2">Счёт</th>${sysTh('Сейчас')}${sysTh('Эло K=4')}${sysTh('Эло K=2')}</tr>
+    <tr>${['Вы', 'Он', 'Вы', 'Он', 'Вы', 'Он'].map(x => `<th>${x}</th>`).join('')}</tr></thead><tbody>${rows.join('')}
+    <tr class="me"><td class="l" colspan="4">Итого за ${rows.length} матч.</td>${sum.map(v => `<td>${sg(v)}</td>`).join('')}</tr>
+    <tr class="me"><td class="l" colspan="4">Рейтинг в конце (вы)</td>${[A0, A4, A2].map(A => `<td colspan="2">${(A.rating.get(id) ?? 0).toFixed(1)}</td>`).join('')}</tr></tbody></table></div>
+    <p class="muted small">Для каждого матча: сколько очков получили или потеряли «Вы» и «Он» (соперник). В Эло это всегда два одинаковых числа с разными знаками, сумма 0. В «Сейчас» (лига) победитель получает вдвое больше, чем теряет проигравший, поэтому в системе каждый матч добавляет очки. Рейтинги в таблице — по варианту «Эло K=4».</p>`;
 }
 function ratingLabBody() {
   const st = settings(), pool = labPool(), ms = S.data.matches;
