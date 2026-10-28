@@ -1226,41 +1226,51 @@ function predHomeBlock() {
 function openPredict(eid) {
   const e = S.data.predEvents.find(x => x.id === eid);
   if (!e) return;
-  const s = settings(), min = s.predMin ?? 10, max = s.predMax ?? 500;
-  const bal = S.coins ?? 0;
-  const st = { side: e.chance1 >= 0.5 ? 1 : 2, stake: Math.min(100, bal, max) };
+  const s = settings(), min = s.predMin ?? 10, max = s.predMax ?? 1000;
+  const bal = () => S.coins ?? 0;
+  // лимит считается на каждого игрока отдельно: уже поставленное на эту сторону вычитаем из максимума
+  const placed = sd => myPreds(e).filter(p => p.side === sd).reduce((n, p) => n + p.stake, 0);
+  const room = sd => Math.max(0, Math.min(max - placed(sd), bal()));
+  const st = { side: e.chance1 >= 0.5 ? 1 : 2, stake: 0 };
+  const fit = () => { const r = room(st.side); st.stake = r < min ? 0 : Math.max(min, Math.min(st.stake || Math.min(100, r), r)); };
+  fit();
   const draw = sh => {
     const fresh = S.data.predEvents.find(x => x.id === eid); if (fresh) Object.assign(e, fresh);
-    const odds = st.side === 1 ? e.odds1 : e.odds2;
+    const odds = st.side === 1 ? e.odds1 : e.odds2, r = room(st.side), have = placed(st.side), full = max - have < min;
+    const mineLine = myPredsLine(e, sd => evName(e, sd));
     sh.querySelector('.pd-body').innerHTML = `<h3>🎯 Прогноз на матч</h3>
       <div class="pd-vs"><div><b>${esc(evName(e, 1))}</b><small>${pct(e.chance1)}</small></div><span>vs</span><div><b>${esc(evName(e, 2))}</b><small>${pct(1 - e.chance1)}</small></div></div>
       <div class="pd-bar"><i style="width:${e.chance1 * 100}%"></i></div>
-      <small class="muted">${e.source === 'live' ? '● Коэффициенты меняются по ходу игры — ставка фиксируется по текущему.' : 'Шансы по рейтингу. Чем меньше шанс — тем выше коэффициент.'}</small>
-      <div class="pd-sides">${[1, 2].map(sd => `<button type="button" class="pd-side s${sd} ${st.side === sd ? 'on' : ''}" data-side="${sd}"><span>${esc(evName(e, sd))}</span><b>×${sd === 1 ? e.odds1 : e.odds2}</b></button>`).join('')}</div>
-      <div class="pd-stakes">${[min, 50, 100, 250, max].filter((v, i, a) => v >= min && v <= max && a.indexOf(v) === i).map(v => `<button type="button" class="chip ${st.stake === v ? 'on' : ''}" data-stake="${v}">${v}</button>`).join('')}
-        <input type="number" min="${min}" max="${max}" value="${st.stake}" class="pd-input" aria-label="Своя сумма"></div>
-      <div class="pd-sum">Ставка <b>${st.stake} PC</b> · выигрыш <b class="up">${Math.round(st.stake * odds)} PC</b><small class="muted">На счёте: ${fmtC(bal)} PC</small></div>
+      <small class="muted">${e.source === 'live' ? '● Коэффициенты меняются по ходу игры — каждая ставка считается по коэффициенту на момент ставки.' : 'Шансы по рейтингу. Чем меньше шанс — тем выше коэффициент.'}</small>
+      <div class="pd-sides">${[1, 2].map(sd => `<button type="button" class="pd-side s${sd} ${st.side === sd ? 'on' : ''}" data-side="${sd}"><span>${esc(evName(e, sd))}</span><b>×${sd === 1 ? e.odds1 : e.odds2}</b>${placed(sd) ? `<small>уже ${placed(sd)} PC</small>` : ''}</button>`).join('')}</div>
+      ${mineLine ? `<small class="muted">${mineLine}</small>` : ''}
+      ${full ? `<div class="mf-err">На ${esc(evName(e, st.side))} лимит ${max} PC исчерпан. Можно поставить на соперника.</div>` : r < min ? `<div class="mf-err">Не хватает PC для минимальной ставки (${min} PC).</div>` : `
+      <div class="pd-stakes">${[min, 50, 100, 250, 500, 1000].filter((v, i, a) => v >= min && v <= r && a.indexOf(v) === i).map(v => `<button type="button" class="chip ${st.stake === v ? 'on' : ''}" data-stake="${v}">${v}</button>`).join('')}${r > min && ![min, 50, 100, 250, 500, 1000].includes(r) ? `<button type="button" class="chip ${st.stake === r ? 'on' : ''}" data-stake="${r}">макс ${r}</button>` : ''}
+        <input type="number" min="${min}" max="${r}" value="${st.stake}" class="pd-input" aria-label="Своя сумма"></div>
+      <div class="pd-sum">${have ? `Добавить <b>${st.stake} PC</b> к ставке ${have} PC` : `Ставка <b>${st.stake} PC</b>`} · выигрыш с этой ставки <b class="up">${Math.round(st.stake * odds)} PC</b><small class="muted">На этого игрока можно ещё ${max - have} PC · на счёте: ${fmtC(bal())} PC</small></div>`}
       <div class="mf-err"></div>
-      <button class="btn primary big" data-go="1">Поставить на ${esc(evName(e, st.side))}</button>
-      <small class="muted center">Сделанный прогноз нельзя изменить или отменить — можно поставить ещё, на любого игрока. Баллы не влияют на рейтинг.</small>`;
+      <button class="btn primary big" data-go="1" ${full || r < min ? 'disabled' : ''}>${have ? 'Добавить к ставке на' : 'Поставить на'} ${esc(evName(e, st.side))}</button>
+      <small class="muted center">Сделанную ставку нельзя изменить или отменить — можно добавить ещё и поставить на любого из двух игроков. Баллы не влияют на рейтинг.</small>`;
   };
   openModal('<div class="pd-body stack"></div>', sh => {
     draw(sh);
     // пришли новые данные (очко в игре) — обновляем коэффициенты прямо в окне
     S.modalRefresh = () => { if (sh.isConnected) { const ae = document.activeElement; if (!(ae && ae.classList.contains('pd-input'))) draw(sh); } else S.modalRefresh = null; };
     sh.addEventListener('click', async ev => {
-      const sd = ev.target.closest('[data-side]'); if (sd) { st.side = +sd.dataset.side; return draw(sh); }
+      const sd = ev.target.closest('[data-side]'); if (sd) { st.side = +sd.dataset.side; st.stake = Math.min(st.stake || 100, room(st.side)); fit(); return draw(sh); }
       const sk = ev.target.closest('[data-stake]'); if (sk) { st.stake = +sk.dataset.stake; return draw(sh); }
       if (ev.target.closest('[data-go]')) {
         const btn = ev.target.closest('button');
+        if (!st.stake) return;
         btn.disabled = true;
+        const had = placed(st.side), odds = st.side === 1 ? e.odds1 : e.odds2;
         try {
           S.coins = await S.store.rpc('place_prediction', { eid: e.id, pick: st.side, amount: st.stake });
-          closeModal(); await refresh(); toast(`Прогноз принят: ${st.stake} PC на ${evName(e, st.side)} 🎯`);
+          closeModal(); await refresh(); toast(had ? `Ставка принята: +${st.stake} PC на ${evName(e, st.side)} по ×${odds} (всего ${had + st.stake}) 🎯` : `Прогноз принят: ${st.stake} PC на ${evName(e, st.side)} 🎯`);
         } catch (er) { sh.querySelector('.mf-err').textContent = er.message; btn.disabled = false; }
       }
     });
-    sh.addEventListener('change', ev => { if (ev.target.classList.contains('pd-input')) { st.stake = Math.max(min, Math.min(max, Math.round(+ev.target.value || min))); draw(sh); } });
+    sh.addEventListener('change', ev => { if (ev.target.classList.contains('pd-input')) { const r = room(st.side); st.stake = Math.max(min, Math.min(r, Math.round(+ev.target.value || min))); draw(sh); } });
   });
 }
 
@@ -3515,7 +3525,7 @@ function viewAdmin(r) {
       <label class="switch"><input type="checkbox" name="predEnabled" ${s.predEnabled ? 'checked' : ''}><i></i><span>Включены</span></label>
       ${f('predStart', 'Стартовый баланс, PC', 'Сколько пинг-коинов получает каждый в начале', 50)}
       ${f('predMin', 'Минимальная ставка, PC', '', 5)}
-      ${f('predMax', 'Максимальная ставка, PC', '', 50)}
+      ${f('predMax', 'Максимум на одного игрока, PC', 'Сумма всех ставок игрока на одного из двух соперников. На каждого можно поставить свой максимум.', 50)}
       ${f('predWindowMin', 'Приём прогнозов в игре без счёта, мин', 'Сколько минут после старта можно ставить, если счёт не ведут', 1)}
       <hr>
       <div><b class="small">Иконка приложения</b><div class="icon-pick">${Object.entries(ICON_VARIANTS).map(([k, l]) => `<label><input type="radio" name="icon" value="${k}" ${iconChoice() === k ? 'checked' : ''}><img src="icons/${k}.svg" alt="" width="64" height="64"><span>${l}</span></label>`).join('')}</div>
