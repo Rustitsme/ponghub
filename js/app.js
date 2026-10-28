@@ -3532,13 +3532,17 @@ function ratingLabBody() {
     <p class="muted small">${cols.map(c => `<b>${esc(c.name)}</b>: ${esc(c.hint)}.`).join(' ')} Масштаб — ${sp}. Красное/зелёное — насколько рейтинг игрока отличается от нынешнего.</p>
     ${labTable(cols, st)}
   </section>
-  <section class="card stack" id="lab-custom"><h3>5. Свой вариант — потрогать цифры</h3>
+  <section class="card prose"><h3>5. Поправка на счёт: все игроки при разной силе</h3>
+    <p class="muted small">Настройки клуба: K ${st.kFree} (турнир ${st.kTournament}), масштаб ${st.spread}. «Без счёта» — только победа и поражение. Дальше сила поправки: при 0,2 победа всухую весит ×1,2, а в решающей партии ×0,8. Силу меняют в «Рейтинге» (поле «Сила поправки на счёт»).</p>
+    ${labTable([['Без счёта', { marginBonus: false }], ['Сила 0,1', { marginBonus: true, marginStrength: 0.1 }], ['Сила 0,2', { marginBonus: true, marginStrength: 0.2 }], ['Сила 0,3', { marginBonus: true, marginStrength: 0.3 }]].map(([name, o]) => ({ name, R: labRun({ spread: +st.spread, kFree: +st.kFree, kTournament: +st.kTournament, newcomerMult: +st.newcomerMult, ...o }) })), st)}
+  </section>
+  <section class="card stack" id="lab-custom"><h3>6. Свой вариант — потрогать цифры</h3>
     <p class="muted small">Меняйте числа: таблица ниже пересчитается на ваших матчах. Это только проба, в настройки ничего не попадает.</p>
     <div class="lab-ctl">${[['spread', 'Масштаб', sp, 5], ['kFree', 'K свободной', 4, .5], ['kTournament', 'K турнира', 6, .5], ['newcomerMult', 'Ускорение новичкам', 1.5, .1], ['newcomerGames', 'Игр «новичка»', 10, 1], ['marginStrength', 'Сила счёта (0–0.5)', 0.2, 0.05]].map(([k, l, v, stp]) => `<label>${l}<input type="number" name="${k}" value="${v}" step="${stp}" min="0" data-act-change="lab-calc"></label>`).join('')}
       <label class="switch"><input type="checkbox" name="marginBonus" checked data-act-change="lab-calc"><i></i><span>Учитывать счёт</span></label></div>
     <div id="lab-out">${labTable([{ name: 'Свой', R: labRun({ spread: sp, kFree: 4, kTournament: 6, newcomerMult: 1.5, newcomerGames: 10, marginBonus: true, marginStrength: 0.2 }) }], st)}</div>
   </section>
-  <section class="card stack" id="lab-player"><h3>6. Разбор игрока: каждый матч</h3>
+  <section class="card stack" id="lab-player"><h3>7. Разбор игрока: каждый матч</h3>
     <p class="muted small">Выберите игрока: увидите каждый его матч, соперника и сколько очков он получил или потерял сейчас и по Эло.</p>
     <select data-act-change="lab-player">${pool.filter(p => p.status === 'approved' && (S.A.games.get(p.id) || 0) > 0).sort((a, b) => (S.A.games.get(b.id) || 0) - (S.A.games.get(a.id) || 0)).map(p => `<option value="${p.id}">${esc(p.nickname)} · ${S.A.games.get(p.id)} матч.</option>`).join('')}</select>
     <div id="lab-player-out">${(() => { const top = pool.filter(p => p.status === 'approved' && (S.A.games.get(p.id) || 0) > 0).sort((a, b) => (S.A.games.get(b.id) || 0) - (S.A.games.get(a.id) || 0))[0]; return top ? labPlayer(top.id) : ''; })()}</div>
