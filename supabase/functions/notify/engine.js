@@ -5,13 +5,13 @@
 export const DEFAULT_SETTINGS = {
   clubName: 'PongHub',
   initialRating: 40,   // стартовый рейтинг по умолчанию
-  spread: 50,          // «масштаб»: разница в 50 очков ≈ шанс 10 к 1
-  kTournament: 8,      // максимальное изменение за турнирный матч
+  spread: 40,          // «масштаб»: разница в 40 очков ≈ шанс 10 к 1 (фаворит выигрывает в 91% игр)
+  kTournament: 6,      // максимальное изменение за турнирный матч (у равных соперников победитель получает K/2)
   kFree: 4,            // максимальное изменение за свободную игру
   kDoubles: 4,         // максимальное изменение за парную игру (отдельный рейтинг)
   newcomerGames: 10,   // первые N матчей рейтинг двигается быстрее
-  newcomerMult: 1.5,
-  marginBonus: true,   // 3:0 весит чуть больше, чем 3:2
+  newcomerMult: 1,     // ускорение для новичков (1 — без ускорения: очки в матче строго «сколько взял, столько отдал»)
+  marginBonus: false,  // 3:0 весит чуть больше, чем 3:2
   minRating: 1,
   decayEnabled: true,  // снижение рейтинга, если долго не играть
   decayGraceDays: 30,  // сколько дней без игр не наказываются
@@ -19,7 +19,7 @@ export const DEFAULT_SETTINGS = {
   seasonMinMatches: 3, // минимум матчей за месяц, чтобы бороться за звание чемпиона сезона
   remindIdle: true,    // напоминать тем, кто давно не играл (push через 14, 30 и 60 дней)
   // Система расчёта: 'league' — как в любительских лигах (ТТВ/«Тайфун»), 'elo' — классическая Эло
-  system: 'league',
+  system: 'elo',
   leagueWin: 2,          // победа над равным
   leagueWinSlope: 0.02,  // + за каждое очко, на которое соперник сильнее (− если слабее)
   leagueWinMax: 4,       // максимум за одну победу
@@ -172,6 +172,25 @@ export function analyze(profiles, matches, settings, now = Date.now()) {
   }
   for (const id of rating.keys()) decayTo(id, now);
   return { rating, games, history, md, played, decayTotal, S };
+}
+
+/**
+ * Проверка формулы на прошлом: насколько рейтинг ДО матча угадывал победителя.
+ * logLoss — чем меньше, тем лучше (0.693 = «монетка»), acc — доля матчей, где фаворит выиграл.
+ * Матчи, где у кого-то меньше minGames игр, не считаются: у новичка рейтинг ещё ничего не значит.
+ */
+export function backtest(profiles, matches, settings, minGames = 3) {
+  const A = analyze(profiles, matches, { ...settings, decayEnabled: false });
+  const cnt = new Map(); let n = 0, ll = 0, hit = 0;
+  for (const m of A.played) {
+    if (m.rated === false) continue;
+    const d = A.md.get(m.id), a = m.player1_id, b = m.player2_id, g1 = cnt.get(a) || 0, g2 = cnt.get(b) || 0;
+    cnt.set(a, g1 + 1); cnt.set(b, g2 + 1);
+    if (g1 < minGames || g2 < minGames || !d) continue;
+    const p = Math.min(.999, Math.max(.001, d.exp[m.winner_id]));
+    n++; ll -= Math.log(p); if (p > .5) hit++;
+  }
+  return { n, logLoss: n ? ll / n : NaN, acc: n ? hit / n : NaN, A };
 }
 
 /**
