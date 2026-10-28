@@ -1606,3 +1606,7 @@ body.av-big { overflow: hidden; }
 .inv-on, .inv-gift { font-style: normal; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px; margin-top: 3px; }
 .inv-on { background: #12a061; color: #fff; } .inv-gift { background: #f3e3a6; color: #5a4300; }
 
+
+/* лаборатория рейтинга */
+.lab-ctl { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; align-items: end; }
+.lab-ctl label { font-size: 13px; }

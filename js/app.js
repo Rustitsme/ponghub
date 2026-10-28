@@ -3443,36 +3443,52 @@ async function printSheets(what) {
 
 // ───────────── Админка ─────────────
 // ───────────── Лаборатория рейтинга: проверка формулы на настоящих матчах клуба (ничего не меняет) ─────────────
-function ratingLabBody() {
-  const d = S.data, st = settings();
-  const pool = d.profiles.filter(p => ['approved', 'archived', 'deleted'].includes(p.status));
-  const ms = d.matches;
-  const base = { ...st, kFree: 4, kTournament: 6, newcomerMult: 1.5, marginBonus: true };
-  const real = ms.filter(m => m.status === 'approved' && !isDoubles(m) && m.winner_id && m.rated !== false);
-  if (real.length < 20) return `<section class="card prose"><h2>🔬 Лаборатория рейтинга</h2><p class="muted">Нужно хотя бы 20 подтверждённых матчей 1×1, сейчас их ${real.length}. Подождите, пока наберётся история.</p></section>`;
-  // 1. какой «масштаб» лучше всего описывает реальную игру клуба
-  const spreads = [20, 30, 40, 50, 60, 80, 100, 150];
-  const rows = spreads.map(sp => ({ sp, ...backtest(pool, ms, { ...base, system: 'elo', spread: sp }) }));
-  const best = rows.reduce((a, b) => (b.logLoss < a.logLoss ? b : a));
-  const cur = backtest(pool, ms, { ...st });   // как считается сейчас
-  // 2. вес матча K при лучшем масштабе
-  const ks = [2, 3, 4, 6, 8, 12];
-  const krows = ks.map(k => ({ k, ...backtest(pool, ms, { ...base, system: 'elo', spread: best.sp, kFree: k, kTournament: Math.round(k * 1.5 * 10) / 10 }) }));
-  const bestK = krows.reduce((a, b) => (b.logLoss < a.logLoss ? b : a));
-  // 3. рейтинги игроков: сейчас и по Эло
-  const E = backtest(pool, ms, { ...base, system: 'elo', spread: best.sp, kFree: bestK.k, kTournament: Math.round(bestK.k * 1.5 * 10) / 10 }).A;
-  const now = S.A, apl = pool.filter(p => p.status === 'approved' && (E.games.get(p.id) || 0) > 0);
-  const stat = id => { let w = 0, l = 0; for (const m of E.played) { if (m.player1_id !== id && m.player2_id !== id) continue; if (m.winner_id === id) w++; else l++; } return { w, l }; };
-  const list = apl.map(p => ({ p, ...stat(p.id), a: now.rating.get(p.id) ?? st.initialRating, e: E.rating.get(p.id) ?? st.initialRating })).sort((x, y) => y.e - x.e);
+const labPool = () => S.data.profiles.filter(p => ['approved', 'archived', 'deleted'].includes(p.status));
+const labRun = set => backtest(labPool(), S.data.matches, { ...settings(), ...set, system: 'elo' });
+const LAB_VARIANTS = sp => [
+  { key: 'A', name: 'A · Классический Эло', hint: 'равные: победа +2 / поражение −2 (свободная), турнир ±3; новички ×1.5', set: { spread: sp, kFree: 4, kTournament: 6, newcomerMult: 1.5, marginBonus: true } },
+  { key: 'B', name: 'B · Спокойный (по таблице)', hint: 'равные: ±1 (свободная), турнир ±2; новички ×2; рейтинг растёт медленнее', set: { spread: sp, kFree: 2, kTournament: 4, newcomerMult: 2, marginBonus: true } },
+  { key: 'C', name: 'C · Строго «сколько взял, столько отдал»', hint: 'как A, но без бонуса новичкам и без поправки на счёт: сумма очков в матче всегда 0', set: { spread: sp, kFree: 4, kTournament: 6, newcomerMult: 1, marginBonus: false } },
+];
+function labTable(cols, cur) {
+  const pool = labPool(), now = S.A;
+  const players = pool.filter(p => p.status === 'approved' && (cols[0].R.A.games.get(p.id) || 0) > 0);
+  const stat = id => { let w = 0, l = 0; for (const m of cols[0].R.A.played) { if (m.player1_id !== id && m.player2_id !== id) continue; if (m.winner_id === id) w++; else l++; } return { w, l }; };
+  const list = players.map(p => ({ p, ...stat(p.id), a: now.rating.get(p.id) ?? cur.initialRating, v: cols.map(c => c.R.A.rating.get(p.id) ?? cur.initialRating) })).sort((x, y) => y.v[0] - x.v[0]);
   const avg = f => list.reduce((n, x) => n + f(x), 0) / (list.length || 1);
   const P = x => x.toFixed(3), pc1 = x => Math.round(x * 100) + '%';
-  const ex = (ra, rb, sp) => 1 / (1 + Math.pow(10, (rb - ra) / sp));
+  const head = `<tr><th class="l">Игрок</th><th>Игр</th><th>В–П</th><th>Сейчас</th>${cols.map(c => `<th>${esc(c.name)}</th>`).join('')}</tr>`;
+  const sum = [
+    ['Средний рейтинг', avg(x => x.a).toFixed(1), cols.map(c => avg(x => x.v[cols.indexOf(c)]).toFixed(1))],
+    ['Лучший − худший', (Math.max(...list.map(x => x.a)) - Math.min(...list.map(x => x.a))).toFixed(1), cols.map((c, k) => (Math.max(...list.map(x => x.v[k])) - Math.min(...list.map(x => x.v[k]))).toFixed(1))],
+    ['Ошибка прогноза', P(backtest(pool, S.data.matches, { ...cur }).logLoss), cols.map(c => P(c.R.logLoss))],
+    ['Угадано побед', pc1(backtest(pool, S.data.matches, { ...cur }).acc), cols.map(c => pc1(c.R.acc))],
+  ];
+  return `<div class="tbl-wrap"><table class="tbl"><thead>${head}</thead><tbody>
+    ${list.map(x => `<tr><td class="l">${esc(x.p.nickname)}</td><td>${x.w + x.l}</td><td>${x.w}–${x.l}</td><td>${x.a.toFixed(1)}</td>${x.v.map(v => `<td><b>${v.toFixed(1)}</b> <small class="${v - x.a < 0 ? 'down' : 'up'}">${(v - x.a > 0 ? '+' : '') + (v - x.a).toFixed(1)}</small></td>`).join('')}</tr>`).join('')}
+    ${sum.map(([l, a, vs]) => `<tr class="me"><td class="l" colspan="3">${l}</td><td>${a}</td>${vs.map(v => `<td>${v}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+function ratingLabBody() {
+  const st = settings(), pool = labPool(), ms = S.data.matches;
+  const real = ms.filter(m => m.status === 'approved' && !isDoubles(m) && m.winner_id && m.rated !== false);
+  if (real.length < 20) return `<section class="card prose"><h2>🔬 Лаборатория рейтинга</h2><p class="muted">Нужно хотя бы 20 подтверждённых матчей 1×1, сейчас их ${real.length}. Подождите, пока наберётся история.</p></section>`;
+  const base = { newcomerMult: 1.5, marginBonus: true, kFree: 4, kTournament: 6 };
+  const spreads = [20, 30, 40, 50, 60, 80, 100, 150];
+  const rows = spreads.map(sp => ({ sp, ...labRun({ ...base, spread: sp }) }));
+  const best = rows.reduce((a, b) => (b.logLoss < a.logLoss ? b : a));
+  const cur = backtest(pool, ms, { ...st });
+  const ks = [2, 3, 4, 6, 8, 12];
+  const krows = ks.map(k => ({ k, ...labRun({ ...base, spread: best.sp, kFree: k, kTournament: Math.round(k * 1.5 * 10) / 10 }) }));
+  const bestK = krows.reduce((a, b) => (b.logLoss < a.logLoss ? b : a));
+  const sp = best.sp, kF = 4;
+  const P = x => x.toFixed(3), pc1 = x => Math.round(x * 100) + '%';
+  const ex = (ra, rb, spr) => 1 / (1 + Math.pow(10, (rb - ra) / spr));
   const gaps = [0, 3, 6, 10, 20, 30, 50, 80];
-  const sp = best.sp, kF = bestK.k;
+  const cols = LAB_VARIANTS(sp).map(v => ({ ...v, R: labRun(v.set) }));
   return `<section class="card prose"><h2>🔬 Лаборатория рейтинга</h2>
-    <p class="muted small">Здесь ничего не меняется. Формулы проверяются на ваших настоящих матчах: <b>${real.length}</b> подтверждённых игр, <b>${list.length}</b> игроков. Берётся рейтинг <i>до</i> матча и смотрится, насколько он угадал победителя.</p>
+    <p class="muted small">Здесь ничего не меняется и ничего не сохраняется: формулы проверяются на ваших настоящих матчах (<b>${real.length}</b> подтверждённых игр). Берётся рейтинг <i>до</i> матча и смотрится, насколько он угадал победителя.</p>
     <h3>1. Какой масштаб подходит вашей игре</h3>
-    <p class="muted small">Масштаб — разница рейтингов, при которой фаворит выигрывает ~10 из 11. Чем меньше «ошибка прогноза», тем точнее рейтинг отражает реальную силу. «Монетка» даёт 0,693.</p>
+    <p class="muted small">Масштаб — разница рейтингов, при которой фаворит выигрывает ~10 из 11. Чем меньше «ошибка прогноза», тем точнее рейтинг отражает силу. «Монетка» даёт 0,693.</p>
     <div class="tbl-wrap"><table class="tbl rules"><thead><tr><th class="l">Масштаб</th><th>Ошибка прогноза</th><th>Угадано побед</th></tr></thead><tbody>
       ${rows.map(r => `<tr class="${r.sp === best.sp ? 'me' : ''}"><td class="l">${r.sp}${r.sp === best.sp ? ' ✓ лучший' : ''}${r.sp === +st.spread ? ' · сейчас' : ''}</td><td>${P(r.logLoss)}</td><td>${pc1(r.acc)}</td></tr>`).join('')}
       <tr><td class="l muted">Сейчас (${st.system === 'elo' ? 'Эло' : 'как в лиге'})</td><td>${P(cur.logLoss)}</td><td>${pc1(cur.acc)}</td></tr></tbody></table></div>
@@ -3482,16 +3498,20 @@ function ratingLabBody() {
       ${krows.map(r => `<tr class="${r.k === bestK.k ? 'me' : ''}"><td class="l">${r.k}${r.k === bestK.k ? ' ✓ лучший' : ''}</td><td>${P(r.logLoss)}</td><td>${pc1(r.acc)}</td></tr>`).join('')}</tbody></table></div>
     <h3>3. Сколько очков за матч (масштаб ${sp}, K = ${kF})</h3>
     <p class="muted small">Для игрока с рейтингом 50. Сверху — победа, снизу — поражение. Соперник сильнее (+) или слабее (−).</p>
-    <div class="tbl-wrap"><table class="tbl rules"><thead><tr><th class="l">Соперник</th>${gaps.map(g => `<th>${g ? '+' + g : '=' }</th>`).join('')}${gaps.slice(1).map(g => `<th>−${g}</th>`).join('')}</tr></thead><tbody>
+    <div class="tbl-wrap"><table class="tbl rules"><thead><tr><th class="l">Соперник</th>${gaps.map(g => `<th>${g ? '+' + g : '='}</th>`).join('')}${gaps.slice(1).map(g => `<th>−${g}</th>`).join('')}</tr></thead><tbody>
       <tr><td class="l">Матч</td>${[...gaps, ...gaps.slice(1).map(g => -g)].map(g => { const e = ex(50, 50 + g, sp); return `<td><span class="up">+${(kF * (1 - e)).toFixed(2)}</span><br><span class="down">−${(kF * e).toFixed(2)}</span></td>`; }).join('')}</tr></tbody></table></div>
-    <p class="muted small">Пример: у вас 51, у соперника 45 (вы сильнее на 6). Победа даёт <b class="up">+${(kF * (1 - ex(51, 45, sp))).toFixed(2)}</b>, поражение отнимает <b class="down">−${(kF * ex(51, 45, sp)).toFixed(2)}</b>. Сколько получил победитель, столько потерял проигравший.</p>
-    <h3>4. Рейтинги игроков: сейчас и по Эло</h3>
-    <p class="muted small">Средний рейтинг сейчас <b>${avg(x => x.a).toFixed(1)}</b>, по Эло — <b>${avg(x => x.e).toFixed(1)}</b> (стартовый ${st.initialRating}). Если сейчас заметно выше, значит рейтинг «надувается» от самой игры.</p>
-    <div class="tbl-wrap"><table class="tbl"><thead><tr><th class="l">Игрок</th><th>Игр</th><th>В–П</th><th>Сейчас</th><th>Эло</th><th>Разница</th></tr></thead><tbody>
-      ${list.map(x => `<tr><td class="l">${esc(x.p.nickname)}</td><td>${x.w + x.l}</td><td>${x.w}–${x.l}</td><td>${x.a.toFixed(1)}</td><td><b>${x.e.toFixed(1)}</b></td><td class="${x.e - x.a < 0 ? 'down' : 'up'}">${(x.e - x.a > 0 ? '+' : '') + (x.e - x.a).toFixed(1)}</td></tr>`).join('')}</tbody></table></div>
+    <p class="muted small">Пример: у вас 51, у соперника 45 (вы сильнее на 6). Победа даёт <b class="up">+${(kF * (1 - ex(51, 45, sp))).toFixed(2)}</b>, поражение отнимает <b class="down">−${(kF * ex(51, 45, sp)).toFixed(2)}</b>.</p>
+    <h3>4. Три варианта на ваших матчах</h3>
+    <p class="muted small">${cols.map(c => `<b>${esc(c.name)}</b>: ${esc(c.hint)}.`).join(' ')} Масштаб — ${sp}. Красное/зелёное — насколько рейтинг игрока отличается от нынешнего.</p>
+    ${labTable(cols, st)}
+  </section>
+  <section class="card stack" id="lab-custom"><h3>5. Свой вариант — потрогать цифры</h3>
+    <p class="muted small">Меняйте числа: таблица ниже пересчитается на ваших матчах. Это только проба, в настройки ничего не попадает.</p>
+    <div class="lab-ctl">${[['spread', 'Масштаб', sp, 5], ['kFree', 'K свободной', 4, .5], ['kTournament', 'K турнира', 6, .5], ['newcomerMult', 'Ускорение новичкам', 1.5, .1], ['newcomerGames', 'Игр «новичка»', 10, 1]].map(([k, l, v, stp]) => `<label>${l}<input type="number" name="${k}" value="${v}" step="${stp}" min="0" data-act-change="lab-calc"></label>`).join('')}
+      <label class="switch"><input type="checkbox" name="marginBonus" checked data-act-change="lab-calc"><i></i><span>Учитывать счёт</span></label></div>
+    <div id="lab-out">${labTable([{ name: 'Свой', R: labRun({ spread: sp, kFree: 4, kTournament: 6, newcomerMult: 1.5, newcomerGames: 10, marginBonus: true }) }], st)}</div>
   </section>`;
 }
-
 function viewAdmin(r) {
   if (!isAdmin()) return '<div class="empty">Управление клубом доступно только владельцу</div>';
   const tabs = isAdmin() ? [['reqs', 'Заявки'], ['matches', 'Матчи'], ['players', 'Игроки'], ['screens', 'Табло'], ['log', 'Журнал'], ['rating', 'Рейтинг'], ['lab', 'Лаборатория'], ['data', 'Данные']] : [['matches', 'Матчи']];
@@ -4338,6 +4358,12 @@ const ACT = {
 const csv = rows => '﻿' + rows.map(r => r.map(v => { const s = String(v ?? ''); return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }).join(';')).join('\r\n');
 
 const CHANGE = {
+  'lab-calc': () => {
+    const box = document.getElementById('lab-custom'); if (!box) return;
+    const v = k => +box.querySelector(`[name=${k}]`).value || 0;
+    const set = { spread: Math.max(5, v('spread')), kFree: v('kFree'), kTournament: v('kTournament'), newcomerMult: Math.max(1, v('newcomerMult')), newcomerGames: v('newcomerGames'), marginBonus: box.querySelector('[name=marginBonus]').checked };
+    document.getElementById('lab-out').innerHTML = labTable([{ name: 'Свой', R: labRun(set) }], settings());
+  },
   'filter-player': el => go(`#/matches?type=${el.dataset.type}${el.value ? '&p=' + el.value : ''}`),
   'h2h-sel': el => { const r = route(); const a = el.dataset.side === 'a' ? el.value : (r.args[0] || ''); const b = el.dataset.side === 'b' ? el.value : (r.args[1] || ''); go(`#/h2h/${a || S.me.id}/${b}`); },
   'test-mode': async el => {
