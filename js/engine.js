@@ -11,7 +11,8 @@ export const DEFAULT_SETTINGS = {
   kDoubles: 4,         // максимальное изменение за парную игру (отдельный рейтинг)
   newcomerGames: 10,   // первые N матчей рейтинг двигается быстрее
   newcomerMult: 1,     // ускорение для новичков (1 — без ускорения: очки в матче строго «сколько взял, столько отдал»)
-  marginBonus: false,  // 3:0 весит чуть больше, чем 3:2
+  marginBonus: true,   // учитывать счёт: 3:0 весит больше, чем 3:2, а проигравшему, взявшему партию, отнимается меньше
+  marginStrength: 0.2, // сила поправки на счёт: от ×(1−сила) для победы в решающей партии до ×(1+сила) для победы всухую
   minRating: 1,
   decayEnabled: true,  // снижение рейтинга, если долго не играть
   decayGraceDays: 30,  // сколько дней без игр не наказываются
@@ -67,10 +68,11 @@ export function winsNeeded(bestOf) {
   return Math.ceil((bestOf || 1) / 2);
 }
 
-export function marginFactor(w, l, bestOf) {
+export function marginFactor(w, l, bestOf, strength = 0.1) {
   const need = winsNeeded(bestOf || (2 * w - 1));
   if (need <= 1) return 1;
-  return 0.9 + 0.2 * ((w - l) - 1) / (need - 1);
+  const k = Math.max(0, Math.min(0.5, +strength || 0));
+  return 1 - k + 2 * k * ((w - l) - 1) / (need - 1);
 }
 
 export const ts = m => Date.parse(m.played_at) || 0;
@@ -149,7 +151,7 @@ export function analyze(profiles, matches, settings, now = Date.now()) {
       }
       const K = m.type === 'tournament' ? +S.kTournament : +S.kFree;
       const w = Math.max(m.sets1 || 0, m.sets2 || 0), l = Math.min(m.sets1 || 0, m.sets2 || 0);
-      const f = S.marginBonus && w > 0 ? marginFactor(w, l, m.best_of) : 1;
+      const f = S.marginBonus && w > 0 ? marginFactor(w, l, m.best_of, S.marginStrength) : 1;
       const ka = K * f * (games.get(a) < S.newcomerGames ? +S.newcomerMult : 1);
       const kb = K * f * (games.get(b) < S.newcomerGames ? +S.newcomerMult : 1);
       if (!league) {
@@ -220,7 +222,7 @@ export function analyzeDoubles(profiles, matches, settings) {
     const eA = expected(avg(A), avg(B), S.spread);
     if (m.rated !== false) {
       const w = Math.max(m.sets1 || 0, m.sets2 || 0), l = Math.min(m.sets1 || 0, m.sets2 || 0);
-      const f = S.marginBonus && w > 0 ? marginFactor(w, l, m.best_of) : 1;
+      const f = S.marginBonus && w > 0 ? marginFactor(w, l, m.best_of, S.marginStrength) : 1;
       const apply = (ids, score, e) => ids.forEach(id => {
         let ch;
         if (S.system !== 'elo') {
