@@ -175,6 +175,25 @@ export function analyze(profiles, matches, settings, now = Date.now()) {
 }
 
 /**
+ * Проверка формулы на прошлом: насколько рейтинг ДО матча угадывал победителя.
+ * logLoss — чем меньше, тем лучше (0.693 = «монетка»), acc — доля матчей, где фаворит выиграл.
+ * Матчи, где у кого-то меньше minGames игр, не считаются: у новичка рейтинг ещё ничего не значит.
+ */
+export function backtest(profiles, matches, settings, minGames = 3) {
+  const A = analyze(profiles, matches, { ...settings, decayEnabled: false });
+  const cnt = new Map(); let n = 0, ll = 0, hit = 0;
+  for (const m of A.played) {
+    if (m.rated === false) continue;
+    const d = A.md.get(m.id), a = m.player1_id, b = m.player2_id, g1 = cnt.get(a) || 0, g2 = cnt.get(b) || 0;
+    cnt.set(a, g1 + 1); cnt.set(b, g2 + 1);
+    if (g1 < minGames || g2 < minGames || !d) continue;
+    const p = Math.min(.999, Math.max(.001, d.exp[m.winner_id]));
+    n++; ll -= Math.log(p); if (p > .5) hit++;
+  }
+  return { n, logLoss: n ? ll / n : NaN, acc: n ? hit / n : NaN, A };
+}
+
+/**
  * Отдельный парный рейтинг (2×2). Команда 1 = player1 + player3, команда 2 = player2 + player4.
  * Шанс считается по среднему рейтингу команд, каждый игрок получает своё изменение.
  */
