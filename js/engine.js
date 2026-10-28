@@ -28,7 +28,7 @@ export const DEFAULT_SETTINGS = {
   leagueLossMax: 2,      // максимум потери за одно поражение
   leagueFreeMult: 1,     // свободная игра считается так же, как турнирная
   // Прогнозы на матчи (пинг-коины, PC) — на рейтинг не влияют
-  predEnabled: true, predStart: 1000, predMin: 10, predMax: 500, predWindowMin: 3,
+  predEnabled: true, predStart: 1000, predMin: 10, predMax: 1000, predWindowMin: 3,
   // Не больше стольких игр подряд с одним соперником, дальше нужно сыграть с кем-то другим (0 — без ограничения)
   repeatLimit: 2,
 };

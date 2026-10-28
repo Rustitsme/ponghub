@@ -1046,8 +1046,10 @@ class LocalStore {
       if (e.closes_at && Date.now() > Date.parse(e.closes_at)) { e.status = 'closed'; this.save(); throw new Error('Время приёма прогнозов вышло'); }
       if ([e.player1_id, e.player2_id, e.player3_id, e.player4_id].includes(me)) throw new Error('На свой матч прогноз сделать нельзя');
       if (e.source === 'live') { const l = (this.db.live_matches || []).find(x => x.id === e.source_id); if (!l || l.status !== 'live' || (l.log || []).length) { e.status = 'closed'; this.save(); throw new Error('Игра уже началась — приём прогнозов закрыт'); } }
-      const min = this.predSetting('predMin', 10), max = this.predSetting('predMax', 300);
-      if (a.amount < min || a.amount > max) throw new Error(`Ставка от ${min} до ${max} PC`);
+      const min = this.predSetting('predMin', 10), max = this.predSetting('predMax', 1000);
+      const have = this.db.predictions.filter(p => p.event_id === e.id && p.user_id === me && p.side === a.pick).reduce((n, p) => n + p.stake, 0);
+      if (a.amount < min) throw new Error(`Минимальная ставка — ${min} PC`);
+      if (have + a.amount > max) throw new Error(`Лимит на одного игрока — ${max} PC (уже поставлено ${have}, можно ещё ${Math.max(max - have, 0)})`);
       await this.rpc('ensure_wallet');
       if (this.coinBal(me) < a.amount) throw new Error(`Недостаточно пинг-коинов (у вас ${this.coinBal(me)})`);
       this.db.predictions.push({ id: uid(), club_id: this.cid, event_id: e.id, user_id: me, side: a.pick, stake: a.amount, odds: a.pick === 1 ? e.odds1 : e.odds2, status: 'open', created_at: new Date().toISOString() });
