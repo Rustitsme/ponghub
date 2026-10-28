@@ -3468,6 +3468,28 @@ function labTable(cols, cur) {
     ${list.map(x => `<tr><td class="l">${esc(x.p.nickname)}</td><td>${x.w + x.l}</td><td>${x.w}–${x.l}</td><td>${x.a.toFixed(1)}</td>${x.v.map(v => `<td><b>${v.toFixed(1)}</b> <small class="${v - x.a < 0 ? 'down' : 'up'}">${(v - x.a > 0 ? '+' : '') + (v - x.a).toFixed(1)}</small></td>`).join('')}</tr>`).join('')}
     ${sum.map(([l, a, vs]) => `<tr class="me"><td class="l" colspan="3">${l}</td><td>${a}</td>${vs.map(v => `<td>${v}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
+// разбор одного игрока: каждый его матч — сколько очков он дал бы сейчас и по Эло с разной «ставкой» K
+function labPlayer(id) {
+  const pool = labPool(), st = settings();
+  const plain = k => ({ ...st, system: 'elo', spread: 40, kFree: k, kTournament: k, newcomerMult: 1, marginBonus: false, decayEnabled: false });
+  const A0 = analyze(pool, S.data.matches, { ...st, decayEnabled: false }), A4 = analyze(pool, S.data.matches, plain(4)), A2 = analyze(pool, S.data.matches, plain(2));
+  const nick = x => esc(S.data.profiles.find(p => p.id === x)?.nickname || '—');
+  const sg = v => (v > 0 ? '+' : '') + v.toFixed(2);
+  const rows = []; const sum = [0, 0, 0];
+  for (const m of A0.played) {
+    if (m.player1_id !== id && m.player2_id !== id) continue;
+    const opp = m.player1_id === id ? m.player2_id : m.player1_id, win = m.winner_id === id;
+    const d = [A0, A4, A2].map(A => A.md.get(m.id)?.delta[id] ?? 0); d.forEach((v, i) => { sum[i] += v; });
+    const b = A4.md.get(m.id)?.before || {};
+    const sc = m.player1_id === id ? `${m.sets1}:${m.sets2}` : `${m.sets2}:${m.sets1}`;
+    rows.push(`<tr><td class="l">${fmtDate(m.played_at)}</td><td class="l">${nick(opp)} <small class="muted">${(b[opp] ?? 0).toFixed(1)}</small></td><td>${(b[id] ?? 0).toFixed(1)}</td><td>${sc}</td><td class="${win ? 'up' : 'down'}">${win ? 'победа' : 'поражение'}</td>${d.map(v => `<td class="${v < 0 ? 'down' : 'up'}">${sg(v)}</td>`).join('')}</tr>`);
+  }
+  if (!rows.length) return '<p class="muted small">У этого игрока пока нет матчей.</p>';
+  return `<div class="tbl-wrap"><table class="tbl"><thead><tr><th class="l">Дата</th><th class="l">Соперник (его рейтинг)</th><th>Ваш рейтинг</th><th>Счёт</th><th>Исход</th><th>Сейчас</th><th>Эло K=4</th><th>Эло K=2</th></tr></thead><tbody>${rows.join('')}
+    <tr class="me"><td class="l" colspan="5">Итого за ${rows.length} матч.</td>${sum.map(v => `<td>${sg(v)}</td>`).join('')}</tr>
+    <tr class="me"><td class="l" colspan="5">Рейтинг в конце</td>${[A0, A4, A2].map(A => `<td>${(A.rating.get(id) ?? 0).toFixed(1)}</td>`).join('')}</tr></tbody></table></div>
+    <p class="muted small">Рейтинги соперников и ваш в таблице — по варианту «Эло K=4». «Сейчас» — по формуле клуба. K — «ставка» матча: у равных соперников победитель получает K/2, проигравший отдаёт столько же.</p>`;
+}
 function ratingLabBody() {
   const st = settings(), pool = labPool(), ms = S.data.matches;
   const real = ms.filter(m => m.status === 'approved' && !isDoubles(m) && m.winner_id && m.rated !== false);
@@ -3510,6 +3532,11 @@ function ratingLabBody() {
     <div class="lab-ctl">${[['spread', 'Масштаб', sp, 5], ['kFree', 'K свободной', 4, .5], ['kTournament', 'K турнира', 6, .5], ['newcomerMult', 'Ускорение новичкам', 1.5, .1], ['newcomerGames', 'Игр «новичка»', 10, 1]].map(([k, l, v, stp]) => `<label>${l}<input type="number" name="${k}" value="${v}" step="${stp}" min="0" data-act-change="lab-calc"></label>`).join('')}
       <label class="switch"><input type="checkbox" name="marginBonus" checked data-act-change="lab-calc"><i></i><span>Учитывать счёт</span></label></div>
     <div id="lab-out">${labTable([{ name: 'Свой', R: labRun({ spread: sp, kFree: 4, kTournament: 6, newcomerMult: 1.5, newcomerGames: 10, marginBonus: true }) }], st)}</div>
+  </section>
+  <section class="card stack" id="lab-player"><h3>6. Разбор игрока: каждый матч</h3>
+    <p class="muted small">Выберите игрока: увидите каждый его матч, соперника и сколько очков он получил или потерял сейчас и по Эло.</p>
+    <select data-act-change="lab-player">${pool.filter(p => p.status === 'approved' && (S.A.games.get(p.id) || 0) > 0).sort((a, b) => (S.A.games.get(b.id) || 0) - (S.A.games.get(a.id) || 0)).map(p => `<option value="${p.id}">${esc(p.nickname)} · ${S.A.games.get(p.id)} матч.</option>`).join('')}</select>
+    <div id="lab-player-out">${(() => { const top = pool.filter(p => p.status === 'approved' && (S.A.games.get(p.id) || 0) > 0).sort((a, b) => (S.A.games.get(b.id) || 0) - (S.A.games.get(a.id) || 0))[0]; return top ? labPlayer(top.id) : ''; })()}</div>
   </section>`;
 }
 function viewAdmin(r) {
@@ -4358,6 +4385,7 @@ const ACT = {
 const csv = rows => '﻿' + rows.map(r => r.map(v => { const s = String(v ?? ''); return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }).join(';')).join('\r\n');
 
 const CHANGE = {
+  'lab-player': el => { const o = document.getElementById('lab-player-out'); if (o) o.innerHTML = labPlayer(el.value); },
   'lab-calc': () => {
     const box = document.getElementById('lab-custom'); if (!box) return;
     const v = k => +box.querySelector(`[name=${k}]`).value || 0;
