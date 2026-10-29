@@ -163,6 +163,7 @@ async function reload() {
     }
     const after = lsGet('ponghub_after');
     if (after && S.ctx?.me) { lsSet('ponghub_after', ''); setTimeout(() => location.replace(after), 0); }
+    trackJoinRequests();
     pickClub();
     S.data = S.club ? await S.store.loadAll() : EMPTY();
     if (isAdmin()) S.emails = await S.store.adminEmails();
@@ -180,6 +181,46 @@ async function reload() {
   setTimeout(showNews, 600);
 }
 async function refresh() { await reload(); render(); }
+
+// ───────────── Заявка в клуб: сообщаем человеку, когда её приняли ─────────────
+// Push приходит с сервера (функция notify), но только тем, кто включил уведомления. Поэтому дополнительно:
+// 1) запоминаем отправленные заявки и при следующем открытии показываем «Вас приняли»;
+// 2) пока человек ждёт и не состоит ни в одном клубе, раз в 20 секунд проверяем решение;
+// 3) после отправки заявки предлагаем включить уведомления.
+function trackJoinRequests() {
+  if (!S.ctx?.me) return;
+  const key = 'ponghub_pending_' + S.ctx.me.id;
+  let prev = []; try { prev = JSON.parse(lsGet(key) || '[]'); } catch { /* */ }
+  const cl = S.ctx.clubs || [];
+  lsSet(key, JSON.stringify(cl.filter(c => c.my_status === 'pending').map(c => c.id)));
+  const ok = cl.find(c => c.my_status === 'active' && prev.includes(c.id));
+  if (ok) setTimeout(() => showJoinApproved(ok), 500);
+}
+function showJoinApproved(c, tries = 0) {
+  if ($modal.classList.contains('open') && tries < 5) return setTimeout(() => showJoinApproved(c, tries + 1), 1500);
+  openModal(`<div class="wn pn"><div class="pn-ic">🎉</div><h3>Вас приняли в клуб!</h3>
+    <p>Клуб <b>«${esc(c.name)}»</b> одобрил вашу заявку. Можно играть, вносить результаты и расти в рейтинге.</p>
+    <div class="wn-btns"><button class="btn ghost" id="ja-later">Позже</button><button class="btn primary" id="ja-go">Открыть клуб</button></div></div>`, sh => {
+    sh.classList.add('center-sheet');
+    sh.querySelector('#ja-later').onclick = closeModal;
+    sh.querySelector('.sheet-x').onclick = closeModal;
+    sh.querySelector('#ja-go').onclick = () => { closeModal(); switchClub(c.id); };
+  });
+}
+setInterval(async () => {
+  if (document.hidden || !S.user || S.club || !(S.ctx?.clubs || []).some(c => c.my_status === 'pending')) return;
+  await reload();
+  if (!$modal.classList.contains('open')) render();
+}, 20000);
+async function fillPendPush() {
+  const box = document.getElementById('pend-push'); if (!box) return;
+  const st = await pushState();
+  if (!box.isConnected || st === 'demo' || st === 'unsupported') return;
+  box.innerHTML = st === 'on' ? '<small class="muted">🔔 Уведомления включены — сообщим, как только клуб примет вас.</small>'
+    : st === 'off' ? '<button class="btn sm primary" data-act="push-on-pend">🔔 Сообщить, когда примут</button>'
+    : st === 'ios-install' ? '<small class="muted">Чтобы получить уведомление, добавьте приложение на экран «Домой»: «Поделиться» ⬆︎ → «На экран „Домой“».</small>'
+    : '<small class="muted">Уведомления запрещены в настройках телефона или браузера — включите их, чтобы узнать о решении.</small>';
+}
 
 // ───────────── Памятка «Что нового» для тестировщиков нововведений ─────────────
 // показывается один раз на каждое открытое нововведение (запоминается на устройстве)
@@ -1175,7 +1216,7 @@ function viewRules() {
       <li><b>Поражение сильному</b> — небольшой минус. <b>Поражение слабому</b> — заметный минус.</li>
       <li>Турнирный матч весит до <b>${s.kTournament}</b> очков, свободная игра — до <b>${s.kFree}</b>. У равных соперников победитель получает ровно половину: в свободной игре <b>+${s.kFree / 2}</b> и <b>−${s.kFree / 2}</b> проигравшему.</li>
       ${+s.newcomerMult > 1 ? `<li>Первые <b>${s.newcomerGames}</b> матчей рейтинг меняется в <b>${s.newcomerMult}×</b> быстрее, чтобы новичок быстрее нашёл свой уровень.</li>` : ''}
-      ${s.marginBonus ? '<li>Счёт тоже важен: победа всухую (3:0) даёт +10%, а победа в решающей партии (3:2) — −10%.</li>' : ''}
+      ${s.marginBonus ? `<li><b>Счёт тоже важен.</b> Победа всухую (3:0) весит на ${Math.round(s.marginStrength * 100)}% больше, победа в решающей партии (3:2) — на ${Math.round(s.marginStrength * 100)}% меньше. Поэтому проигравший, который взял хотя бы одну партию, теряет меньше, чем при сухом проигрыше: сдаваться при 0:2 невыгодно.</li>` : ''}
       <li>Рейтинг всегда пересчитывается по всей истории, поэтому исправление ошибочного матча обновляет всё автоматически.</li>
       ${s.decayEnabled ? `<li><b>Пауза в игре:</b> после ${s.decayGraceDays} дней без матчей рейтинг снижается на ${s.decayPerWeek} в неделю, но не ниже стартового. Первый же матч останавливает снижение.</li>` : ''}
       <li><b>Парные игры 2×2</b> считаются в отдельном парном рейтинге (вес до ${s.kDoubles}), по среднему рейтингу команд.</li>
@@ -2189,7 +2230,7 @@ function viewClubs() {
     ${active.length ? '' : `<p class="muted">Привет, <b>${esc(S.ctx.me.nickname)}</b>! Вступите в клуб по приглашению, найдите свой клуб или создайте новый.</p>`}
     ${active.length ? `<section class="card club-list">${active.map(clubRow).join('')}</section>` : ''}
     ${pend.length ? `<section class="card"><div class="card-h"><h3>⏳ Заявки</h3></div>${pend.map(c => `<div class="req"><div class="rn"><b>${esc(c.name)}</b><small class="muted">Ждём решения клуба</small></div>
-      <div class="req-btns"><button class="btn ghost sm" data-act="cancel-request" data-id="${c.id}">Отозвать</button></div></div>`).join('')}</section>` : ''}
+      <div class="req-btns"><button class="btn ghost sm" data-act="cancel-request" data-id="${c.id}">Отозвать</button></div></div>`).join('')}<div id="pend-push" class="pend-push"></div></section>` : ''}
     <form class="card stack" data-form="join-code"><div class="card-h"><h3>✉️&nbsp; У меня есть приглашение</h3></div>
       <label>Код приглашения<input name="code" required minlength="6" maxlength="20" placeholder="Например, K7Q2M9XA" autocapitalize="characters" autocomplete="off"></label>
       <button class="btn primary">Найти клуб</button></form>
@@ -2412,7 +2453,7 @@ async function renderClubPage(id, code = null, auto = false, table = null, tour 
   // пришли по QR (плакат, приглашение, стол) — заявка уходит сама, один раз
   if (auto && (!d.my_status || d.my_status === 'former') && !(S.autoJoined ||= new Set()).has(id)) {
     S.autoJoined.add(id);
-    try { await S.store.requestJoin(id, code || null); S.ctx = await S.store.loadContext(); toast('Заявка отправлена — клуб рассмотрит её'); }
+    try { await S.store.requestJoin(id, code || null); S.ctx = await S.store.loadContext(); trackJoinRequests(); toast('Заявка отправлена — клуб рассмотрит её'); setTimeout(() => maybeAskPush(true), 900); }
     catch (e) { toast(e.message, 'err'); }
     return renderClubPage(id, code, false, table, tour);
   }
@@ -2680,7 +2721,7 @@ const CLUB_ACT = {
   },
   'club-menu': () => openClubMenu(),
   'switch-club': el => switchClub(el.dataset.id),
-  'request-join': el => busy(el, async () => { await S.store.requestJoin(el.dataset.id, el.dataset.code || null); S.ctx = await S.store.loadContext(); toast('Заявка отправлена — клуб рассмотрит её'); render(); }),
+  'request-join': el => busy(el, async () => { await S.store.requestJoin(el.dataset.id, el.dataset.code || null); S.ctx = await S.store.loadContext(); trackJoinRequests(); toast('Заявка отправлена — клуб рассмотрит её'); render(); setTimeout(() => maybeAskPush(true), 900); }),
   'cancel-request': el => busy(el, async () => { await S.store.cancelRequest(el.dataset.id); S.ctx = await S.store.loadContext(); toast('Заявка отозвана'); render(); }),
   'leave-club': async () => {
     if (!(await confirmDialog(`Покинуть клуб «${settings().clubName}»? Ваши матчи останутся в истории клуба. Вернуться можно по приглашению.`, 'Покинуть', true))) return;
@@ -3472,11 +3513,12 @@ function labTable(cols, cur) {
 // разбор одного игрока: каждый его матч — сколько очков он дал бы сейчас и по Эло с разной «ставкой» K
 function labPlayer(id) {
   const pool = labPool(), st = settings();
-  const plain = k => ({ ...st, system: 'elo', spread: 40, kFree: k, kTournament: k, newcomerMult: 1, marginBonus: false, decayEnabled: false });
+  const plain = k => ({ ...st, system: 'elo', spread: 40, kFree: k, kTournament: k, newcomerMult: 1, decayEnabled: false });
   const A0 = analyze(pool, S.data.matches, { ...st, decayEnabled: false }), A4 = analyze(pool, S.data.matches, plain(4)), A2 = analyze(pool, S.data.matches, plain(2));
   const nick = x => esc(S.data.profiles.find(p => p.id === x)?.nickname || '—');
   const sg = v => (v > 0 ? '+' : '') + v.toFixed(2);
   const cell = v => `<td class="${v < 0 ? 'down' : 'up'}">${sg(v)}</td>`;
+  const mult = m => { const w = Math.max(m.sets1 || 0, m.sets2 || 0), l = Math.min(m.sets1 || 0, m.sets2 || 0); return st.marginBonus && w > 0 ? marginFactor(w, l, m.best_of, st.marginStrength) : 1; };
   const rows = []; const sum = [0, 0, 0, 0, 0, 0];
   for (const m of A0.played) {
     if (m.player1_id !== id && m.player2_id !== id) continue;
@@ -3484,15 +3526,15 @@ function labPlayer(id) {
     const d = [A0, A4, A2].flatMap(A => { const x = A.md.get(m.id)?.delta || {}; return [x[id] ?? 0, x[opp] ?? 0]; }); d.forEach((v, i) => { sum[i] += v; });
     const b = A4.md.get(m.id)?.before || {};
     const sc = m.player1_id === id ? `${m.sets1}:${m.sets2}` : `${m.sets2}:${m.sets1}`;
-    rows.push(`<tr><td class="l">${fmtDate(m.played_at)}</td><td class="l">${nick(opp)} <small class="muted">${(b[opp] ?? 0).toFixed(1)}</small></td><td>${(b[id] ?? 0).toFixed(1)}</td><td>${sc} ${win ? '✓' : '✗'}</td>${d.map(cell).join('')}</tr>`);
+    rows.push(`<tr><td class="l">${fmtDate(m.played_at)}</td><td class="l">${nick(opp)} <small class="muted">${(b[opp] ?? 0).toFixed(1)}</small></td><td>${(b[id] ?? 0).toFixed(1)}</td><td>${sc} ${win ? '✓' : '✗'}</td><td class="muted">×${mult(m).toFixed(2)}</td>${d.map(cell).join('')}</tr>`);
   }
   if (!rows.length) return '<p class="muted small">У этого игрока пока нет матчей.</p>';
   const sysTh = n => `<th colspan="2">${n}</th>`;
-  return `<div class="tbl-wrap"><table class="tbl"><thead><tr><th class="l" rowspan="2">Дата</th><th class="l" rowspan="2">Соперник (его рейтинг)</th><th rowspan="2">Ваш рейтинг</th><th rowspan="2">Счёт</th>${sysTh('Сейчас')}${sysTh('Эло K=4')}${sysTh('Эло K=2')}</tr>
+  return `<div class="tbl-wrap"><table class="tbl"><thead><tr><th class="l" rowspan="2">Дата</th><th class="l" rowspan="2">Соперник (его рейтинг)</th><th rowspan="2">Ваш рейтинг</th><th rowspan="2">Счёт</th><th rowspan="2" title="Поправка на счёт">Счёт ×</th>${sysTh('Сейчас')}${sysTh('Эло K=4')}${sysTh('Эло K=2')}</tr>
     <tr>${['Вы', 'Он', 'Вы', 'Он', 'Вы', 'Он'].map(x => `<th>${x}</th>`).join('')}</tr></thead><tbody>${rows.join('')}
-    <tr class="me"><td class="l" colspan="4">Итого за ${rows.length} матч.</td>${sum.map(v => `<td>${sg(v)}</td>`).join('')}</tr>
-    <tr class="me"><td class="l" colspan="4">Рейтинг в конце (вы)</td>${[A0, A4, A2].map(A => `<td colspan="2">${(A.rating.get(id) ?? 0).toFixed(1)}</td>`).join('')}</tr></tbody></table></div>
-    <p class="muted small">Для каждого матча: сколько очков получили или потеряли «Вы» и «Он» (соперник). В Эло это всегда два одинаковых числа с разными знаками, сумма 0. В «Сейчас» (лига) победитель получает вдвое больше, чем теряет проигравший, поэтому в системе каждый матч добавляет очки. Рейтинги в таблице — по варианту «Эло K=4».</p>`;
+    <tr class="me"><td class="l" colspan="5">Итого за ${rows.length} матч.</td>${sum.map(v => `<td>${sg(v)}</td>`).join('')}</tr>
+    <tr class="me"><td class="l" colspan="5">Рейтинг в конце (вы)</td>${[A0, A4, A2].map(A => `<td colspan="2">${(A.rating.get(id) ?? 0).toFixed(1)}</td>`).join('')}</tr></tbody></table></div>
+    <p class="muted small">Для каждого матча: сколько очков получили или потеряли «Вы» и «Он» (соперник). В Эло это всегда два одинаковых числа с разными знаками, сумма 0. В «Сейчас» (лига) победитель получает вдвое больше, чем теряет проигравший, поэтому в системе каждый матч добавляет очки. Рейтинги в таблице — по варианту «Эло K=4». «Счёт ×» — поправка на счёт матча (0:3 и 3:0 весят больше, 2:3 и 3:2 меньше); её можно включить и выключить в «Рейтинге».</p>`;
 }
 function ratingLabBody() {
   const st = settings(), pool = labPool(), ms = S.data.matches;
@@ -3533,9 +3575,9 @@ function ratingLabBody() {
   </section>
   <section class="card stack" id="lab-custom"><h3>5. Свой вариант — потрогать цифры</h3>
     <p class="muted small">Меняйте числа: таблица ниже пересчитается на ваших матчах. Это только проба, в настройки ничего не попадает.</p>
-    <div class="lab-ctl">${[['spread', 'Масштаб', sp, 5], ['kFree', 'K свободной', 4, .5], ['kTournament', 'K турнира', 6, .5], ['newcomerMult', 'Ускорение новичкам', 1.5, .1], ['newcomerGames', 'Игр «новичка»', 10, 1]].map(([k, l, v, stp]) => `<label>${l}<input type="number" name="${k}" value="${v}" step="${stp}" min="0" data-act-change="lab-calc"></label>`).join('')}
+    <div class="lab-ctl">${[['spread', 'Масштаб', sp, 5], ['kFree', 'K свободной', 4, .5], ['kTournament', 'K турнира', 6, .5], ['newcomerMult', 'Ускорение новичкам', 1.5, .1], ['newcomerGames', 'Игр «новичка»', 10, 1], ['marginStrength', 'Сила счёта (0–0.5)', 0.2, 0.05]].map(([k, l, v, stp]) => `<label>${l}<input type="number" name="${k}" value="${v}" step="${stp}" min="0" data-act-change="lab-calc"></label>`).join('')}
       <label class="switch"><input type="checkbox" name="marginBonus" checked data-act-change="lab-calc"><i></i><span>Учитывать счёт</span></label></div>
-    <div id="lab-out">${labTable([{ name: 'Свой', R: labRun({ spread: sp, kFree: 4, kTournament: 6, newcomerMult: 1.5, newcomerGames: 10, marginBonus: true }) }], st)}</div>
+    <div id="lab-out">${labTable([{ name: 'Свой', R: labRun({ spread: sp, kFree: 4, kTournament: 6, newcomerMult: 1.5, newcomerGames: 10, marginBonus: true, marginStrength: 0.2 }) }], st)}</div>
   </section>
   <section class="card stack" id="lab-player"><h3>6. Разбор игрока: каждый матч</h3>
     <p class="muted small">Выберите игрока: увидите каждый его матч, соперника и сколько очков он получил или потерял сейчас и по Эло.</p>
@@ -3611,6 +3653,7 @@ function viewAdmin(r) {
         ${f('newcomerGames', 'Матчей «новичка»', 'Сколько первых матчей рейтинг меняется быстрее', 1)}
         ${f('newcomerMult', 'Ускорение для новичков', 'Множитель для первых матчей', 0.1)}
         <label class="switch"><input type="checkbox" name="marginBonus" ${s.marginBonus ? 'checked' : ''}><i></i><span>Учитывать счёт (3:0 весит больше, чем 3:2)</span></label>
+        ${f('marginStrength', 'Сила поправки на счёт', '0,2 — победа всухую весит на 20% больше, в решающей партии на 20% меньше. Проигравший, взявший хоть одну партию, теряет меньше', 0.05)}
         ${f('kDoubles', 'Вес парной игры 2×2 (K)', 'Максимум очков парного рейтинга за игру', 0.5)}
       </div>
       <hr><b class="small">Снижение рейтинга без игр</b>
@@ -3686,11 +3729,11 @@ function updateCalc(form) {
       <div class="muted">Свободная игра: ×${s.leagueFreeMult}</div>`;
     return;
   }
-  for (const k of ['kTournament', 'kFree', 'spread', 'initialRating']) s[k] = +fd.get(k) || 0;
+  for (const k of ['kTournament', 'kFree', 'spread', 'initialRating', 'marginStrength']) s[k] = +fd.get(k) || 0;
   s.marginBonus = !!fd.get('marginBonus');
   const base = s.initialRating;
   const ex = (ra, rb) => expected(ra, rb, s.spread || 50);
-  const mf = s.marginBonus ? marginFactor(3, 1, 5) : 1;
+  const mf = s.marginBonus ? marginFactor(3, 0, 5, s.marginStrength) : 1;
   const w = (ra, rb, k) => (k * mf * (1 - ex(ra, rb))).toFixed(2);
   const l = (ra, rb, k) => (k * mf * ex(ra, rb)).toFixed(2);
   el.innerHTML = `<b>Примеры (турнир, 3:1):</b>
@@ -4275,6 +4318,7 @@ const ACT = {
   'share-match': el => busy(el, async () => { await shareMatch(S.data.matches.find(m => m.id === el.dataset.id)); }),
   'ios-hint-later': () => { lsSet('ponghub_ios_hint_until', String(Date.now() + 3 * DAY)); document.querySelector('.ios-hint')?.remove(); },
   'push-on': el => busy(el, async () => { await enablePush(); toast('Уведомления включены 🔔'); renderPushBox(); }),
+  'push-on-pend': el => busy(el, async () => { await enablePush(); toast('Уведомления включены 🔔'); fillPendPush(); }),
   'push-off': el => busy(el, async () => { await disablePush(); toast('Уведомления выключены'); renderPushBox(); }),
   'push-test': el => busy(el, async () => { await S.store.testPush(); toast('Отправлено — уведомление придёт через пару секунд'); }),
   logout: async () => { closeModal(); await disablePush().catch(() => {}); await S.store.signOut(); S.user = null; S.me = null; await reload(); location.hash = '#/login'; render(); },
@@ -4393,7 +4437,7 @@ const CHANGE = {
   'lab-calc': () => {
     const box = document.getElementById('lab-custom'); if (!box) return;
     const v = k => +box.querySelector(`[name=${k}]`).value || 0;
-    const set = { spread: Math.max(5, v('spread')), kFree: v('kFree'), kTournament: v('kTournament'), newcomerMult: Math.max(1, v('newcomerMult')), newcomerGames: v('newcomerGames'), marginBonus: box.querySelector('[name=marginBonus]').checked };
+    const set = { spread: Math.max(5, v('spread')), kFree: v('kFree'), kTournament: v('kTournament'), newcomerMult: Math.max(1, v('newcomerMult')), newcomerGames: v('newcomerGames'), marginBonus: box.querySelector('[name=marginBonus]').checked, marginStrength: Math.min(0.5, v('marginStrength')) };
     document.getElementById('lab-out').innerHTML = labTable([{ name: 'Свой', R: labRun(set) }], settings());
   },
   'filter-player': el => go(`#/matches?type=${el.dataset.type}${el.value ? '&p=' + el.value : ''}`),
@@ -4441,7 +4485,7 @@ const FORMS = {
   },
   settings: async (f, fd) => {
     const s = { ...settings() };
-    for (const k of ['initialRating', 'kTournament', 'kFree', 'spread', 'newcomerGames', 'newcomerMult', 'kDoubles', 'decayGraceDays', 'decayPerWeek', 'seasonMinMatches',
+    for (const k of ['initialRating', 'kTournament', 'kFree', 'spread', 'newcomerGames', 'newcomerMult', 'kDoubles', 'decayGraceDays', 'decayPerWeek', 'seasonMinMatches', 'marginStrength',
       'leagueWin', 'leagueWinSlope', 'leagueWinMax', 'leagueLoss', 'leagueLossSlope', 'leagueLossMax', 'leagueFreeMult']) s[k] = +fd.get(k);
     s.system = fd.get('system') === 'elo' ? 'elo' : 'league';
     s.decayEnabled = !!fd.get('decayEnabled');
@@ -4597,14 +4641,15 @@ function showWhatsNew() {
   });
 }
 
-async function maybeAskPush() {
+async function maybeAskPush(pend = false) {
   if (S.store.mode === 'demo' || $modal.classList.contains('open')) return;
-  if (Date.now() < +(lsGet('ponghub_push_later') || 0)) return;
+  if (!pend && Date.now() < +(lsGet('ponghub_push_later') || 0)) return;
   const st = await pushState();
   if (!['off', 'ios-install', 'denied'].includes(st)) return;
   const later = () => { lsSet('ponghub_push_later', String(Date.now() + 3 * DAY)); closeModal(); };
   const body = {
-    off: `<p>Чтобы не пропустить <b>вызов на матч</b>, открытые <b>прогнозы</b> и <b>итоги недели</b>, включите уведомления — это одно нажатие.</p>
+    off: pend ? `<p>Заявка отправлена. Включите уведомления — <b>сообщим сразу, как клуб примет вас</b>. Это одно нажатие.</p>
+      <div class="wn-btns"><button class="btn ghost" id="pn-later">Позже</button><button class="btn primary" id="pn-on">🔔 Включить</button></div>` : `<p>Чтобы не пропустить <b>вызов на матч</b>, открытые <b>прогнозы</b> и <b>итоги недели</b>, включите уведомления — это одно нажатие.</p>
       <div class="wn-btns"><button class="btn ghost" id="pn-later">Позже</button><button class="btn primary" id="pn-on">🔔 Включить</button></div>`,
     'ios-install': `<p>На iPhone уведомления работают только в установленном приложении. Нажмите <b>«Поделиться» ⬆︎</b> внизу Safari → <b>«На экран „Домой“»</b>, откройте PongHub с иконки и включите уведомления в Профиле.</p>
       <div class="wn-btns"><button class="btn primary" id="pn-later">Понятно</button></div>`,
@@ -4688,6 +4733,7 @@ function fitNicks() {
 addEventListener('resize', () => fitNicks());
 
 function afterRender(r) {
+  fillPendPush();
   maybeCollectionNotice();
   maybeGiftNotice();
   fitNicks();
