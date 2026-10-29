@@ -163,6 +163,7 @@ async function reload() {
     }
     const after = lsGet('ponghub_after');
     if (after && S.ctx?.me) { lsSet('ponghub_after', ''); setTimeout(() => location.replace(after), 0); }
+    trackJoinRequests();
     pickClub();
     S.data = S.club ? await S.store.loadAll() : EMPTY();
     if (isAdmin()) S.emails = await S.store.adminEmails();
@@ -180,6 +181,46 @@ async function reload() {
   setTimeout(showNews, 600);
 }
 async function refresh() { await reload(); render(); }
+
+// ───────────── Заявка в клуб: сообщаем человеку, когда её приняли ─────────────
+// Push приходит с сервера (функция notify), но только тем, кто включил уведомления. Поэтому дополнительно:
+// 1) запоминаем отправленные заявки и при следующем открытии показываем «Вас приняли»;
+// 2) пока человек ждёт и не состоит ни в одном клубе, раз в 20 секунд проверяем решение;
+// 3) после отправки заявки предлагаем включить уведомления.
+function trackJoinRequests() {
+  if (!S.ctx?.me) return;
+  const key = 'ponghub_pending_' + S.ctx.me.id;
+  let prev = []; try { prev = JSON.parse(lsGet(key) || '[]'); } catch { /* */ }
+  const cl = S.ctx.clubs || [];
+  lsSet(key, JSON.stringify(cl.filter(c => c.my_status === 'pending').map(c => c.id)));
+  const ok = cl.find(c => c.my_status === 'active' && prev.includes(c.id));
+  if (ok) setTimeout(() => showJoinApproved(ok), 500);
+}
+function showJoinApproved(c, tries = 0) {
+  if ($modal.classList.contains('open') && tries < 5) return setTimeout(() => showJoinApproved(c, tries + 1), 1500);
+  openModal(`<div class="wn pn"><div class="pn-ic">🎉</div><h3>Вас приняли в клуб!</h3>
+    <p>Клуб <b>«${esc(c.name)}»</b> одобрил вашу заявку. Можно играть, вносить результаты и расти в рейтинге.</p>
+    <div class="wn-btns"><button class="btn ghost" id="ja-later">Позже</button><button class="btn primary" id="ja-go">Открыть клуб</button></div></div>`, sh => {
+    sh.classList.add('center-sheet');
+    sh.querySelector('#ja-later').onclick = closeModal;
+    sh.querySelector('.sheet-x').onclick = closeModal;
+    sh.querySelector('#ja-go').onclick = () => { closeModal(); switchClub(c.id); };
+  });
+}
+setInterval(async () => {
+  if (document.hidden || !S.user || S.club || !(S.ctx?.clubs || []).some(c => c.my_status === 'pending')) return;
+  await reload();
+  if (!$modal.classList.contains('open')) render();
+}, 20000);
+async function fillPendPush() {
+  const box = document.getElementById('pend-push'); if (!box) return;
+  const st = await pushState();
+  if (!box.isConnected || st === 'demo' || st === 'unsupported') return;
+  box.innerHTML = st === 'on' ? '<small class="muted">🔔 Уведомления включены — сообщим, как только клуб примет вас.</small>'
+    : st === 'off' ? '<button class="btn sm primary" data-act="push-on-pend">🔔 Сообщить, когда примут</button>'
+    : st === 'ios-install' ? '<small class="muted">Чтобы получить уведомление, добавьте приложение на экран «Домой»: «Поделиться» ⬆︎ → «На экран „Домой“».</small>'
+    : '<small class="muted">Уведомления запрещены в настройках телефона или браузера — включите их, чтобы узнать о решении.</small>';
+}
 
 // ───────────── Памятка «Что нового» для тестировщиков нововведений ─────────────
 // показывается один раз на каждое открытое нововведение (запоминается на устройстве)
@@ -2189,7 +2230,7 @@ function viewClubs() {
     ${active.length ? '' : `<p class="muted">Привет, <b>${esc(S.ctx.me.nickname)}</b>! Вступите в клуб по приглашению, найдите свой клуб или создайте новый.</p>`}
     ${active.length ? `<section class="card club-list">${active.map(clubRow).join('')}</section>` : ''}
     ${pend.length ? `<section class="card"><div class="card-h"><h3>⏳ Заявки</h3></div>${pend.map(c => `<div class="req"><div class="rn"><b>${esc(c.name)}</b><small class="muted">Ждём решения клуба</small></div>
-      <div class="req-btns"><button class="btn ghost sm" data-act="cancel-request" data-id="${c.id}">Отозвать</button></div></div>`).join('')}</section>` : ''}
+      <div class="req-btns"><button class="btn ghost sm" data-act="cancel-request" data-id="${c.id}">Отозвать</button></div></div>`).join('')}<div id="pend-push" class="pend-push"></div></section>` : ''}
     <form class="card stack" data-form="join-code"><div class="card-h"><h3>✉️&nbsp; У меня есть приглашение</h3></div>
       <label>Код приглашения<input name="code" required minlength="6" maxlength="20" placeholder="Например, K7Q2M9XA" autocapitalize="characters" autocomplete="off"></label>
       <button class="btn primary">Найти клуб</button></form>
@@ -2412,7 +2453,7 @@ async function renderClubPage(id, code = null, auto = false, table = null, tour 
   // пришли по QR (плакат, приглашение, стол) — заявка уходит сама, один раз
   if (auto && (!d.my_status || d.my_status === 'former') && !(S.autoJoined ||= new Set()).has(id)) {
     S.autoJoined.add(id);
-    try { await S.store.requestJoin(id, code || null); S.ctx = await S.store.loadContext(); toast('Заявка отправлена — клуб рассмотрит её'); }
+    try { await S.store.requestJoin(id, code || null); S.ctx = await S.store.loadContext(); trackJoinRequests(); toast('Заявка отправлена — клуб рассмотрит её'); setTimeout(() => maybeAskPush(true), 900); }
     catch (e) { toast(e.message, 'err'); }
     return renderClubPage(id, code, false, table, tour);
   }
@@ -2680,7 +2721,7 @@ const CLUB_ACT = {
   },
   'club-menu': () => openClubMenu(),
   'switch-club': el => switchClub(el.dataset.id),
-  'request-join': el => busy(el, async () => { await S.store.requestJoin(el.dataset.id, el.dataset.code || null); S.ctx = await S.store.loadContext(); toast('Заявка отправлена — клуб рассмотрит её'); render(); }),
+  'request-join': el => busy(el, async () => { await S.store.requestJoin(el.dataset.id, el.dataset.code || null); S.ctx = await S.store.loadContext(); trackJoinRequests(); toast('Заявка отправлена — клуб рассмотрит её'); render(); setTimeout(() => maybeAskPush(true), 900); }),
   'cancel-request': el => busy(el, async () => { await S.store.cancelRequest(el.dataset.id); S.ctx = await S.store.loadContext(); toast('Заявка отозвана'); render(); }),
   'leave-club': async () => {
     if (!(await confirmDialog(`Покинуть клуб «${settings().clubName}»? Ваши матчи останутся в истории клуба. Вернуться можно по приглашению.`, 'Покинуть', true))) return;
@@ -4281,6 +4322,7 @@ const ACT = {
   'share-match': el => busy(el, async () => { await shareMatch(S.data.matches.find(m => m.id === el.dataset.id)); }),
   'ios-hint-later': () => { lsSet('ponghub_ios_hint_until', String(Date.now() + 3 * DAY)); document.querySelector('.ios-hint')?.remove(); },
   'push-on': el => busy(el, async () => { await enablePush(); toast('Уведомления включены 🔔'); renderPushBox(); }),
+  'push-on-pend': el => busy(el, async () => { await enablePush(); toast('Уведомления включены 🔔'); fillPendPush(); }),
   'push-off': el => busy(el, async () => { await disablePush(); toast('Уведомления выключены'); renderPushBox(); }),
   'push-test': el => busy(el, async () => { await S.store.testPush(); toast('Отправлено — уведомление придёт через пару секунд'); }),
   logout: async () => { closeModal(); await disablePush().catch(() => {}); await S.store.signOut(); S.user = null; S.me = null; await reload(); location.hash = '#/login'; render(); },
@@ -4603,14 +4645,15 @@ function showWhatsNew() {
   });
 }
 
-async function maybeAskPush() {
+async function maybeAskPush(pend = false) {
   if (S.store.mode === 'demo' || $modal.classList.contains('open')) return;
-  if (Date.now() < +(lsGet('ponghub_push_later') || 0)) return;
+  if (!pend && Date.now() < +(lsGet('ponghub_push_later') || 0)) return;
   const st = await pushState();
   if (!['off', 'ios-install', 'denied'].includes(st)) return;
   const later = () => { lsSet('ponghub_push_later', String(Date.now() + 3 * DAY)); closeModal(); };
   const body = {
-    off: `<p>Чтобы не пропустить <b>вызов на матч</b>, открытые <b>прогнозы</b> и <b>итоги недели</b>, включите уведомления — это одно нажатие.</p>
+    off: pend ? `<p>Заявка отправлена. Включите уведомления — <b>сообщим сразу, как клуб примет вас</b>. Это одно нажатие.</p>
+      <div class="wn-btns"><button class="btn ghost" id="pn-later">Позже</button><button class="btn primary" id="pn-on">🔔 Включить</button></div>` : `<p>Чтобы не пропустить <b>вызов на матч</b>, открытые <b>прогнозы</b> и <b>итоги недели</b>, включите уведомления — это одно нажатие.</p>
       <div class="wn-btns"><button class="btn ghost" id="pn-later">Позже</button><button class="btn primary" id="pn-on">🔔 Включить</button></div>`,
     'ios-install': `<p>На iPhone уведомления работают только в установленном приложении. Нажмите <b>«Поделиться» ⬆︎</b> внизу Safari → <b>«На экран „Домой“»</b>, откройте PongHub с иконки и включите уведомления в Профиле.</p>
       <div class="wn-btns"><button class="btn primary" id="pn-later">Понятно</button></div>`,
@@ -4694,6 +4737,7 @@ function fitNicks() {
 addEventListener('resize', () => fitNicks());
 
 function afterRender(r) {
+  fillPendPush();
   maybeCollectionNotice();
   maybeGiftNotice();
   fitNicks();
