@@ -2,7 +2,7 @@
 // Привязка: табло получает токен и код из 6 цифр → владелец клуба вводит код в «Управлении → Табло».
 // Дальше табло само опрашивает screen_state(токен) и переключается: игра → итоги → перерыв.
 import { analyze, ranking, leagueOf, replayLive, DEFAULT_SETTINGS, isDoubles, winsNeeded } from './engine.js';
-import { koBracket, roundName, standings, pairings, findPairMatch } from './tourney.js';
+import { koBracket, roundName, standings, pairings, findPairMatch, tieStageOf, tieOptsFor, tournamentSchedule } from './tourney.js';
 import { parseKey } from './shop-catalog.js';
 import { unlock, sfx, soundOn } from './sound.js';
 import { media } from './store.js';
@@ -200,20 +200,11 @@ export async function startTV(root, store) {
     const active = (T.full?.tournaments || []).filter(t => t.status === 'active').sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))[0];
     const liveIds = new Set((T.data.live || []).flatMap(l => [l.player1_id, l.player2_id]));
     if (active) {
+      // порядок игр турнира — тот же, что в приложении: идущие игры пропускаем, дальше «на стол» → «готовятся» → остальные
       const ms = (T.full.matches || []).filter(m => m.tournament_id === active.id);
-      if (active.config?.slots) {
-        const br = koBracket(active.config.slots, ms, active.config.thirdPlace);
-        br.rounds.forEach((row, r) => row.forEach(c => {
-          if (c.a && c.b && !c.match && !c.bye && !(liveIds.has(c.a) && liveIds.has(c.b)))
-            out.push({ a: c.a, b: c.b, label: `${P(c.a).nickname} — ${P(c.b).nickname}`, note: roundName(r, br.rounds.length).toLowerCase() });
-        }));
-        if (br.third && br.third.a && br.third.b && !br.third.match) out.push({ a: br.third.a, b: br.third.b, label: `${P(br.third.a).nickname} — ${P(br.third.b).nickname}`, note: 'за 3-е место' });
-      } else {
-        const groups = active.format === 'groups' ? (active.config?.groups || []).map((g, i) => ({ ids: g, stage: 'grp', grp: i })) : [{ ids: active.participants || [], stage: 'rr', grp: null }];
-        for (const g of groups) for (const [a, b] of pairings(g.ids)) {
-          const played = ms.some(m => m.stage === g.stage && (g.grp === null || m.grp === g.grp) && ((m.player1_id === a && m.player2_id === b) || (m.player1_id === b && m.player2_id === a)));
-          if (!played && !(liveIds.has(a) && liveIds.has(b))) out.push({ a, b, label: `${P(a).nickname} — ${P(b).nickname}`, note: g.grp === null ? 'круговой' : `группа ${String.fromCharCode(1040 + g.grp)}` });
-        }
+      for (const it of tournamentSchedule(active, ms, T.data.live || [])) {
+        if (it.status === 'done' || it.status === 'live') continue;
+        out.push({ a: it.a, b: it.b, label: `${P(it.a).nickname} — ${P(it.b).nickname}`, note: it.status === 'soon' ? `готовятся · ${it.note}` : it.note.charAt(0).toLowerCase() + it.note.slice(1), status: it.status });
       }
     }
     for (const n of T.data.next || []) out.push({ a: n.a, b: n.b, label: `${P(n.a).nickname} — ${P(n.b).nickname}`, note: 'вызов принят' });
@@ -320,15 +311,16 @@ export async function startTV(root, store) {
       ${L.map(col).join('')}<div class="tvx-mfin"><h5>Финал</h5>${cell(fin)}<div class="tvx-champ"><i>🏆</i>${champ}</div></div>${Rt.map(col).join('')}</div>`;
   }
   // группа / круг: места и победы простыми словами
-  function placesCard(title, sub, ids, ms, adv) {
-    const st = standings(ids, ms);
-    return `<div class="tvx-card tvx-gc"><h4>${title}<small>${sub}</small></h4>${st.list.map((x, i) => `<div class="tvx-pl ${i < adv ? 'go' : ''}"><span class="n">${i + 1}</span>${avaTv(P(x.id))}<span class="tvx-nk">${esc(P(x.id).nickname)}</span><span class="wins"><b>${x.w}</b>${adv === 1 ? 'из ' + x.p : plW(x.w)}</span></div>`).join('')}
-      <div class="left">${st.complete ? 'Все матчи сыграны ✓' : `Сыграно ${st.played} из ${st.total}`}</div></div>`;
+  function placesCard(title, sub, ids, ms, adv, opts) {
+    const st = standings(ids, ms, opts);
+    const lab = x => { const k = st.ties.find(tt => tt.ids.includes(x.id)); return k ? `${k.from}–${k.to}` : String(x.rank); };
+    return `<div class="tvx-card tvx-gc"><h4>${title}<small>${sub}</small></h4>${st.list.map(x => `<div class="tvx-pl ${!x.tie && x.rank <= adv ? 'go' : ''} ${x.tie ? 'tied' : ''}"><span class="n">${lab(x)}</span>${avaTv(P(x.id))}<span class="tvx-nk">${esc(P(x.id).nickname)}</span><span class="wins"><b>${x.w}</b>${adv === 1 ? 'из ' + x.p : plW(x.w)}</span></div>`).join('')}
+      <div class="left">${st.ties.length ? '⚖️ Ничья — нужны дополнительные матчи' : st.complete ? 'Все матчи сыграны ✓' : `Сыграно ${st.played} из ${st.total}`}</div></div>`;
   }
   // плей-офф для двух групп: 1-й одной группы против 2-го другой; имя появляется, когда группа доиграна
-  function playoffCard(groups, ms) {
-    const st = groups.map((g, i) => standings(g, ms.filter(m => m.stage === 'grp' && m.grp === i)));
-    const who = (gi, place) => { const t = st[gi]; const L = String.fromCharCode(1040 + gi); return t.complete && t.list[place] ? `<div>${avaTv(P(t.list[place].id))}<span class="tvx-nk">${esc(P(t.list[place].id).nickname)}</span><span class="sc">${place + 1}-й ${L}</span></div>` : `<div class="tbd">${place + 1}-й в группе ${L}</div>`; };
+  function playoffCard(groups, ms, t) {
+    const st = groups.map((g, i) => standings(g, ms.filter(m => (m.stage === 'grp' || m.stage === 'grptb') && m.grp === i), tieOptsFor(t, 'grp')));
+    const who = (gi, place) => { const t = st[gi]; const L = String.fromCharCode(1040 + gi); return t.complete && t.resolved && t.list[place] ? `<div>${avaTv(P(t.list[place].id))}<span class="tvx-nk">${esc(P(t.list[place].id).nickname)}</span><span class="sc">${place + 1}-й ${L}</span></div>` : `<div class="tbd">${place + 1}-й в группе ${L}</div>`; };
     return `<div class="tvx-card tvx-gc"><h4>Плей-офф<small>пары заполнятся сами</small></h4>
       <div class="tvx-bm"><div class="tbd" style="font-style:normal">Полуфинал 1</div>${who(0, 0)}${who(1, 1)}</div>
       <div class="tvx-bm"><div class="tbd" style="font-style:normal">Полуфинал 2</div>${who(1, 0)}${who(0, 1)}</div>
@@ -355,7 +347,8 @@ export async function startTV(root, store) {
       const nxLine = nx ? `<div class="tvx-nxline"><small>Следом за этим столом</small><b>${esc(P(nx.a).nickname)}</b><em>—</em><b>${esc(P(nx.b).nickname)}</b><span>${esc(nx.note)}</span></div>` : '';
       return `<section class="tvx-scr">${top(`${title} · ${sub}`, '<div class="tvx-tag">Перерыв</div>')}<div class="tvx-wide">${nxLine}${left}</div>${foot()}</section>`;
     }
-    const right = nx ? `<div class="tvx-next"><small>Следом за этим столом</small>${fitNick(P(nx.a).nickname)}<em>—</em>${fitNick(P(nx.b).nickname)}<span>${esc(nx.note)}</span></div>`
+    const after = nextPairs().slice(1, 5);
+    const right = nx ? `<div class="tvx-next"><small>Следом за этим столом</small>${fitNick(P(nx.a).nickname)}<em>—</em>${fitNick(P(nx.b).nickname)}<span>${esc(nx.note)}</span>${after.length ? `<ol class="tvx-after">${after.map(x => `<li>${esc(x.label)}<span>${esc(x.status === 'next' ? 'на стол · ' + x.note : x.note)}</span></li>`).join('')}</ol>` : ''}</div>`
       : `<div class="tvx-next">${qrCard()}</div>`;
     return `<section class="tvx-scr">${top(`${title} · ${sub}`, '<div class="tvx-tag">Перерыв</div>')}<div class="tvx-brk"><div class="tvx-left">${left}</div>${right}</div>${foot()}</section>`;
   }
@@ -372,16 +365,17 @@ export async function startTV(root, store) {
         if (active.config?.slots && koMs.length) { sub = 'плей-офф'; if (active.config.slots.length >= 8) { wide = true; left = koMirror(active.config.slots, koMs, active.config.thirdPlace, nx); } else left = koTree(active.config.slots, koMs, active.config.thirdPlace, nx); }
         else {
           sub = 'групповой этап';
+          const n = groups.length, two = n === 2 && adv === 2, cols = n <= 3 ? n + (two ? 1 : 0) : Math.ceil(n / 2);
           left = `<div class="tvx-steps"><span class="on">Этап 1 · Группы</span><i>→</i><span>Этап 2 · Плей-офф</span><em>Из каждой группы в плей-офф выходят ${adv}</em></div>
-            <div class="tvx-groups" style="grid-template-columns:repeat(${Math.min(groups.length, 3) + (groups.length === 2 && adv === 2 ? 1 : 0)},minmax(0,1fr))">${groups.slice(0, 3).map((g, i) => placesCard(`Группа ${String.fromCharCode(1040 + i)}`, `${g.length} ${plural(g.length, 'игрок', 'игрока', 'игроков')} · каждый с каждым`, g, ms.filter(m => m.stage === 'grp' && m.grp === i), adv)).join('')}${groups.length === 2 && adv === 2 ? playoffCard(groups, ms) : ''}</div>`;
+            <div class="tvx-groups ${n > 4 ? 'dense' : ''}" style="grid-template-columns:repeat(${cols},minmax(0,1fr))">${groups.map((g, i) => placesCard(`Группа ${String.fromCharCode(1040 + i)}`, `${g.length} ${plural(g.length, 'игрок', 'игрока', 'игроков')} · каждый с каждым`, g, ms.filter(m => (m.stage === 'grp' || m.stage === 'grptb') && m.grp === i), adv, tieOptsFor(active, 'grp'))).join('')}${two ? playoffCard(groups, ms, active) : ''}</div>`;
         }
       } else {
         sub = 'каждый с каждым';
-        const ids = active.participants || [], rrMs = ms.filter(m => m.stage === 'rr'), st = standings(ids, rrMs);
-        const left2 = pairings(ids).filter(([a, b]) => !findPairMatch(rrMs, 'rr', a, b));
+        const ids = active.participants || [], rrMs = ms.filter(m => m.stage === 'rr' || m.stage === 'rrtb'), st = standings(ids, rrMs, tieOptsFor(active, 'rr'));
+        const left2 = tournamentSchedule(active, ms, T.data.live || []).filter(i => i.status !== 'done');
         left = `<div class="tvx-steps"><span class="on">Каждый играет со всеми</span><span>Больше побед — выше место</span><em>Сыграно ${st.played} из ${st.total}</em></div>
-          <div class="tvx-rr">${placesCard('Места', 'у кого больше побед — тот выше', ids, rrMs, 1)}
-          <div class="tvx-card tvx-gc"><h4>Осталось сыграть · ${left2.length}</h4>${left2.slice(0, 7).map(([a, b]) => `<div class="tvx-mr ${nx && ((nx.a === a && nx.b === b) || (nx.a === b && nx.b === a)) ? 'now' : ''}"><span class="tvx-nk">${esc(P(a).nickname)}</span><b>—</b><span class="tvx-nk r">${esc(P(b).nickname)}</span></div>`).join('') || '<p class="tvx-muted">Все матчи сыграны</p>'}</div></div>`;
+          <div class="tvx-rr">${placesCard('Места', 'у кого больше побед — тот выше', ids, rrMs, 1, tieOptsFor(active, 'rr'))}
+          <div class="tvx-card tvx-gc"><h4>Порядок игр · осталось ${left2.length}</h4>${left2.slice(0, 7).map(it => `<div class="tvx-mr ${it.status === 'next' || it.status === 'live' ? 'now' : ''}"><span class="tvx-nk">${esc(P(it.a).nickname)}</span><b>—</b><span class="tvx-nk r">${esc(P(it.b).nickname)}</span></div>`).join('') || '<p class="tvx-muted">Все матчи сыграны</p>'}</div></div>`;
       }
     } else {
       title = 'Игры клуба'; sub = 'сегодня у стола';

@@ -8,7 +8,7 @@ import {
   analyzeDoubles, backtest, rankingDoubles, isDoubles, seasons, seasonTable, monthKey, monthName, weekSummary, replayLive, leagueDelta,
 } from './engine.js';
 import {
-  FORMATS, koBracket, koPlacings, roundName, pairings, standings, snakeGroups, playoffSlots, slotsFromSeeds, findPairMatch,
+  FORMATS, koBracket, koPlacings, roundName, pairings, standings, snakeGroups, playoffSlots, slotsFromSeeds, findPairMatch, tieStageOf, tieOptsFor, tournamentSchedule,
 } from './tourney.js';
 
 const $app = document.getElementById('app');
@@ -35,9 +35,46 @@ const ratingOf = id => S.A.rating.get(id) ?? S.A.S.initialRating;
 const settings = () => ({ ...DEFAULT_SETTINGS, ...(S.data?.settings || {}) });
 const tById = id => S.data.tournaments.find(t => t.id === id);
 
-function ava(p, cls = '') {
+function ava(p, cls = '', zoom = false) {
   const inner = p.photo_url ? `<img src="${esc(media(p.photo_url))}" alt="" loading="lazy">` : esc(p.avatar || (p.nickname || '?')[0]);
-  return `<span class="ava ${cls}" style="--c:${esc(p.color || '#e63946')}">${inner}</span>`;
+  // zoom: нажатие открывает фото во весь экран (как в Telegram)
+  const z = zoom && p.photo_url ? ` data-act="photo-open" data-photo="${esc(media(p.photo_url))}" data-nick="${esc(p.nickname || '')}" role="button" aria-label="Открыть фото"` : '';
+  return `<span class="ava ${cls}${z ? ' zoomable' : ''}" style="--c:${esc(p.color || '#e63946')}"${z}>${inner}</span>`;
+}
+// просмотр фото во весь экран: раскрывается из аватара, закрывается свайпом вниз, кнопкой, Esc или нажатием на фон
+function openPhoto(el) {
+  const src = el.dataset.photo; if (!src || document.querySelector('.pv')) return;
+  const r0 = el.getBoundingClientRect();
+  const ov = document.createElement('div'); ov.className = 'pv';
+  ov.innerHTML = `<div class="pv-bg"></div><div class="pv-top"><b>${esc(el.dataset.nick || '')}</b><button type="button" class="pv-x" aria-label="Закрыть">✕</button></div><div class="pv-box"><img src="${esc(src)}" alt=""></div>`;
+  document.body.appendChild(ov);
+  const box = ov.querySelector('.pv-box'), img = box.querySelector('img'), bg = ov.querySelector('.pv-bg');
+  const put = (r, radius) => Object.assign(box.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px', borderRadius: radius });
+  const full = () => {
+    const nw = img.naturalWidth || 1, nh = img.naturalHeight || 1, k = Math.min(innerWidth / nw, (innerHeight - 140) / nh), w = nw * k, h = nh * k;
+    return { left: (innerWidth - w) / 2, top: (innerHeight - h) / 2, width: w, height: h };
+  };
+  box.style.transition = 'none'; put(r0, '50%');
+  let closing = false, dy = 0;
+  const open = () => requestAnimationFrame(() => requestAnimationFrame(() => { box.style.transition = ''; put(full(), '0px'); ov.classList.add('on'); }));
+  const close = () => {
+    if (closing) return; closing = true;
+    document.removeEventListener('keydown', onKey); removeEventListener('hashchange', close); removeEventListener('resize', close);
+    ov.classList.remove('on'); box.style.transform = ''; bg.style.opacity = '';
+    if (el.isConnected && dy < 240) put(el.getBoundingClientRect(), '50%'); else box.style.opacity = '0';
+    setTimeout(() => ov.remove(), 300);
+  };
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey); addEventListener('hashchange', close); addEventListener('resize', close);
+  ov.querySelector('.pv-x').onclick = close;
+  ov.addEventListener('click', e => { if (e.target === ov || e.target === bg) close(); });
+  img.onerror = close;
+  if (img.complete && img.naturalWidth) open(); else img.onload = open;
+  // свайп вниз закрывает: картинка едет за пальцем, фон светлеет
+  let y0 = null;
+  ov.addEventListener('touchstart', e => { y0 = e.touches[0].clientY; dy = 0; box.style.transition = 'none'; }, { passive: true });
+  ov.addEventListener('touchmove', e => { if (y0 === null) return; dy = Math.max(0, e.touches[0].clientY - y0); box.style.transform = `translateY(${dy}px) scale(${1 - Math.min(dy, 300) / 1800})`; bg.style.opacity = String(Math.max(.15, .94 - dy / 320)); }, { passive: true });
+  ov.addEventListener('touchend', () => { if (y0 === null) return; y0 = null; box.style.transition = ''; if (dy > 90) close(); else { box.style.transform = ''; bg.style.opacity = ''; dy = 0; } });
 }
 function leagueBadge(r) { const l = leagueOf(r); return `<span class="league ${l.cls}">${l.name}</span>`; }
 const roleIcon = p => { const t = p.role === 'admin' ? ['👑', 'Владелец'] : p.role === 'editor' ? ['✍️', 'Помощник'] : null; const st = p.is_founder ? '⭐' : ''; return t || st ? `<span class="role-ic" title="${t ? t[1] : 'Создатель PongHub'}">${t ? t[0] : ''}${st}</span>` : ''; };
@@ -567,7 +604,7 @@ function viewHome() {
   const coins = S.coins != null && (feature('shop') || predOn());
   const nl = nextLeague(r);
   const bigHero = `<section class="hero table-card hm h-hero">
-    <div class="hm-top"><div><div class="hero-top">${ava(me, 'lg')}<div class="hero-id"><div class="hello">Привет,</div><div class="hero-nick">${esc(me.nickname)}</div><div class="badges">${leagueBadge(r)}${roleBadge(me)}</div></div></div>
+    <div class="hm-top"><div><div class="hero-top">${ava(me, 'lg', true)}<div class="hero-id"><div class="hello">Привет,</div><div class="hero-nick">${esc(me.nickname)}</div><div class="badges">${leagueBadge(r)}${roleBadge(me)}</div></div></div>
       <div class="hm-place">${st.matches ? pos : '—'} <small>место из ${total}</small></div></div>
       ${showRk ? '<a href="#/racket" class="hm-frame hm-rk" id="hm-rk" aria-label="Моя ракетка"></a>' : ''}</div>
     <div class="hero-mid"><div><div class="big-num">${fmtR(r)}</div><div class="muted small">рейтинг · ${delta(d30)} за 30 дней</div></div>${sparkline(hist.slice(-20))}</div>
@@ -577,7 +614,7 @@ function viewHome() {
     <div class="row-btns hero-links"><a href="#/player/${me.id}" class="btn ghost-light">Статистика и анализ →</a></div>
   </section>`;
   const meTile = `<section class="bt bt-me">
-    <a href="#/player/${me.id}" class="bt-me-main">${ava(me, 'lg')}<div class="bt-me-id"><div class="bt-hi">Привет, <b class="bt-nick">${esc(me.nickname)}</b></div>
+    <a href="#/player/${me.id}" class="bt-me-main">${ava(me, 'lg', true)}<div class="bt-me-id"><div class="bt-hi">Привет, <b class="bt-nick">${esc(me.nickname)}</b></div>
       <div class="bt-me-num"><div class="big-num">${fmtR(r)}</div><div class="badges">${leagueBadge(r)}${roleIcon(me)}</div></div>
       <small>${st.matches ? `${pos}-е место из ${total}` : 'ещё нет матчей'} · <span title="за 30 дней">${delta(d30)}</span></small></div></a>
     ${showRk ? '<a href="#/racket" class="hm-frame bt-rk" id="hm-rk" aria-label="Моя ракетка"></a>' : `<div class="bt-spark">${sparkline(hist.slice(-20))}</div>`}
@@ -732,7 +769,7 @@ function viewPlayer(r) {
   return `
   <section class="hero table-card">
     <div class="hero-top">
-      ${ava(p, 'lg')}
+      ${ava(p, 'lg', true)}
       <div class="hero-id"><div class="hero-nick">${esc(p.nickname)}</div><div class="muted small">${esc(p.full_name || '')}${hand ? ' · ' + hand : ''}</div><div class="badges">${leagueBadge(rt)}${roleBadge(p)}</div></div>
       <div class="hero-rank"><small>место</small><b>${st.matches ? pos : '—'}</b><small>из ${S.rank.length}</small></div>
     </div>
@@ -867,52 +904,80 @@ function koBlock(t, slots, ms) {
   return { br, html: `<div class="bracket-wrap"><div class="bracket">${cols}</div></div>${br.third ? `<div class="third"><div class="bcol-h">Матч за 3-е место</div>${cell({ ...br.third, r: 'third', i: 0 })}</div>` : ''}` };
 }
 
+// настройки определения мест: матчи таблицы (основные и дополнительные), призовая зона и режим ничьей
+const tieOpts = tieOptsFor;
+const tableMs = (ms, stage, grp) => ms.filter(m => (m.stage === stage || m.stage === tieStageOf(stage)) && (grp === null || m.grp === grp));
+const tableStanding = (t, ids, ms, stage, grp = null) => standings(ids, tableMs(ms, stage, grp), tieOpts(t, stage));
+const tieLabel = st => x => { const k = st.ties.find(tt => tt.ids.includes(x.id)); return k ? `${k.from}–${k.to}` : String(x.rank); };
+
 function rrBlock(t, ids, ms, stage, grp = null, title = '') {
-  const st = standings(ids, ms.filter(m => m.stage === stage && (grp === null || m.grp === grp)));
+  const st = tableStanding(t, ids, ms, stage, grp);
+  const tbStage = tieStageOf(stage);
   const can = isAdmin() && t.status === 'active';
   const adv = grp !== null ? (t.config.advance || 2) : 1;
-  const table = `<div class="tp-list">${st.list.map((x, i) => `<a href="#/player/${x.id}" class="tp-row ${i < adv && (grp !== null || st.played) ? 'go' : ''}"><span class="n">${i + 1}</span>${ava(P(x.id), 'sm')}<b class="nk">${esc(P(x.id).nickname)}</b><span class="w"><b>${x.w}</b> из ${x.p}</span></a>`).join('')}</div>
+  const lab = tieLabel(st);
+  const table = `<div class="tp-list">${st.list.map(x => `<a href="#/player/${x.id}" class="tp-row ${x.tie ? 'tied' : ''} ${!x.tie && x.rank <= adv && (grp !== null || st.played) ? 'go' : ''}"><span class="n">${lab(x)}</span>${ava(P(x.id), 'sm')}<b class="nk">${esc(P(x.id).nickname)}</b><span class="w"><b>${x.w}</b> из ${x.p}</span></a>`).join('')}</div>
     ${grp !== null ? `<p class="muted small tp-adv">🟨 в плей-офф выходят ${adv} лучших</p>` : ''}`;
-  const fixtures = pairings(ids).map(([a, b]) => {
-    const m = findPairMatch(ms, stage, a, b, grp);
+  const fxRow = (a, b, m, stg, round) => {
     const done = m && m.status === 'approved';
     const w = done ? m.winner_id : null;
     const sa = done ? (m.player1_id === a ? m.sets1 : m.sets2) : '', sb = done ? (m.player1_id === a ? m.sets2 : m.sets1) : '';
-    const act = m ? `data-act="match" data-id="${m.id}"` : can ? `data-act="fixture" data-t="${t.id}" data-a="${a}" data-b="${b}" data-stage="${stage}" data-grp="${grp ?? ''}"` : '';
+    const act = m ? `data-act="match" data-id="${m.id}"` : can ? `data-act="fixture" data-t="${t.id}" data-a="${a}" data-b="${b}" data-stage="${stg}" data-grp="${grp ?? ''}" data-round="${round ?? ''}"` : '';
     return `<div class="fx ${act ? 'click' : ''} ${done ? 'done' : ''}" ${act}>
       <span class="${w === a ? 'w' : ''}">${esc(P(a).nickname)}</span>
       <b>${done ? `${sa}:${sb}` : m ? '⏳' : can ? '+' : '–'}</b>
       <span class="${w === b ? 'w' : ''} r">${esc(P(b).nickname)}</span></div>`;
-  }).join('');
-  return { st, html: `${title ? `<h3 class="grp-h">${title}</h3>` : ''}${table}<details class="fixtures" ${can && !st.complete ? 'open' : ''}><summary>Матчи · сыграно ${st.played} из ${st.total}</summary><div class="fx-list">${fixtures}</div></details>` };
+  };
+  const fixtures = pairings(ids).map(([a, b]) => fxRow(a, b, findPairMatch(ms, stage, a, b, grp), stage, null)).join('');
+  // ничья за призовые места / выход из группы: нужны дополнительные матчи
+  const tieBox = st.ties.length ? `<div class="tie-box"><b>⚖️ Ничья — нужны дополнительные матчи</b>${st.ties.map(k => {
+    const rows = k.need.map(([a, b]) => fxRow(a, b, null, tbStage, k.round)).join('');
+    return `<p class="small">За ${k.from === k.to ? k.from + '-е' : k.from + '–' + k.to} ${k.from === k.to ? 'место' : 'места'}: <b>${k.ids.map(id => esc(P(id).nickname)).join(', ')}</b> — по ${k.wins} ${plural(k.wins, 'победе', 'победы', 'побед')}. ${grp !== null ? 'Без этого неясно, кто выходит в плей-офф.' : 'Без этого неясно, кто победитель.'} Пусть сыграют между собой${k.round > 1 ? ` (круг ${k.round}: снова поровну)` : ''}:</p><div class="fx-list">${rows}</div>`;
+  }).join('')}</div>` : '';
+  const tbPlayed = st.tbRounds.filter(r => r.pairs.some(x => x.match)).map(r => `<div class="tb-round"><small class="muted">Дополнительный круг ${r.round}: ${r.ids.map(id => esc(P(id).nickname)).join(', ')}</small><div class="fx-list">${r.pairs.filter(x => x.match).map(x => fxRow(x.a, x.b, x.match, tbStage, r.round)).join('')}</div></div>`).join('');
+  return { st, html: `${title ? `<h3 class="grp-h">${title}</h3>` : ''}${table}${tieBox}${tbPlayed}<details class="fixtures" ${can && !st.complete ? 'open' : ''}><summary>Матчи · сыграно ${st.played} из ${st.total}</summary><div class="fx-list">${fixtures}</div></details>` };
 }
 
 function tournamentPlacings(t) {
   const ms = tMatches(t);
   if (t.format === 'ko') return koPlacings(koBracket(t.config.slots, ms, t.config.thirdPlace));
   if (t.format === 'groups') return t.config.slots ? koPlacings(koBracket(t.config.slots, ms.filter(m => m.stage === 'ko' || m.stage === 'ko3'), t.config.thirdPlace)) : null;
-  const st = standings(t.participants, ms.filter(m => m.stage === 'rr'));
+  const st = tableStanding(t, t.participants, ms, 'rr');
   if (!st.played) return null;
-  return { gold: st.list[0]?.id, silver: st.list[1]?.id, bronze: st.list[2] ? [st.list[2].id] : [], incomplete: !st.complete };
+  return { gold: st.list[0]?.id, silver: st.list[1]?.id, bronze: st.list[2] ? [st.list[2].id] : [], incomplete: !st.complete, ties: st.ties };
 }
 
-// ближайшая несыгранная пара турнира (для карточки «Следующий матч»)
+// ближайшая несыгранная пара турнира (для карточки «Следующий матч»): порядок игр общий с табло
 function tNext(t, ms) {
-  // пара, которая уже играет на каком-то столе, — не «следующая»
   const playing = (a, b) => S.data.live.some(l => l.tournament_id === t.id && ((l.player1_id === a && l.player2_id === b) || (l.player1_id === b && l.player2_id === a)));
-  if (t.format === 'ko' || (t.format === 'groups' && t.config.slots && ms.some(m => m.stage === 'ko'))) {
+  if (t.format === 'ko' || (t.format === 'groups' && t.config.slots)) {
     if (!t.config.slots) return null;
     const br = koBracket(t.config.slots, ms.filter(m => m.stage === 'ko' || m.stage === 'ko3'), t.config.thirdPlace);
     for (const row of br.rounds) for (const c of row) if (c.a && c.b && !c.match && !c.bye && !playing(c.a, c.b)) return { a: c.a, b: c.b, act: `data-act="kocell" data-t="${t.id}" data-r="${c.r}" data-i="${c.i}"`, note: roundName(c.r, br.rounds.length) };
     if (br.third && br.third.a && br.third.b && !br.third.match && !playing(br.third.a, br.third.b)) return { a: br.third.a, b: br.third.b, act: `data-act="kocell" data-t="${t.id}" data-r="third" data-i="0"`, note: 'за 3-е место' };
     return null;
   }
-  const groups = t.format === 'groups' ? (t.config.groups || []).map((g, i) => ({ ids: g, stage: 'grp', grp: i })) : [{ ids: t.participants, stage: 'rr', grp: null }];
-  for (const g of groups) for (const [a, b] of pairings(g.ids)) if (!findPairMatch(ms, g.stage, a, b, g.grp) && !playing(a, b))
-    return { a, b, act: `data-act="fixture" data-t="${t.id}" data-a="${a}" data-b="${b}" data-stage="${g.stage}" data-grp="${g.grp ?? ''}"`, note: g.grp === null ? 'каждый с каждым' : `группа ${String.fromCharCode(1040 + g.grp)}` };
-  return null;
+  const it = tournamentSchedule(t, ms, S.data.live).find(x => x.kind !== 'ko' && x.status === 'next');
+  if (!it) return null;
+  return { a: it.a, b: it.b, act: `data-act="fixture" data-t="${t.id}" data-a="${it.a}" data-b="${it.b}" data-stage="${it.stage}" data-grp="${it.grp ?? ''}" data-round="${it.kind === 'tie' ? it.round : ''}"`, note: it.kind === 'tie' ? it.note : it.grp === null ? 'каждый с каждым' : `группа ${String.fromCharCode(1040 + it.grp)}` };
 }
-const T_HOW = { ko: 'Проиграл — выбыл. Победитель идёт дальше по сетке, финал решает, кто чемпион.', rr: 'Каждый сыграет со всеми по разу. У кого больше побед — тот выше.', groups: 'Игроки поделены на группы, в группе каждый играет с каждым. Лучшие из групп — в плей-офф на вылет.' };
+// порядок игр: кто играет сейчас, кто на стол, кто готовится, что дальше — чтобы никто не гадал, чья очередь
+function scheduleCard(t, ms) {
+  const items = tournamentSchedule(t, ms, S.data.live);
+  if (!items.length) return '';
+  const can = isAdmin();
+  const open = items.filter(i => i.status !== 'done'), done = items.filter(i => i.status === 'done');
+  const st = { live: '<span class="sch-st live">● идёт</span>', next: '<span class="sch-st next">на стол</span>', soon: '<span class="sch-st soon">готовятся</span>', later: '' };
+  const act = it => it.match ? `data-act="match" data-id="${it.match.id}"` : !can ? '' : it.kind === 'ko' ? `data-act="kocell" data-t="${t.id}" data-r="${it.stage === 'ko3' ? 'third' : it.round}" data-i="${it.slot ?? 0}"` : `data-act="fixture" data-t="${t.id}" data-a="${it.a}" data-b="${it.b}" data-stage="${it.stage}" data-grp="${it.grp ?? ''}" data-round="${it.kind === 'tie' ? it.round : ''}"`;
+  const score = it => { const m = it.match; return m && m.status === 'approved' ? (m.player1_id === it.a ? `${m.sets1}:${m.sets2}` : `${m.sets2}:${m.sets1}`) : '⏳'; };
+  const row = it => { const a = act(it); return `<li class="sch ${it.status} ${a ? 'click' : ''}" ${a}><span class="no">${it.n}</span><div class="sch-m"><b>${esc(P(it.a).nickname)} <i>—</i> ${esc(P(it.b).nickname)}</b><small>${esc(it.note)}</small></div>${it.status === 'done' ? `<span class="sch-sc">${score(it)}</span>` : st[it.status]}</li>`; };
+  const shown = open.slice(0, 12);
+  return `<section class="card sched"><div class="card-h"><h3>📋 Порядок игр</h3><small class="muted">сыграно ${done.length} из ${items.length}</small></div>
+    <p class="muted small">Играем строго по порядку: «на стол» — идут сейчас, «готовятся» — следующие, им пора размяться.</p>
+    <ol class="sch-list">${shown.map(row).join('') || '<li class="muted small">Все игры сыграны</li>'}</ol>${open.length > shown.length ? `<p class="muted small">…и ещё ${open.length - shown.length} ${plural(open.length - shown.length, 'игра', 'игры', 'игр')} дальше по порядку</p>` : ''}
+    ${done.length ? `<details class="sch-done"><summary>Сыграно · ${done.length}</summary><ol class="sch-list">${done.map(row).join('')}</ol></details>` : ''}</section>`;
+}
+const T_HOW = { ko: 'Проиграл — выбыл. Победитель идёт дальше по сетке, финал решает, кто чемпион.', rr: 'Каждый сыграет со всеми по разу. У кого больше побед — тот выше. Если у призёров поровну побед — решают очная встреча, а если она не помогла, дополнительные матчи.', groups: 'Игроки поделены на группы, в группе каждый играет с каждым. Лучшие из групп — в плей-офф на вылет.' };
 
 function viewTournament(r) {
   const cid = r.q.get('club');
@@ -931,7 +996,7 @@ function viewTournament(r) {
   else if (t.format === 'rr') body = `<section class="card">${rrBlock(t, t.participants, ms, 'rr').html}</section>`;
   else {
     const blocks = (t.config.groups || []).map((g, i) => rrBlock(t, g, ms, 'grp', i, `Группа ${String.fromCharCode(1040 + i)}`));
-    const allDone = blocks.every(b => b.st.complete);
+    const allDone = blocks.every(b => b.st.complete && b.st.resolved);
     const koStarted = ms.some(m => m.stage === 'ko');
     body = `<section class="card">${blocks.map(b => b.html).join('<hr>')}</section>
       <section class="card"><div class="card-h"><h3>Плей-офф</h3>${can && t.status === 'active' && !koStarted ? `<button class="btn sm ${allDone ? 'primary' : ''}" data-act="make-playoff" data-t="${t.id}">${t.config.slots ? 'Пересобрать' : 'Сформировать'}</button>` : ''}</div>
@@ -951,9 +1016,10 @@ function viewTournament(r) {
   </section>
   ${t.status === 'active' ? `<p class="t-how">${T_HOW[t.format] || ''}</p>` : ''}
   ${nextCard}
+  ${t.status === 'active' ? scheduleCard(t, ms) : ''}
   ${body}
   ${can ? `<section class="card admin-actions">
-    ${t.status === 'active' ? `<button class="btn primary" data-act="finish-t" data-t="${t.id}" ${pl ? '' : 'disabled'}>🏁 Завершить турнир</button>${pl ? '' : '<p class="muted small">Завершить можно, когда определится победитель.</p>'}` : `<button class="btn" data-act="reopen-t" data-t="${t.id}">↩︎ Возобновить</button>`}
+    ${t.status === 'active' ? `<button class="btn primary" data-act="finish-t" data-t="${t.id}" ${pl && !(pl.ties || []).length ? '' : 'disabled'}>🏁 Завершить турнир</button>${(pl?.ties || []).length ? `<p class="muted small">⚖️ Есть ничья за призовые места — сначала доиграйте дополнительные матчи (они в таблице выше).</p><button class="btn ghost danger sm" data-act="finish-t" data-t="${t.id}" data-force="1">Завершить без доигрывания</button>` : pl ? '' : '<p class="muted small">Завершить можно, когда определится победитель.</p>'}` : `<button class="btn" data-act="reopen-t" data-t="${t.id}">↩︎ Возобновить</button>`}
     <button class="btn danger ghost" data-act="del-t" data-t="${t.id}">Удалить турнир</button></section>` : ''}
   <div class="sec-h"><h3>Участники</h3></div>
   <div class="chips people">${t.participants.map(id => `<a href="#/player/${id}" class="chip">${ava(P(id), 'xs')} ${esc(P(id).nickname)}</a>`).join('')}</div>`;
@@ -1617,7 +1683,7 @@ function openChallengeForm(toId) {
   const h = headToHead(S.A, S.me.id, toId);
   openModal(`<form data-form="challenge" class="stack"><input type="hidden" name="to" value="${toId}">
     <h3>Вызов на матч</h3>
-    <div class="ch-vs">${ava(S.me, 'lg')}<b>vs</b>${ava(p, 'lg')}</div>
+    <div class="ch-vs">${ava(S.me, 'lg', true)}<b>vs</b>${ava(p, 'lg', true)}</div>
     <p class="center muted small">Личные встречи ${h.wa}:${h.wb} · шанс по рейтингу ${pct(expected(ratingOf(S.me.id), ratingOf(toId), S.A.S.spread))}</p>
     <label>Сообщение<input name="message" maxlength="80" placeholder="Например: реванш после обеда?"></label>
     <button class="btn primary">⚔️ Вызвать ${esc(p.nickname)}</button></form>`);
@@ -3984,7 +4050,7 @@ function openMatchDetail(id) {
   const d = S.A.md.get(m.id);
   const a = P(m.player1_id), b = P(m.player2_id);
   const t = m.tournament_id ? tById(m.tournament_id) : null;
-  const side = p => `<a href="#/player/${p.id}" class="md-p ${m.winner_id === p.id ? 'win' : ''}" data-act="close">${ava(p, 'lg')}<b>${esc(p.nickname)}</b>
+  const side = p => `<a href="#/player/${p.id}" class="md-p ${m.winner_id === p.id ? 'win' : ''}" data-act="close">${ava(p, 'lg', true)}<b>${esc(p.nickname)}</b>
     ${d ? `<small>${fmtR(d.before[p.id])} → ${fmtR(d.after[p.id])}</small>${delta(d.delta[p.id])}<small class="muted">шанс ${pct(d.exp[p.id])}</small>` : ''}</a>`;
   const canEdit = isAdmin() || (m.status === 'pending' && m.submitted_by === S.me.id);
   openModal(`
@@ -4159,6 +4225,7 @@ function openTournamentForm(pre = null) {
     <div class="two"><label>До скольких побед<select name="best_of">${[[3, 'до 2 побед'], [5, 'до 3 побед'], [7, 'до 4 побед']].map(([v, l]) => `<option value="${v}" ${(pre?.best_of || 5) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
     <label>Партия до<select name="points_to">${[11, 21].map(v => `<option ${(pre?.points_to || 11) === v ? 'selected' : ''}>${v}</option>`).join('')}</select></label></div>
     <label class="switch only-ko tf-switch"><input type="checkbox" name="thirdPlace" checked><i></i><span>Матч за 3-е место</span></label>
+    <label class="switch only-tie tf-switch"><input type="checkbox" name="strictTie"><i></i><span>Всегда доигрывать ничью по победам (очная встреча не в счёт)</span></label>
     <input type="hidden" name="date" value="${new Date().toISOString().slice(0, 10)}"><input type="hidden" name="place" value="${esc(pre?.place || '')}">
     <button class="btn primary full tf-create">${pre ? '▶ Начать турнир' : '🏆 Создать турнир'}</button></div>
     <div class="tf-players" hidden><div class="tf-ph"><button type="button" class="tf-back" id="t-back">←</button><h3>Выбор игроков</h3></div><input class="tf-search" placeholder="🔍 Найти игрока">
@@ -4172,6 +4239,7 @@ function openTournamentForm(pre = null) {
       const F = fmt(), ids = chosen();
       sh.querySelectorAll('.only-groups').forEach(x => x.style.display = F === 'groups' ? '' : 'none');
       sh.querySelectorAll('.only-ko').forEach(x => x.style.display = F === 'rr' ? 'none' : '');
+      sh.querySelectorAll('.only-tie').forEach(x => x.style.display = F === 'ko' ? 'none' : '');
       sh.querySelector('#fmt-hint').innerHTML = FORMAT_HELP[F];
       sh.querySelector('#t-cnt').textContent = `${ids.length} ${plural(ids.length, 'игрок', 'игрока', 'игроков')}`;
       sh.querySelector('#t-cnt2').textContent = ids.length;
@@ -4319,6 +4387,7 @@ const ACT = {
   'ios-hint-later': () => { lsSet('ponghub_ios_hint_until', String(Date.now() + 3 * DAY)); document.querySelector('.ios-hint')?.remove(); },
   'push-on': el => busy(el, async () => { await enablePush(); toast('Уведомления включены 🔔'); renderPushBox(); }),
   'push-on-pend': el => busy(el, async () => { await enablePush(); toast('Уведомления включены 🔔'); fillPendPush(); }),
+  'photo-open': el => openPhoto(el),
   'push-off': el => busy(el, async () => { await disablePush(); toast('Уведомления выключены'); renderPushBox(); }),
   'push-test': el => busy(el, async () => { await S.store.testPush(); toast('Отправлено — уведомление придёт через пару секунд'); }),
   logout: async () => { closeModal(); await disablePush().catch(() => {}); await S.store.signOut(); S.user = null; S.me = null; await reload(); location.hash = '#/login'; render(); },
@@ -4375,7 +4444,7 @@ const ACT = {
   'del-event': async el => { if (await confirmDialog('Удалить событие?', 'Удалить', true)) await busy(el, async () => { await S.store.remove('events', el.dataset.id); await refresh(); }); },
   fixture: el => {
     const t = tById(el.dataset.t);
-    openMatchForm({ fixed: { player1_id: el.dataset.a, player2_id: el.dataset.b, tournament_id: t.id, type: 'tournament', stage: el.dataset.stage, grp: el.dataset.grp === '' ? null : +el.dataset.grp, best_of: t.best_of, points_to: t.points_to } });
+    openMatchForm({ fixed: { player1_id: el.dataset.a, player2_id: el.dataset.b, tournament_id: t.id, type: 'tournament', stage: el.dataset.stage, grp: el.dataset.grp === '' ? null : +el.dataset.grp, round: el.dataset.round ? +el.dataset.round : null, best_of: t.best_of, points_to: t.points_to } });
   },
   kocell: async el => {
     const t = tById(el.dataset.t);
@@ -4395,16 +4464,24 @@ const ACT = {
   'make-playoff': async el => {
     const t = tById(el.dataset.t);
     const ms = tMatches(t);
-    const tables = t.config.groups.map((g, i) => standings(g, ms.filter(m => m.stage === 'grp' && m.grp === i)));
-    if (!tables.every(x => x.complete) && !(await confirmDialog('Не все матчи в группах сыграны. Сформировать плей-офф по текущим результатам?'))) return;
-    const slots = playoffSlots(tables.map(x => x.list.map(r => r.id)), t.config.advance || 2);
+    const tables = t.config.groups.map((g, i) => tableStanding(t, g, ms, 'grp', i));
+    const ties = tables.flatMap((x, i) => x.ties.map(k => `группа ${String.fromCharCode(1040 + i)}: ${k.ids.map(id => P(id).nickname).join(', ')}`));
+    if (ties.length) {
+      if (!(await confirmDialog(`Ничья за выход в плей-офф не решена (${ties.join('; ')}). Сначала нужно доиграть дополнительные матчи, иначе места между ними определятся по партиям и очкам. Сформировать сетку всё равно?`, 'Сформировать', true))) return;
+    } else if (!tables.every(x => x.complete) && !(await confirmDialog('Не все матчи в группах сыграны. Сформировать плей-офф по текущим результатам?'))) return;
+    // сила игрока внутри одного места: доля побед в группе, затем разница партий
+    const strength = new Map(tables.flatMap(x => x.list.map(r => [r.id, r.p ? r.w / r.p + 0.01 * (r.sw - r.sl) / r.p : 0])));
+    const slots = playoffSlots(tables.map(x => x.list.map(r => r.id)), t.config.advance || 2, strength);
     await busy(el, async () => { await S.store.update('tournaments', t.id, { config: { ...t.config, slots } }); await refresh(); toast('Сетка плей-офф готова'); });
   },
   'finish-t': async el => {
     const t = tById(el.dataset.t);
     const pl = tournamentPlacings(t);
     if (!pl) return;
-    if (pl.incomplete && !(await confirmDialog('Не все матчи сыграны. Завершить по текущей таблице?'))) return;
+    if ((pl.ties || []).length) {
+      if (!el.dataset.force) return toast('Ничья за призовые места — сначала дополнительные матчи', 'warn');
+      if (!(await confirmDialog(`Ничья за ${pl.ties.map(k => `${k.from}–${k.to} место (${k.ids.map(id => P(id).nickname).join(', ')})`).join('; ')} не решена. Места между ними будут расставлены по партиям и очкам, а при равенстве — произвольно. Завершить всё равно?`, 'Завершить', true))) return;
+    } else if (pl.incomplete && !(await confirmDialog('Не все матчи сыграны. Завершить по текущей таблице?'))) return;
     const results = { gold: pl.gold || null, silver: pl.silver || null, bronze: pl.bronze || [] };
     await busy(el, async () => { await S.store.update('tournaments', t.id, { status: 'finished', results }); await refresh(); toast(`🏆 Турнир завершён! Победитель — ${P(pl.gold).nickname}`); });
   },
@@ -4506,7 +4583,7 @@ const FORMS = {
     const sorted = [...ids].sort((a, b) => ratingOf(b) - ratingOf(a));
     const format = fd.get('format');
     const scoring = fd.get('scoring') === 'final' ? 'final' : 'points';
-    const config = { thirdPlace: !!fd.get('thirdPlace'), tables: Math.max(1, Math.min(8, +fd.get('tables') || 1)), scoring,
+    const config = { thirdPlace: !!fd.get('thirdPlace'), tieMode: fd.get('strictTie') ? 'play' : 'h2h', tables: Math.max(1, Math.min(8, +fd.get('tables') || 1)), scoring,
       scorers: scoring === 'points' ? fd.getAll('scorer').map(x => x || null) : [] };
     if (format === 'ko') config.slots = slotsFromSeeds(sorted);
     if (format === 'groups') {
