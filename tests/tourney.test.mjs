@@ -113,3 +113,32 @@ import { circleFinal, circleSpots } from '../js/tourney.js';
   assert.equal(circleFinal(t2, tie).ready, true);
 }
 console.log('финальный круг: проверки прошли');
+
+// финал «полуфиналы и финал» после борьбы за путёвку: сетка из 4 финалистов, 4 матча
+import { finalSeeds } from '../js/tourney.js';
+{
+  const grp = (a, b, w, g) => mk(a, b, w, { stage: 'grp', grp: g });
+  const t = { id: 't', format: 'groups', participants: [], config: { tables: 2, advance: 2, thirdPlace: true, finalMode: 'circle', finalType: 'ko', finalSize: 4, groups: [['a1', 'a2', 'a3'], ['b1', 'b2', 'b3'], ['c1', 'c2', 'c3']] } };
+  let ms = [];
+  for (const [g, L] of [[0, 'a'], [1, 'b'], [2, 'c']]) ms.push(grp(`${L}1`, `${L}2`, `${L}1`, g), grp(`${L}1`, `${L}3`, `${L}1`, g), grp(`${L}2`, `${L}3`, `${L}2`, g));
+  ms.push(mk('a2', 'b2', 'a2', { stage: 'qual' }), mk('a2', 'c2', 'a2', { stage: 'qual' }), mk('b2', 'c2', 'b2', { stage: 'qual' }));
+  const cf = circleFinal(t, ms);
+  const seeds = finalSeeds(cf);
+  assert.equal(seeds.length, 4);
+  assert.equal(seeds[3], 'a2');                       // прошедший по борьбе за путёвку — последний сеяный
+  const slots = slotsFromSeeds(seeds);                // 1-й с 4-м, 2-й с 3-м
+  assert.equal(slots[1], 'a2');
+  const t2 = { ...t, config: { ...t.config, slots } };
+  const sched = tournamentSchedule(t2, ms, []);
+  assert.deepEqual(sched.filter(x => x.status !== 'done').map(x => x.note), ['1/2 финала', '1/2 финала']);
+  // сыграли: 2 полуфинала + финал + матч за 3-е = 4 матча
+  let m2 = [...ms];
+  for (let k = 0; k < 6; k++) {
+    const br = koBracket(slots, m2.filter(m => m.stage === 'ko' || m.stage === 'ko3'), true);
+    if (br.champion) break;
+    for (const row of br.rounds) for (const c of row) if (c.a && c.b && !c.match && !c.bye) m2.push(mk(c.a, c.b, c.a, { stage: 'ko', round: c.r, slot: c.i }));
+    if (br.third && br.third.a && br.third.b && !br.third.match) m2.push(mk(br.third.a, br.third.b, br.third.a, { stage: 'ko3' }));
+  }
+  assert.equal(m2.filter(m => m.stage === 'ko' || m.stage === 'ko3').length, 4);
+}
+console.log('финал на выбывание: проверки прошли');
