@@ -187,7 +187,7 @@ async function onChange(table: string, type: string, r: any, o: any, actor: stri
     if (type === 'UPDATE' && o?.status === 'open' && r.status === 'active')
       return send(except(r.participants ?? [], r.created_by), { title: `🏓 Турнир «${r.name}» начался`, body: 'Сетка готова — вы в списке участников', url: `#/tournament/${r.id}` });
     if (type === 'UPDATE' && o?.status !== 'finished' && r.status === 'finished' && r.results?.gold)
-      return send(all, { title: '🏆 Турнир завершён', body: `«${r.name}»: победитель — ${nick(r.results.gold)}`, url: `#/tournament/${r.id}` });
+      return send(all, { title: '🏆 Итоги турнира готовы', body: `«${r.name}»: победитель — ${nick(r.results.gold)}. Откройте и посмотрите, кто как сыграл и сколько набрал в рейтинге`, url: `#/tournament/${r.id}` });
     return;
   }
 
