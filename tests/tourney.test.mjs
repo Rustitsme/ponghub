@@ -84,3 +84,32 @@ for (const [sizes, T] of [[[6], 1], [[6], 2], [[4, 4], 2], [[4, 4, 3], 1], [[4, 
   assert.deepEqual(st2.map(x => x.status), ['live', 'next']);
 }
 console.log('порядок игр: проверки прошли');
+
+// группы → финальный круг: победители групп сразу в финале, вторые места играют круг за последнюю путёвку
+import { circleFinal, circleSpots } from '../js/tourney.js';
+{
+  const grp = (a, b, w, g) => mk(a, b, w, { stage: 'grp', grp: g });
+  const t = { id: 't', format: 'groups', participants: [], config: { tables: 2, advance: 2, finalMode: 'circle', finalSize: 4, groups: [['a1', 'a2', 'a3'], ['b1', 'b2', 'b3'], ['c1', 'c2', 'c3']] } };
+  assert.equal(circleSpots(t), 1);
+  let ms = [];
+  for (const [g, L] of [[0, 'a'], [1, 'b'], [2, 'c']]) ms.push(grp(`${L}1`, `${L}2`, `${L}1`, g), grp(`${L}1`, `${L}3`, `${L}1`, g), grp(`${L}2`, `${L}3`, `${L}2`, g));
+  let cf = circleFinal(t, ms);
+  assert.equal(cf.ready, true);
+  assert.deepEqual([...cf.winners].sort(), ['a1', 'b1', 'c1']);
+  assert.deepEqual([...cf.pool].sort(), ['a2', 'b2', 'c2']);
+  assert.equal(cf.finalists, null);                 // путёвка ещё не разыграна
+  ms.push(mk('a2', 'b2', 'a2', { stage: 'qual' }), mk('a2', 'c2', 'c2', { stage: 'qual' }), mk('b2', 'c2', 'c2', { stage: 'qual' }));
+  cf = circleFinal(t, ms);
+  assert.deepEqual([...cf.finalists].sort(), ['a1', 'b1', 'c1', 'c2']);   // c2 выиграл оба матча
+  // в финальном круге победитель определяется как в круге
+  const fin = pairings(cf.finalists).map(([x, y]) => mk(x, y, x < y ? x : y, { stage: 'fin' }));
+  const st = standings(cf.finalists, fin, { tbStage: 'fintb', matter: 3 });
+  assert.equal(st.complete, true);
+  const tb = tournamentSchedule(t, ms.concat(fin), []);
+  assert.ok(tb.every(x => x.status === 'done'));
+  // круг трёх вторых мест: ничья по победам требует дополнительных матчей
+  const tie = [grp('a1', 'a2', 'a1', 0), grp('a1', 'a3', 'a1', 0), grp('a2', 'a3', 'a2', 0)];
+  const t2 = { ...t, config: { ...t.config, groups: [['a1', 'a2', 'a3']], finalSize: 2 } };
+  assert.equal(circleFinal(t2, tie).ready, true);
+}
+console.log('финальный круг: проверки прошли');

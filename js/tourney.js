@@ -91,7 +91,7 @@ export function pairings(ids) {
 }
 
 /** Стадия дополнительных матчей для ничьей: круг — 'rrtb', группы — 'grptb'. */
-export const tieStageOf = stage => (stage === 'rr' ? 'rrtb' : stage === 'grp' ? 'grptb' : null);
+export const tieStageOf = stage => ({ rr: 'rrtb', grp: 'grptb', qual: 'qualtb', fin: 'fintb' })[stage] || null;
 
 /**
  * Таблица кругового турнира/группы. Очки как в ITTF: победа 2, поражение 1.
@@ -301,7 +301,44 @@ export function scheduleStatus(items, isDone, busy, tableCount = 1) {
 }
 
 /** Настройки определения мест для таблицы турнира (круг — призовая тройка, группа — места, дающие выход в плей-офф). */
-export const tieOptsFor = (t, stage) => ({ tbStage: tieStageOf(stage), matter: stage === 'rr' ? 3 : (t.config?.advance || 2), strict: t.config?.tieMode === 'play' });
+export const tieOptsFor = (t, stage) => ({
+  tbStage: tieStageOf(stage),
+  // круг — призовая тройка; группа — места, дающие выход; борьба за путёвку — число путёвок; финальный круг — призовая тройка
+  matter: stage === 'rr' || stage === 'fin' ? 3 : stage === 'qual' ? circleSpots(t) : (t.config?.advance || 2),
+  strict: t.config?.tieMode === 'play',
+});
+
+/** «Групповой этап + финальный круг»: сколько путёвок в финал достаётся лучшим из вторых мест. */
+export const circleSpots = t => {
+  const g = (t.config?.groups || []).length, size = t.config?.finalSize || g + 1;
+  return Math.max(0, Math.min(size - g, g));
+};
+
+/**
+ * Финальный этап «группы → финальный круг» (config.finalMode === 'circle'):
+ * победители групп сразу в финал; вторые места играют между собой круг за оставшиеся путёвки (qual);
+ * финалисты играют каждый с каждым (fin). Всё считается из матчей и не хранится — сыграли матч, и состав обновился.
+ * Возвращает null для других видов турнира.
+ */
+export function circleFinal(t, ms) {
+  const cfg = t.config || {};
+  if (t.format !== 'groups' || cfg.finalMode !== 'circle') return null;
+  const groups = cfg.groups || [];
+  const tables = groups.map((g, i) => standings(g, ms.filter(m => (m.stage === 'grp' || m.stage === 'grptb') && m.grp === i), tieOptsFor(t, 'grp')));
+  const groupsDone = tables.every(x => x.complete && x.resolved);
+  if (!groupsDone) return { ready: false, tables, finalists: null };
+  const winners = tables.map(x => x.list[0]?.id).filter(Boolean);
+  const pool = tables.map(x => x.list[1]?.id).filter(Boolean);
+  const spots = Math.min(circleSpots(t), pool.length);
+  let qual = null, wild = [];
+  if (spots >= pool.length) wild = pool;
+  else if (spots > 0) {
+    qual = standings(pool, ms.filter(m => m.stage === 'qual' || m.stage === 'qualtb'), tieOptsFor(t, 'qual'));
+    if (qual.complete && qual.resolved) wild = qual.list.slice(0, spots).map(r => r.id);
+  }
+  const finalists = (spots >= pool.length || wild.length === spots) ? [...winners, ...wild] : null;
+  return { ready: true, tables, winners, pool, spots, qual, wild, finalists, needQual: spots < pool.length };
+}
 
 /**
  * Полный порядок игр турнира: групповой/круговой этап по расписанию, потом доигрывание ничьих, потом плей-офф.
@@ -319,7 +356,17 @@ export function tournamentSchedule(t, ms, liveMatches = []) {
     for (const g of tables) for (const k of standings(g.ids, ms.filter(m => (m.stage === g.stage || m.stage === tieStageOf(g.stage)) && (g.grp === null || m.grp === g.grp)), tieOptsFor(t, g.stage)).ties)
       for (const [a, b] of k.need) items.push({ a, b, kind: 'tie', stage: tieStageOf(g.stage), grp: g.grp, round: k.round, note: `ничья за ${k.from}–${k.to} место`, match: null });
     // сыгранные доп. матчи показываем тоже
-    for (const m of ms.filter(m => m.stage === 'rrtb' || m.stage === 'grptb')) if (!items.some(i => i.kind === 'tie' && i.match === m)) items.push({ a: m.player1_id, b: m.player2_id, kind: 'tie', stage: m.stage, grp: m.grp ?? null, round: m.round, note: 'дополнительный матч', match: m });
+    for (const m of ms.filter(m => ['rrtb', 'grptb', 'qualtb', 'fintb'].includes(m.stage))) if (!items.some(i => i.kind === 'tie' && i.match === m)) items.push({ a: m.player1_id, b: m.player2_id, kind: 'tie', stage: m.stage, grp: m.grp ?? null, round: m.round, note: 'дополнительный матч', match: m });
+  }
+  const cf = circleFinal(t, ms);
+  if (cf && cf.ready) {
+    const add = (ids, stage, label) => {
+      for (const x of roundRobinSchedule([{ ids, stage, grp: null }], T)) items.push({ ...x, kind: 'group', note: `${label} · круг ${x.round}`, match: findPairMatch(ms, stage, x.a, x.b, null) || null });
+      for (const k of standings(ids, ms.filter(m => m.stage === stage || m.stage === tieStageOf(stage)), tieOptsFor(t, stage)).ties)
+        for (const [a, b] of k.need) items.push({ a, b, kind: 'tie', stage: tieStageOf(stage), grp: null, round: k.round, note: `ничья за ${k.from}–${k.to} место`, match: null });
+    };
+    if (cf.needQual) add(cf.pool, 'qual', 'борьба за путёвку');
+    if (cf.finalists) add(cf.finalists, 'fin', 'финальный круг');
   }
   const koMs = ms.filter(m => m.stage === 'ko' || m.stage === 'ko3');
   if (cfg.slots && (t.format === 'ko' || t.format === 'groups')) {

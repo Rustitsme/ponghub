@@ -8,7 +8,7 @@ import {
   analyzeDoubles, backtest, rankingDoubles, isDoubles, seasons, seasonTable, monthKey, monthName, weekSummary, replayLive, leagueDelta,
 } from './engine.js';
 import {
-  FORMATS, koBracket, koPlacings, roundName, pairings, standings, snakeGroups, playoffSlots, slotsFromSeeds, findPairMatch, tieStageOf, tieOptsFor, tournamentSchedule,
+  FORMATS, koBracket, koPlacings, roundName, pairings, standings, snakeGroups, playoffSlots, slotsFromSeeds, findPairMatch, tieStageOf, tieOptsFor, tournamentSchedule, circleFinal, circleSpots,
 } from './tourney.js';
 
 const $app = document.getElementById('app');
@@ -914,10 +914,10 @@ function rrBlock(t, ids, ms, stage, grp = null, title = '') {
   const st = tableStanding(t, ids, ms, stage, grp);
   const tbStage = tieStageOf(stage);
   const can = isAdmin() && t.status === 'active';
-  const adv = grp !== null ? (t.config.advance || 2) : 1;
+  const adv = stage === 'qual' ? circleSpots(t) : grp !== null ? (t.config.advance || 2) : 1;
   const lab = tieLabel(st);
   const table = `<div class="tp-list">${st.list.map(x => `<a href="#/player/${x.id}" class="tp-row ${x.tie ? 'tied' : ''} ${!x.tie && x.rank <= adv && (grp !== null || st.played) ? 'go' : ''}"><span class="n">${lab(x)}</span>${ava(P(x.id), 'sm')}<b class="nk">${esc(P(x.id).nickname)}</b><span class="w"><b>${x.w}</b> из ${x.p}</span></a>`).join('')}</div>
-    ${grp !== null ? `<p class="muted small tp-adv">🟨 в плей-офф выходят ${adv} лучших</p>` : ''}`;
+    ${grp !== null ? `<p class="muted small tp-adv">${t.config.finalMode === 'circle' ? '🟨 победитель группы сразу в финал, второе место борется за путёвку' : `🟨 в плей-офф выходят ${adv} лучших`}</p>` : ''}`;
   const fxRow = (a, b, m, stg, round) => {
     const done = m && m.status === 'approved';
     const w = done ? m.winner_id : null;
@@ -941,6 +941,13 @@ function rrBlock(t, ids, ms, stage, grp = null, title = '') {
 function tournamentPlacings(t) {
   const ms = tMatches(t);
   if (t.format === 'ko') return koPlacings(koBracket(t.config.slots, ms, t.config.thirdPlace));
+  if (t.format === 'groups' && t.config.finalMode === 'circle') {
+    const cf = circleFinal(t, ms);
+    if (!cf?.finalists) return null;
+    const st = tableStanding(t, cf.finalists, ms, 'fin');
+    if (!st.played) return null;
+    return { gold: st.list[0]?.id, silver: st.list[1]?.id, bronze: st.list[2] ? [st.list[2].id] : [], incomplete: !st.complete, ties: st.ties };
+  }
   if (t.format === 'groups') return t.config.slots ? koPlacings(koBracket(t.config.slots, ms.filter(m => m.stage === 'ko' || m.stage === 'ko3'), t.config.thirdPlace)) : null;
   const st = tableStanding(t, t.participants, ms, 'rr');
   if (!st.played) return null;
@@ -959,7 +966,7 @@ function tNext(t, ms) {
   }
   const it = tournamentSchedule(t, ms, S.data.live).find(x => x.kind !== 'ko' && x.status === 'next');
   if (!it) return null;
-  return { a: it.a, b: it.b, act: `data-act="fixture" data-t="${t.id}" data-a="${it.a}" data-b="${it.b}" data-stage="${it.stage}" data-grp="${it.grp ?? ''}" data-round="${it.kind === 'tie' ? it.round : ''}"`, note: it.kind === 'tie' ? it.note : it.grp === null ? 'каждый с каждым' : `группа ${String.fromCharCode(1040 + it.grp)}` };
+  return { a: it.a, b: it.b, act: `data-act="fixture" data-t="${t.id}" data-a="${it.a}" data-b="${it.b}" data-stage="${it.stage}" data-grp="${it.grp ?? ''}" data-round="${it.kind === 'tie' ? it.round : ''}"`, note: it.kind === 'tie' || it.stage === 'qual' || it.stage === 'fin' ? it.note : it.grp === null ? 'каждый с каждым' : `группа ${String.fromCharCode(1040 + it.grp)}` };
 }
 // порядок игр: кто играет сейчас, кто на стол, кто готовится, что дальше — чтобы никто не гадал, чья очередь
 function scheduleCard(t, ms) {
@@ -998,7 +1005,18 @@ function viewTournament(r) {
     const blocks = (t.config.groups || []).map((g, i) => rrBlock(t, g, ms, 'grp', i, `Группа ${String.fromCharCode(1040 + i)}`));
     const allDone = blocks.every(b => b.st.complete && b.st.resolved);
     const koStarted = ms.some(m => m.stage === 'ko');
-    body = `<section class="card">${blocks.map(b => b.html).join('<hr>')}</section>
+    const cf = circleFinal(t, ms);
+    const names = ids => ids.map(id => esc(P(id).nickname)).join(', ');
+    if (cf) {
+      // финальный этап «круг»: победители групп сразу в финале, вторые места борются за оставшиеся путёвки
+      const sp = circleSpots(t), g = (t.config.groups || []).length;
+      const wait = `<div class="empty small">Появится после групп: победители групп (${g}) сразу в финальный круг${sp ? `, а вторые места играют между собой за ${sp} ${plural(sp, 'путёвку', 'путёвки', 'путёвок')}` : ''}. Финалисты играют каждый с каждым.</div>`;
+      body = `<section class="card">${blocks.map(b => b.html).join('<hr>')}</section>
+        <section class="card"><div class="card-h"><h3>🏁 Финал</h3></div>
+        ${!cf.ready ? wait : ''}
+        ${cf.ready && cf.needQual ? `<p class="muted small">Победители групп уже в финале: <b>${names(cf.winners)}</b>. Вторые места играют друг с другом за ${cf.spots} ${plural(cf.spots, 'путёвку', 'путёвки', 'путёвок')} в финальный круг.</p>${rrBlock(t, cf.pool, ms, 'qual', null, 'Борьба за путёвку').html}` : ''}
+        ${cf.finalists ? `<p class="muted small">Финалисты: <b>${names(cf.finalists)}</b>. Играют каждый с каждым: больше побед — выше место.</p>${rrBlock(t, cf.finalists, ms, 'fin', null, 'Финальный круг').html}` : ''}</section>`;
+    } else body = `<section class="card">${blocks.map(b => b.html).join('<hr>')}</section>
       <section class="card"><div class="card-h"><h3>Плей-офф</h3>${can && t.status === 'active' && !koStarted ? `<button class="btn sm ${allDone ? 'primary' : ''}" data-act="make-playoff" data-t="${t.id}">${t.config.slots ? 'Пересобрать' : 'Сформировать'}</button>` : ''}</div>
       ${t.config.slots ? koBlock(t, t.config.slots, ms.filter(m => m.stage === 'ko' || m.stage === 'ko3')).html : `<div class="empty small">Сетка появится после группового этапа. Из каждой группы выходят ${t.config.advance || 2}.</div>`}</section>`;
   }
@@ -1011,15 +1029,16 @@ function viewTournament(r) {
   <section class="hero table-card t-hero">
     <div class="t-title"><h1>${esc(t.name)}</h1>${t.status === 'active' ? '<span class="live">● идёт</span>' : '<span class="badge">завершён</span>'}</div>
     <div class="muted small">${t.date ? fmtDate(t.date, { day: 'numeric', month: 'long', year: 'numeric' }) : ''}${t.place ? ' · ' + esc(t.place) : ''}</div>
-    <div class="chips"><span class="chip">${FORMATS[t.format]}</span><span class="chip">до ${winsNeeded(t.best_of)} ${plural(winsNeeded(t.best_of), 'победы', 'побед', 'побед')} в партиях</span><span class="chip">партия до ${t.points_to}</span><span class="chip">${t.participants.length} участников</span></div>
+    <div class="chips"><span class="chip">${t.format === 'groups' && t.config?.finalMode === 'circle' ? 'Группы + финальный круг' : FORMATS[t.format]}</span><span class="chip">до ${winsNeeded(t.best_of)} ${plural(winsNeeded(t.best_of), 'победы', 'побед', 'побед')} в партиях</span><span class="chip">партия до ${t.points_to}</span><span class="chip">${t.participants.length} участников</span></div>
     ${res && res.gold ? `<div class="t-podium"><div>🥇 <b>${esc(P(res.gold).nickname)}</b></div>${res.silver ? `<div>🥈 ${esc(P(res.silver).nickname)}</div>` : ''}${(res.bronze || []).map(x => `<div>🥉 ${esc(P(x).nickname)}</div>`).join('')}</div>` : ''}
   </section>
-  ${t.status === 'active' ? `<p class="t-how">${T_HOW[t.format] || ''}</p>` : ''}
+  ${t.status === 'active' ? `<p class="t-how">${t.format === 'groups' && t.config.finalMode === 'circle' ? 'В группе каждый играет с каждым. Победители групп сразу в финал, вторые места играют между собой за оставшиеся путёвки, финалисты — каждый с каждым: больше побед — выше место.' : T_HOW[t.format] || ''}</p>` : ''}
   ${nextCard}
   ${t.status === 'active' ? scheduleCard(t, ms) : ''}
   ${body}
   ${can ? `<section class="card admin-actions">
     ${t.status === 'active' ? `<button class="btn primary" data-act="finish-t" data-t="${t.id}" ${pl && !(pl.ties || []).length ? '' : 'disabled'}>🏁 Завершить турнир</button>${(pl?.ties || []).length ? `<p class="muted small">⚖️ Есть ничья за призовые места — сначала доиграйте дополнительные матчи (они в таблице выше).</p><button class="btn ghost danger sm" data-act="finish-t" data-t="${t.id}" data-force="1">Завершить без доигрывания</button>` : pl ? '' : '<p class="muted small">Завершить можно, когда определится победитель.</p>'}` : `<button class="btn" data-act="reopen-t" data-t="${t.id}">↩︎ Возобновить</button>`}
+    ${t.status === 'active' && t.format === 'groups' && t.config.finalMode !== 'circle' ? `<button class="btn ghost" data-act="to-circle" data-t="${t.id}">↻ Финальный круг вместо плей-офф</button><p class="muted small">Победители групп сразу в финал, вторые места играют круг за оставшиеся путёвки, финалисты играют каждый с каждым. Внесённые матчи не пропадут.</p>` : ''}
     <button class="btn danger ghost" data-act="del-t" data-t="${t.id}">Удалить турнир</button></section>` : ''}
   <div class="sec-h"><h3>Участники</h3></div>
   <div class="chips people">${t.participants.map(id => `<a href="#/player/${id}" class="chip">${ava(P(id), 'xs')} ${esc(P(id).nickname)}</a>`).join('')}</div>`;
@@ -4218,6 +4237,9 @@ function openTournamentForm(pre = null) {
     <div class="tf-sec"><small class="tf-lbl">Участники</small><button type="button" class="tf-pick" id="t-open"><span class="tf-stack" id="t-stack"></span><b id="t-cnt">0 игроков</b><span class="tf-go">Выбрать игроков ›</span></button></div>
     <div class="two only-groups"><label>Игроков в группе<input type="number" name="gsize" value="4" min="2" max="16"></label><input type="hidden" name="groups" value="2"><label>Выходят из группы<select name="advance"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option></select></label></div>
     <p class="hint only-groups" id="grp-hint"></p>
+    <div class="two only-groups"><label>После групп<select name="finalMode"><option value="ko">Плей-офф на выбывание</option><option value="circle">Финальный круг</option></select></label>
+      <label class="only-circle">Финалистов<select name="finalSize">${[3, 4, 5, 6, 7, 8].map(n => `<option ${n === 4 ? 'selected' : ''}>${n}</option>`).join('')}</select></label></div>
+    <p class="hint only-circle">Победители групп сразу в финал. Вторые места играют между собой круг за оставшиеся путёвки, финалисты — каждый с каждым.</p>
     <div class="tf-sec"><div class="tf-row2"><div><small class="tf-lbl">Столов</small><div class="tf-step"><button type="button" data-step="-1">−</button><input type="number" name="tables" value="1" min="1" max="8" readonly><button type="button" data-step="1">+</button></div></div>
       <div><small class="tf-lbl">Счёт</small><div class="tf-seg2"><label><input type="radio" name="scoring" value="points" checked><span>По очкам</span></label><label><input type="radio" name="scoring" value="final"><span>Только итог</span></label></div></div></div>
     <div id="tf-scorers"></div>
@@ -4239,6 +4261,7 @@ function openTournamentForm(pre = null) {
       const F = fmt(), ids = chosen();
       sh.querySelectorAll('.only-groups').forEach(x => x.style.display = F === 'groups' ? '' : 'none');
       sh.querySelectorAll('.only-ko').forEach(x => x.style.display = F === 'rr' ? 'none' : '');
+      sh.querySelectorAll('.only-circle').forEach(x => x.style.display = F === 'groups' && f.finalMode.value === 'circle' ? '' : 'none');
       sh.querySelectorAll('.only-tie').forEach(x => x.style.display = F === 'ko' ? 'none' : '');
       sh.querySelector('#fmt-hint').innerHTML = FORMAT_HELP[F];
       sh.querySelector('#t-cnt').textContent = `${ids.length} ${plural(ids.length, 'игрок', 'игрока', 'игроков')}`;
@@ -4461,6 +4484,30 @@ const ACT = {
     if (c.match) return openMatchForm({ match: c.match });
     openMatchForm({ fixed: { player1_id: c.a, player2_id: c.b, tournament_id: t.id, type: 'tournament', stage: third ? 'ko3' : 'ko', round: third ? 0 : c.r, slot: third ? 0 : c.i, best_of: t.best_of, points_to: t.points_to } });
   },
+  'to-circle': async el => {
+    const t = tById(el.dataset.t), ms = tMatches(t), groups = t.config.groups || [];
+    const tables = groups.map((g, i) => tableStanding(t, g, ms, 'grp', i));
+    const finalSize = Math.min(8, groups.length + 1);
+    const cfg = { ...t.config, finalMode: 'circle', finalSize, advance: Math.max(2, Math.min(2, ...groups.map(g => g.length))) };
+    delete cfg.slots;
+    const t2 = { ...t, config: cfg };
+    const winners = tables.map(x => x.list[0]?.id).filter(Boolean), pool = tables.map(x => x.list[1]?.id).filter(Boolean);
+    // уже внесённые матчи плей-офф переносим: между вторыми местами — в борьбу за путёвку, между финалистами — в финальный круг
+    let mapped = ms.map(m => ({ ...m }));
+    const ko = mapped.filter(m => m.stage === 'ko' || m.stage === 'ko3');
+    const moves = new Map();
+    for (const m of ko) if (pool.includes(m.player1_id) && pool.includes(m.player2_id)) { m.stage = 'qual'; m.round = null; m.slot = null; moves.set(m.id, 'qual'); }
+    const cf = circleFinal(t2, mapped);
+    for (const m of ko) if (!moves.has(m.id) && cf?.finalists?.includes(m.player1_id) && cf.finalists.includes(m.player2_id)) { m.stage = 'fin'; m.round = null; m.slot = null; moves.set(m.id, 'fin'); }
+    const lost = ko.filter(m => !moves.has(m.id));
+    const txt = `Состав финала: победители групп (${winners.map(id => P(id).nickname).join(', ')}) и ${finalSize - winners.length} из вторых мест (${pool.map(id => P(id).nickname).join(', ')}).\nМатчей плей-офф, которые перенесутся: ${moves.size}${lost.length ? `; не подходят под новую схему: ${lost.length} (они останутся в истории и в рейтинге, но в таблицах не учитываются)` : ''}.\nСетка плей-офф будет убрана. Перейти на финальный круг?`;
+    if (!(await confirmDialog(txt, 'Перейти'))) return;
+    await busy(el, async () => {
+      await S.store.update('tournaments', t.id, { config: cfg });
+      for (const [id, stage] of moves) await S.store.update('matches', id, { stage, round: null, slot: null });
+      await refresh(); toast('Турнир переведён на финальный круг');
+    });
+  },
   'make-playoff': async el => {
     const t = tById(el.dataset.t);
     const ms = tMatches(t);
@@ -4590,6 +4637,11 @@ const FORMS = {
       const g = Math.max(1, Math.min(+fd.get('groups') || 1, Math.floor(ids.length / 2)));
       config.groups = snakeGroups(sorted, g);
       config.advance = Math.min(+fd.get('advance') || 2, Math.min(...config.groups.map(x => x.length)));
+      if (fd.get('finalMode') === 'circle') {
+        config.finalMode = 'circle';
+        config.finalSize = Math.max(g, Math.min(8, g * 2, +fd.get('finalSize') || g + 1));
+        config.advance = Math.min(2, Math.min(...config.groups.map(x => x.length)));
+      }
     }
     const row = { name: fd.get('name').trim(), date: fd.get('date') || null, place: (fd.get('place') || '').trim(), format,
       best_of: +fd.get('best_of'), points_to: +fd.get('points_to'), status: 'active', participants: sorted, results: null };
