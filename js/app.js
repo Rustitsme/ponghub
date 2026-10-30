@@ -8,7 +8,7 @@ import {
   analyzeDoubles, backtest, rankingDoubles, isDoubles, seasons, seasonTable, monthKey, monthName, weekSummary, replayLive, leagueDelta,
 } from './engine.js';
 import {
-  FORMATS, koBracket, koPlacings, roundName, pairings, standings, snakeGroups, playoffSlots, slotsFromSeeds, findPairMatch, tieStageOf,
+  FORMATS, koBracket, koPlacings, roundName, pairings, standings, snakeGroups, playoffSlots, slotsFromSeeds, findPairMatch, tieStageOf, tieOptsFor, tournamentSchedule,
 } from './tourney.js';
 
 const $app = document.getElementById('app');
@@ -604,7 +604,7 @@ function viewHome() {
   const coins = S.coins != null && (feature('shop') || predOn());
   const nl = nextLeague(r);
   const bigHero = `<section class="hero table-card hm h-hero">
-    <div class="hm-top"><div><div class="hero-top">${ava(me, 'lg')}<div class="hero-id"><div class="hello">Привет,</div><div class="hero-nick">${esc(me.nickname)}</div><div class="badges">${leagueBadge(r)}${roleBadge(me)}</div></div></div>
+    <div class="hm-top"><div><div class="hero-top">${ava(me, 'lg', true)}<div class="hero-id"><div class="hello">Привет,</div><div class="hero-nick">${esc(me.nickname)}</div><div class="badges">${leagueBadge(r)}${roleBadge(me)}</div></div></div>
       <div class="hm-place">${st.matches ? pos : '—'} <small>место из ${total}</small></div></div>
       ${showRk ? '<a href="#/racket" class="hm-frame hm-rk" id="hm-rk" aria-label="Моя ракетка"></a>' : ''}</div>
     <div class="hero-mid"><div><div class="big-num">${fmtR(r)}</div><div class="muted small">рейтинг · ${delta(d30)} за 30 дней</div></div>${sparkline(hist.slice(-20))}</div>
@@ -614,7 +614,7 @@ function viewHome() {
     <div class="row-btns hero-links"><a href="#/player/${me.id}" class="btn ghost-light">Статистика и анализ →</a></div>
   </section>`;
   const meTile = `<section class="bt bt-me">
-    <a href="#/player/${me.id}" class="bt-me-main">${ava(me, 'lg')}<div class="bt-me-id"><div class="bt-hi">Привет, <b class="bt-nick">${esc(me.nickname)}</b></div>
+    <a href="#/player/${me.id}" class="bt-me-main">${ava(me, 'lg', true)}<div class="bt-me-id"><div class="bt-hi">Привет, <b class="bt-nick">${esc(me.nickname)}</b></div>
       <div class="bt-me-num"><div class="big-num">${fmtR(r)}</div><div class="badges">${leagueBadge(r)}${roleIcon(me)}</div></div>
       <small>${st.matches ? `${pos}-е место из ${total}` : 'ещё нет матчей'} · <span title="за 30 дней">${delta(d30)}</span></small></div></a>
     ${showRk ? '<a href="#/racket" class="hm-frame bt-rk" id="hm-rk" aria-label="Моя ракетка"></a>' : `<div class="bt-spark">${sparkline(hist.slice(-20))}</div>`}
@@ -905,7 +905,7 @@ function koBlock(t, slots, ms) {
 }
 
 // настройки определения мест: матчи таблицы (основные и дополнительные), призовая зона и режим ничьей
-const tieOpts = (t, stage) => ({ tbStage: tieStageOf(stage), matter: stage === 'rr' ? 3 : (t.config.advance || 2), strict: t.config.tieMode === 'play' });
+const tieOpts = tieOptsFor;
 const tableMs = (ms, stage, grp) => ms.filter(m => (m.stage === stage || m.stage === tieStageOf(stage)) && (grp === null || m.grp === grp));
 const tableStanding = (t, ids, ms, stage, grp = null) => standings(ids, tableMs(ms, stage, grp), tieOpts(t, stage));
 const tieLabel = st => x => { const k = st.ties.find(tt => tt.ids.includes(x.id)); return k ? `${k.from}–${k.to}` : String(x.rank); };
@@ -947,24 +947,35 @@ function tournamentPlacings(t) {
   return { gold: st.list[0]?.id, silver: st.list[1]?.id, bronze: st.list[2] ? [st.list[2].id] : [], incomplete: !st.complete, ties: st.ties };
 }
 
-// ближайшая несыгранная пара турнира (для карточки «Следующий матч»)
+// ближайшая несыгранная пара турнира (для карточки «Следующий матч»): порядок игр общий с табло
 function tNext(t, ms) {
-  // пара, которая уже играет на каком-то столе, — не «следующая»
   const playing = (a, b) => S.data.live.some(l => l.tournament_id === t.id && ((l.player1_id === a && l.player2_id === b) || (l.player1_id === b && l.player2_id === a)));
-  if (t.format === 'ko' || (t.format === 'groups' && t.config.slots && ms.some(m => m.stage === 'ko'))) {
+  if (t.format === 'ko' || (t.format === 'groups' && t.config.slots)) {
     if (!t.config.slots) return null;
     const br = koBracket(t.config.slots, ms.filter(m => m.stage === 'ko' || m.stage === 'ko3'), t.config.thirdPlace);
     for (const row of br.rounds) for (const c of row) if (c.a && c.b && !c.match && !c.bye && !playing(c.a, c.b)) return { a: c.a, b: c.b, act: `data-act="kocell" data-t="${t.id}" data-r="${c.r}" data-i="${c.i}"`, note: roundName(c.r, br.rounds.length) };
     if (br.third && br.third.a && br.third.b && !br.third.match && !playing(br.third.a, br.third.b)) return { a: br.third.a, b: br.third.b, act: `data-act="kocell" data-t="${t.id}" data-r="third" data-i="0"`, note: 'за 3-е место' };
     return null;
   }
-  const groups = t.format === 'groups' ? (t.config.groups || []).map((g, i) => ({ ids: g, stage: 'grp', grp: i })) : [{ ids: t.participants, stage: 'rr', grp: null }];
-  for (const g of groups) for (const [a, b] of pairings(g.ids)) if (!findPairMatch(ms, g.stage, a, b, g.grp) && !playing(a, b))
-    return { a, b, act: `data-act="fixture" data-t="${t.id}" data-a="${a}" data-b="${b}" data-stage="${g.stage}" data-grp="${g.grp ?? ''}"`, note: g.grp === null ? 'каждый с каждым' : `группа ${String.fromCharCode(1040 + g.grp)}` };
-  // основной круг сыгран — доигрываем ничью
-  for (const g of groups) for (const k of tableStanding(t, g.ids, ms, g.stage, g.grp).ties) for (const [a, b] of k.need) if (!playing(a, b))
-    return { a, b, act: `data-act="fixture" data-t="${t.id}" data-a="${a}" data-b="${b}" data-stage="${tieStageOf(g.stage)}" data-grp="${g.grp ?? ''}" data-round="${k.round}"`, note: `ничья за ${k.from}–${k.to} место` };
-  return null;
+  const it = tournamentSchedule(t, ms, S.data.live).find(x => x.kind !== 'ko' && x.status === 'next');
+  if (!it) return null;
+  return { a: it.a, b: it.b, act: `data-act="fixture" data-t="${t.id}" data-a="${it.a}" data-b="${it.b}" data-stage="${it.stage}" data-grp="${it.grp ?? ''}" data-round="${it.kind === 'tie' ? it.round : ''}"`, note: it.kind === 'tie' ? it.note : it.grp === null ? 'каждый с каждым' : `группа ${String.fromCharCode(1040 + it.grp)}` };
+}
+// порядок игр: кто играет сейчас, кто на стол, кто готовится, что дальше — чтобы никто не гадал, чья очередь
+function scheduleCard(t, ms) {
+  const items = tournamentSchedule(t, ms, S.data.live);
+  if (!items.length) return '';
+  const can = isAdmin();
+  const open = items.filter(i => i.status !== 'done'), done = items.filter(i => i.status === 'done');
+  const st = { live: '<span class="sch-st live">● идёт</span>', next: '<span class="sch-st next">на стол</span>', soon: '<span class="sch-st soon">готовятся</span>', later: '' };
+  const act = it => it.match ? `data-act="match" data-id="${it.match.id}"` : !can ? '' : it.kind === 'ko' ? `data-act="kocell" data-t="${t.id}" data-r="${it.stage === 'ko3' ? 'third' : it.round}" data-i="${it.slot ?? 0}"` : `data-act="fixture" data-t="${t.id}" data-a="${it.a}" data-b="${it.b}" data-stage="${it.stage}" data-grp="${it.grp ?? ''}" data-round="${it.kind === 'tie' ? it.round : ''}"`;
+  const score = it => { const m = it.match; return m && m.status === 'approved' ? (m.player1_id === it.a ? `${m.sets1}:${m.sets2}` : `${m.sets2}:${m.sets1}`) : '⏳'; };
+  const row = it => { const a = act(it); return `<li class="sch ${it.status} ${a ? 'click' : ''}" ${a}><span class="no">${it.n}</span><div class="sch-m"><b>${esc(P(it.a).nickname)} <i>—</i> ${esc(P(it.b).nickname)}</b><small>${esc(it.note)}</small></div>${it.status === 'done' ? `<span class="sch-sc">${score(it)}</span>` : st[it.status]}</li>`; };
+  const shown = open.slice(0, 12);
+  return `<section class="card sched"><div class="card-h"><h3>📋 Порядок игр</h3><small class="muted">сыграно ${done.length} из ${items.length}</small></div>
+    <p class="muted small">Играем строго по порядку: «на стол» — идут сейчас, «готовятся» — следующие, им пора размяться.</p>
+    <ol class="sch-list">${shown.map(row).join('') || '<li class="muted small">Все игры сыграны</li>'}</ol>${open.length > shown.length ? `<p class="muted small">…и ещё ${open.length - shown.length} ${plural(open.length - shown.length, 'игра', 'игры', 'игр')} дальше по порядку</p>` : ''}
+    ${done.length ? `<details class="sch-done"><summary>Сыграно · ${done.length}</summary><ol class="sch-list">${done.map(row).join('')}</ol></details>` : ''}</section>`;
 }
 const T_HOW = { ko: 'Проиграл — выбыл. Победитель идёт дальше по сетке, финал решает, кто чемпион.', rr: 'Каждый сыграет со всеми по разу. У кого больше побед — тот выше. Если у призёров поровну побед — решают очная встреча, а если она не помогла, дополнительные матчи.', groups: 'Игроки поделены на группы, в группе каждый играет с каждым. Лучшие из групп — в плей-офф на вылет.' };
 
@@ -1005,6 +1016,7 @@ function viewTournament(r) {
   </section>
   ${t.status === 'active' ? `<p class="t-how">${T_HOW[t.format] || ''}</p>` : ''}
   ${nextCard}
+  ${t.status === 'active' ? scheduleCard(t, ms) : ''}
   ${body}
   ${can ? `<section class="card admin-actions">
     ${t.status === 'active' ? `<button class="btn primary" data-act="finish-t" data-t="${t.id}" ${pl && !(pl.ties || []).length ? '' : 'disabled'}>🏁 Завершить турнир</button>${(pl?.ties || []).length ? `<p class="muted small">⚖️ Есть ничья за призовые места — сначала доиграйте дополнительные матчи (они в таблице выше).</p><button class="btn ghost danger sm" data-act="finish-t" data-t="${t.id}" data-force="1">Завершить без доигрывания</button>` : pl ? '' : '<p class="muted small">Завершить можно, когда определится победитель.</p>'}` : `<button class="btn" data-act="reopen-t" data-t="${t.id}">↩︎ Возобновить</button>`}
@@ -1671,7 +1683,7 @@ function openChallengeForm(toId) {
   const h = headToHead(S.A, S.me.id, toId);
   openModal(`<form data-form="challenge" class="stack"><input type="hidden" name="to" value="${toId}">
     <h3>Вызов на матч</h3>
-    <div class="ch-vs">${ava(S.me, 'lg')}<b>vs</b>${ava(p, 'lg')}</div>
+    <div class="ch-vs">${ava(S.me, 'lg', true)}<b>vs</b>${ava(p, 'lg', true)}</div>
     <p class="center muted small">Личные встречи ${h.wa}:${h.wb} · шанс по рейтингу ${pct(expected(ratingOf(S.me.id), ratingOf(toId), S.A.S.spread))}</p>
     <label>Сообщение<input name="message" maxlength="80" placeholder="Например: реванш после обеда?"></label>
     <button class="btn primary">⚔️ Вызвать ${esc(p.nickname)}</button></form>`);
@@ -4038,7 +4050,7 @@ function openMatchDetail(id) {
   const d = S.A.md.get(m.id);
   const a = P(m.player1_id), b = P(m.player2_id);
   const t = m.tournament_id ? tById(m.tournament_id) : null;
-  const side = p => `<a href="#/player/${p.id}" class="md-p ${m.winner_id === p.id ? 'win' : ''}" data-act="close">${ava(p, 'lg')}<b>${esc(p.nickname)}</b>
+  const side = p => `<a href="#/player/${p.id}" class="md-p ${m.winner_id === p.id ? 'win' : ''}" data-act="close">${ava(p, 'lg', true)}<b>${esc(p.nickname)}</b>
     ${d ? `<small>${fmtR(d.before[p.id])} → ${fmtR(d.after[p.id])}</small>${delta(d.delta[p.id])}<small class="muted">шанс ${pct(d.exp[p.id])}</small>` : ''}</a>`;
   const canEdit = isAdmin() || (m.status === 'pending' && m.submitted_by === S.me.id);
   openModal(`

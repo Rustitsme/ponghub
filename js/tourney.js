@@ -241,6 +241,97 @@ export function playoffSlots(groupTables, advance, strength = null) {
   return slots.map(x => (x ? x.id : null));
 }
 
+/** Круги кругового турнира «по кругу» (метод Бергера): в каждом круге каждый играет не больше одного раза. */
+export function circleRounds(ids) {
+  const list = ids.length % 2 ? [...ids, null] : [...ids];
+  const n = list.length, rounds = [];
+  for (let r = 0; r < n - 1; r++) {
+    const pairs = [];
+    for (let i = 0; i < n / 2; i++) {
+      const a = list[i], b = list[n - 1 - i];
+      if (a && b) pairs.push(r % 2 && i === 0 ? [b, a] : [a, b]);
+    }
+    rounds.push(pairs);
+    list.splice(1, 0, list.pop());   // все, кроме первого, сдвигаются по кругу
+  }
+  return rounds;
+}
+
+/**
+ * Порядок игр группового/кругового этапа: одинаковый на всех экранах (приложение, табло).
+ * tables — [{ ids, stage, grp }]; tableCount — сколько игр идёт одновременно (столов).
+ * Следующей ставится пара, у которой оба игрока дольше всех отдыхали; при равенстве — раньше круг, потом группа
+ * с меньшим числом поставленных матчей, чтобы группы шли наравне. Так никто не играет подряд, пока есть кому сыграть вместо него.
+ */
+export function roundRobinSchedule(tables, tableCount = 1) {
+  const T = Math.max(1, tableCount | 0);
+  const items = [];
+  tables.forEach((g, gi) => circleRounds(g.ids).forEach((pairs, r) => pairs.forEach(([a, b], k) => items.push({ a, b, stage: g.stage, grp: g.grp, gi, round: r, k }))));
+  const last = new Map(), count = new Map(), out = [];
+  const left = [...items];
+  while (left.length) {
+    const idx = out.length;
+    let best = -1, bestKey = null;
+    left.forEach((f, i) => {
+      const ra = last.has(f.a) ? idx - last.get(f.a) : 1e3, rb = last.has(f.b) ? idx - last.get(f.b) : 1e3;
+      const key = [Math.min(Math.min(ra, rb), T + 1), Math.min(ra, T + 1) + Math.min(rb, T + 1), -f.round, -(count.get(f.gi) || 0), -f.gi, -f.k];
+      if (!bestKey || cmpKey(key, bestKey) > 0) { bestKey = key; best = i; }
+    });
+    const f = left.splice(best, 1)[0];
+    last.set(f.a, idx); last.set(f.b, idx); count.set(f.gi, (count.get(f.gi) || 0) + 1);
+    out.push(f);
+  }
+  return out.map((f, i) => ({ n: i + 1, a: f.a, b: f.b, stage: f.stage, grp: f.grp, round: f.round + 1 }));
+}
+const cmpKey = (x, y) => { for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] > y[i] ? 1 : -1; return 0; };
+
+/**
+ * Статусы пар в порядке игр: done — сыграна, live — идёт сейчас, next — следующие на стол (по числу столов),
+ * soon — готовятся (за ними), later — дальше. busy — id игроков, которые сейчас в живой игре.
+ */
+export function scheduleStatus(items, isDone, busy, tableCount = 1) {
+  const T = Math.max(1, tableCount | 0), live = new Set(busy || []);
+  const out = items.map(it => ({ ...it, status: isDone(it) ? 'done' : (live.has(it.a) && live.has(it.b) ? 'live' : 'later') }));
+  const taken = new Set(live);
+  const pick = (status, limit) => { let n = 0; const used = new Set(); for (const it of out) { if (n >= limit) break; if (it.status !== 'later') continue; if (taken.has(it.a) || taken.has(it.b) || used.has(it.a) || used.has(it.b)) continue; it.status = status; used.add(it.a); used.add(it.b); n++; } used.forEach(x => taken.add(x)); };
+  const liveCount = out.filter(x => x.status === 'live').length;
+  pick('next', Math.max(0, T - liveCount));
+  pick('soon', T);
+  return out;
+}
+
+/** Настройки определения мест для таблицы турнира (круг — призовая тройка, группа — места, дающие выход в плей-офф). */
+export const tieOptsFor = (t, stage) => ({ tbStage: tieStageOf(stage), matter: stage === 'rr' ? 3 : (t.config?.advance || 2), strict: t.config?.tieMode === 'play' });
+
+/**
+ * Полный порядок игр турнира: групповой/круговой этап по расписанию, потом доигрывание ничьих, потом плей-офф.
+ * Для каждой пары: n (номер), a, b, kind ('group' | 'tie' | 'ko'), stage/grp/round (для внесения счёта), note (подпись),
+ * match (если уже сыграна) и status: done / live / next (на стол) / soon (готовятся) / later.
+ * liveMatches — живые игры (чьи игроки заняты). Одинаково считается в приложении и на табло.
+ */
+export function tournamentSchedule(t, ms, liveMatches = []) {
+  const cfg = t.config || {}, T = cfg.tables || 1;
+  const grpName = g => (g === null || g === undefined ? '' : `Группа ${String.fromCharCode(1040 + g)}`);
+  const items = [];
+  if (t.format !== 'ko') {
+    const tables = t.format === 'groups' ? (cfg.groups || []).map((g, i) => ({ ids: g, stage: 'grp', grp: i })) : [{ ids: t.participants || [], stage: 'rr', grp: null }];
+    for (const x of roundRobinSchedule(tables, T)) items.push({ ...x, kind: 'group', note: x.grp === null ? `круг ${x.round}` : `${grpName(x.grp)} · круг ${x.round}`, match: findPairMatch(ms, x.stage, x.a, x.b, x.grp) || null });
+    for (const g of tables) for (const k of standings(g.ids, ms.filter(m => (m.stage === g.stage || m.stage === tieStageOf(g.stage)) && (g.grp === null || m.grp === g.grp)), tieOptsFor(t, g.stage)).ties)
+      for (const [a, b] of k.need) items.push({ a, b, kind: 'tie', stage: tieStageOf(g.stage), grp: g.grp, round: k.round, note: `ничья за ${k.from}–${k.to} место`, match: null });
+    // сыгранные доп. матчи показываем тоже
+    for (const m of ms.filter(m => m.stage === 'rrtb' || m.stage === 'grptb')) if (!items.some(i => i.kind === 'tie' && i.match === m)) items.push({ a: m.player1_id, b: m.player2_id, kind: 'tie', stage: m.stage, grp: m.grp ?? null, round: m.round, note: 'дополнительный матч', match: m });
+  }
+  const koMs = ms.filter(m => m.stage === 'ko' || m.stage === 'ko3');
+  if (cfg.slots && (t.format === 'ko' || t.format === 'groups')) {
+    const br = koBracket(cfg.slots, koMs, cfg.thirdPlace);
+    br.rounds.forEach((row, r) => row.forEach(c => { if (c.a && c.b && !c.bye) items.push({ a: c.a, b: c.b, kind: 'ko', stage: 'ko', grp: null, round: r, slot: c.i, note: roundName(r, br.rounds.length), match: c.match || null }); }));
+    if (br.third && br.third.a && br.third.b) items.push({ a: br.third.a, b: br.third.b, kind: 'ko', stage: 'ko3', grp: null, round: 0, slot: 0, note: 'за 3-е место', match: br.third.match || null });
+  }
+  items.forEach((it, i) => { it.n = i + 1; });
+  const busy = liveMatches.filter(l => l.tournament_id === t.id && (!l.status || l.status === 'live')).flatMap(l => [l.player1_id, l.player2_id]);
+  return scheduleStatus(items, it => !!(it.match && it.match.status !== 'rejected'), busy, T);
+}
+
 /** Матч кругового этапа (или группы) между двумя игроками. */
 export function findPairMatch(matches, stage, a, b, grp = null) {
   return matches.find(m => m.stage === stage && (grp === null || m.grp === grp) && samePair(m, a, b));

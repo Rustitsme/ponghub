@@ -62,3 +62,25 @@ for (let n = 2; n <= 17; n++) {
   }
 }
 console.log('турниры: все проверки прошли');
+
+// порядок игр: каждая пара ровно один раз, никто не играет подряд, если есть кому сыграть вместо него
+import { roundRobinSchedule, scheduleStatus, tournamentSchedule } from '../js/tourney.js';
+for (const [sizes, T] of [[[6], 1], [[6], 2], [[4, 4], 2], [[4, 4, 3], 1], [[4, 4, 4, 4], 3], [[5, 5], 2]]) {
+  const tables = sizes.map((n, g) => ({ ids: Array.from({ length: n }, (_, i) => `g${g}p${i}`), stage: sizes.length > 1 ? 'grp' : 'rr', grp: sizes.length > 1 ? g : null }));
+  const sc = roundRobinSchedule(tables, T);
+  const need = tables.reduce((n, g) => n + pairings(g.ids).length, 0);
+  assert.equal(sc.length, need);
+  assert.equal(new Set(sc.map(x => [x.a, x.b].sort().join())).size, need);
+  if (sizes.every(n => n >= 5) || sizes.length > 1) {
+    let back = 0; for (let i = 1; i < sc.length; i++) if ([sc[i].a, sc[i].b].some(x => [sc[i - 1].a, sc[i - 1].b].includes(x))) back++;
+    assert.equal(back, 0, `${sizes} столов ${T}: игроки играют подряд`);
+  }
+}
+{
+  const t = { id: 't', format: 'groups', participants: ['a', 'b', 'c', 'd'], config: { tables: 2, groups: [['a', 'b'], ['c', 'd']], advance: 1 } };
+  const st = tournamentSchedule(t, [], []);
+  assert.deepEqual(st.map(x => x.status), ['next', 'next']);
+  const st2 = tournamentSchedule(t, [], [{ tournament_id: 't', status: 'live', player1_id: 'a', player2_id: 'b' }]);
+  assert.deepEqual(st2.map(x => x.status), ['live', 'next']);
+}
+console.log('порядок игр: проверки прошли');
