@@ -363,7 +363,8 @@ export async function startTV(root, store) {
       else if (active.format === 'groups') {
         const groups = active.config?.groups || [], adv = active.config?.advance || 2;
         const koMs = ms.filter(m => m.stage === 'ko' || m.stage === 'ko3');
-        if (active.config?.slots && koMs.length) { sub = 'плей-офф'; if (active.config.slots.length >= 8) { wide = true; left = koMirror(active.config.slots, koMs, active.config.thirdPlace, nx); } else left = koTree(active.config.slots, koMs, active.config.thirdPlace, nx); }
+        const circleKo = active.config?.finalMode === 'circle' && active.config?.finalType === 'ko';
+        if (active.config?.slots && (koMs.length || circleKo)) { sub = circleKo ? 'финал' : 'плей-офф'; if (active.config.slots.length >= 8) { wide = true; left = koMirror(active.config.slots, koMs, active.config.thirdPlace, nx); } else left = koTree(active.config.slots, koMs, active.config.thirdPlace, nx); }
         else {
           const circle = active.config?.finalMode === 'circle', cf = circle ? circleFinal(active, ms) : null;
           if (cf && cf.ready) {
@@ -371,8 +372,10 @@ export async function startTV(root, store) {
             sub = cf.finalists ? 'финальный круг' : 'борьба за путёвку';
             const finMs = ms.filter(m => m.stage === 'fin' || m.stage === 'fintb'), qualMs = ms.filter(m => m.stage === 'qual' || m.stage === 'qualtb');
             const sp = cf.spots, sched = tournamentSchedule(active, ms, T.data.live || []).filter(i => i.status !== 'done');
-            left = `<div class="tvx-steps"><span>Этап 1 · Группы ✓</span><i>→</i><span class="on">${cf.finalists ? 'Этап 2 · Финальный круг' : 'Этап 2 · Борьба за путёвку'}</span><em>${cf.finalists ? 'Финалисты играют каждый с каждым' : `Победители групп уже в финале: ${cf.winners.map(id => esc(P(id).nickname)).join(', ')}`}</em></div>
-              <div class="tvx-rr">${cf.finalists ? placesCard('Финальный круг', 'больше побед — выше место', cf.finalists, finMs, 1, tieOptsFor(active, 'fin')) : placesCard('Борьба за путёвку', `выходит: ${sp}`, cf.pool, qualMs, sp, tieOptsFor(active, 'qual'))}
+            const koFinal = active.config?.finalType === 'ko';
+            if (cf.finalists && koFinal) sub = 'финал';
+            left = `<div class="tvx-steps"><span>Этап 1 · Группы ✓</span><i>→</i><span class="on">${cf.finalists ? (koFinal ? 'Этап 2 · Полуфиналы и финал' : 'Этап 2 · Финальный круг') : 'Этап 2 · Борьба за путёвку'}</span><em>${cf.finalists ? (koFinal ? 'Полуфиналы, финал и матч за 3-е место' : 'Финалисты играют каждый с каждым') : `Победители групп уже в финале: ${cf.winners.map(id => esc(P(id).nickname)).join(', ')}`}</em></div>
+              <div class="tvx-rr">${cf.finalists ? (koFinal ? `<div class="tvx-card tvx-gc"><h4>Финалисты<small>пары составит организатор</small></h4>${cf.finalists.map(id => `<div class="tvx-pl go"><span class="n">★</span>${avaTv(P(id))}<span class="tvx-nk">${esc(P(id).nickname)}</span></div>`).join('')}</div>` : placesCard('Финальный круг', 'больше побед — выше место', cf.finalists, finMs, 1, tieOptsFor(active, 'fin'))) : placesCard('Борьба за путёвку', `выходит: ${sp}`, cf.pool, qualMs, sp, tieOptsFor(active, 'qual'))}
               <div class="tvx-card tvx-gc"><h4>Порядок игр · осталось ${sched.length}</h4>${sched.slice(0, 7).map(it => `<div class="tvx-mr ${it.status === 'next' || it.status === 'live' ? 'now' : ''}"><span class="tvx-nk">${esc(P(it.a).nickname)}</span><b>—</b><span class="tvx-nk r">${esc(P(it.b).nickname)}</span></div>`).join('') || '<p class="tvx-muted">Все матчи сыграны</p>'}</div></div>`;
           } else {
           sub = 'групповой этап';
@@ -407,7 +410,7 @@ export async function startTV(root, store) {
     return `<section class="tvx-scr">${top(esc(t.name) + ' · начинаем', '<div class="tvx-tag">Добро пожаловать</div>')}
       <div class="tvx-hello"><div><small>Сегодня в клубе</small><h1>${esc(t.name)}</h1><div class="fmt">${fmtOf(t) || ''} · ${ids.length} ${plural(ids.length, 'участник', 'участника', 'участников')}</div>
         <div class="who">${ids.map((id, k) => `<div style="animation-delay:${(.3 + k * .1).toFixed(2)}s">${avaTv(P(id))}<span class="tvx-nk">${esc(P(id).nickname)}</span></div>`).join('')}</div>
-        <div class="how">${((t.format === 'groups' && t.config?.finalMode === 'circle' ? ['В группе каждый играет с каждым', 'Победители групп — сразу в финал', 'Вторые места борются за последние путёвки', 'Финалисты играют каждый с каждым'] : HOW[t.format]) || []).map((x, k) => `<span><b>${k + 1}</b>${x}</span>`).join('<i>→</i>')}</div></div></div>${foot()}</section>`;
+        <div class="how">${((t.format === 'groups' && t.config?.finalMode === 'circle' ? ['В группе каждый играет с каждым', 'Победители групп — сразу в финал', 'Вторые места борются за последние путёвки', t.config?.finalType === 'ko' ? 'Финалисты: полуфиналы и финал' : 'Финалисты играют каждый с каждым'] : HOW[t.format]) || []).map((x, k) => `<span><b>${k + 1}</b>${x}</span>`).join('<i>→</i>')}</div></div></div>${foot()}</section>`;
   }
 
   function pairingScreen(code) {

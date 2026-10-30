@@ -340,6 +340,14 @@ export function circleFinal(t, ms) {
   return { ready: true, tables, winners, pool, spots, qual, wild, finalists, needQual: spots < pool.length };
 }
 
+/** Финалисты по силе: сначала победители групп (по доле побед в группе, потом по разнице партий), потом прошедшие по борьбе за путёвку. */
+export function finalSeeds(cf) {
+  if (!cf?.finalists) return [];
+  const str = new Map(cf.tables.flatMap(x => x.list.map(r => [r.id, r.p ? r.w / r.p + 0.01 * (r.sw - r.sl) / r.p : 0])));
+  const win = [...cf.winners].sort((a, b) => (str.get(b) || 0) - (str.get(a) || 0));
+  return [...win, ...cf.wild];
+}
+
 /**
  * Полный порядок игр турнира: групповой/круговой этап по расписанию, потом доигрывание ничьих, потом плей-офф.
  * Для каждой пары: n (номер), a, b, kind ('group' | 'tie' | 'ko'), stage/grp/round (для внесения счёта), note (подпись),
@@ -366,7 +374,7 @@ export function tournamentSchedule(t, ms, liveMatches = []) {
         for (const [a, b] of k.need) items.push({ a, b, kind: 'tie', stage: tieStageOf(stage), grp: null, round: k.round, note: `ничья за ${k.from}–${k.to} место`, match: null });
     };
     if (cf.needQual) add(cf.pool, 'qual', 'борьба за путёвку');
-    if (cf.finalists) add(cf.finalists, 'fin', 'финальный круг');
+    if (cf.finalists && cfg.finalType !== 'ko') add(cf.finalists, 'fin', 'финальный круг');
   }
   const koMs = ms.filter(m => m.stage === 'ko' || m.stage === 'ko3');
   if (cfg.slots && (t.format === 'ko' || t.format === 'groups')) {
