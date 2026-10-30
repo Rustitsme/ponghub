@@ -666,11 +666,11 @@ function viewHome() {
       : `<div class="bento h-stack">${coinTile}${bonusTile}${liveBlock()}</div>`;
     // остальное — отдельными блоками, чтобы раскладывать по колонкам
     const ssnRow = ssnTile + taskTile ? `<div class="bento">${ssnTile}${taskTile}</div>` : '';
-    const below = `${tourTiles ? `<div class="bento">${tourTiles}</div>` : ''}${activeTiles}${mv(predHomeBlock())}${mv(ssnRow)}${pl ? mv(weekCard()) : ''}`;
+    const below = `${tourTiles ? `<div class="bento">${tourTiles}</div>` : ''}${activeTiles}${mv(tourRecapHome())}${mv(predHomeBlock())}${mv(ssnRow)}${pl ? mv(weekCard()) : ''}`;
     return `<div class="bento-2"><div class="h-col">${bigHero}${challengesBlock()}${idleNudge()}${pl ? '' : deskTile}${mv(topSec)}${pl ? mv(eventsSec) : mv(weekCard())}</div>
       <div class="h-col">${pl ? `<div class="h-plrow">${deskTile}${stack}</div>` : stack}${below}${pl ? '' : mv(eventsSec)}${mv(matchesSec)}</div></div>`;
   })()
-  : `<div class="bento">${meTile}${coinTile}${bonusTile}${tourTiles}${liveBlock()}${activeTiles}${predHomeBlock()}${challengesBlock()}${idleNudge()}${ssnTile}${taskTile}${weekCard()}</div>`}
+  : `<div class="bento">${meTile}${coinTile}${bonusTile}${tourTiles}${liveBlock()}${activeTiles}${tourRecapHome()}${predHomeBlock()}${challengesBlock()}${idleNudge()}${ssnTile}${taskTile}${weekCard()}</div>`}
 
   ${desk ? '' : topSec + eventsSec + matchesSec}`;
 }
@@ -882,6 +882,72 @@ function viewTournaments() {
     <div class="sec-h"><h3>Архив</h3></div>${done.map(card).join('') || '<div class="empty">Завершённых турниров пока нет</div>'}`;
 }
 
+// ───────────── Итоги турнира: сколько кто набрал или потерял и как сыграл с каждым ─────────────
+function stageLabel(t, m) {
+  const st = m.stage;
+  if (st === 'grp') return `Группа ${String.fromCharCode(1040 + (m.grp ?? 0))}`;
+  if (st === 'rr') return 'Круг';
+  if (st === 'qual') return 'Борьба за путёвку';
+  if (st === 'fin') return 'Финальный круг';
+  if (st === 'ko3') return 'За 3-е место';
+  if (st === 'ko') return t.config?.slots ? roundName(m.round ?? 0, Math.log2(t.config.slots.length)) : 'Плей-офф';
+  if (['rrtb', 'grptb', 'qualtb', 'fintb'].includes(st)) return 'Дополнительный матч';
+  return 'Матч';
+}
+function tourRecap(t) {
+  const ms = tMatches(t).filter(m => m.status === 'approved' && m.winner_id).sort((a, b) => ts(a) - ts(b));
+  const rows = new Map();
+  const row = id => { if (!rows.has(id)) rows.set(id, { id, w: 0, l: 0, d: 0, from: null, to: null, ms: [] }); return rows.get(id); };
+  (t.participants || []).forEach(row);
+  for (const m of ms) {
+    const md = S.A?.md.get(m.id);
+    for (const id of [m.player1_id, m.player2_id]) {
+      const r = row(id), opp = id === m.player1_id ? m.player2_id : m.player1_id, win = m.winner_id === id, d = md?.delta[id] ?? 0;
+      win ? r.w++ : r.l++; r.d += d;
+      if (r.from === null) r.from = md?.before[id] ?? null;
+      if (md) r.to = md.after[id];
+      r.ms.push({ m, opp, win, d, od: md?.delta[opp] ?? 0 });
+    }
+  }
+  const res = t.results || {}, podium = [res.gold, res.silver, ...(res.bronze || [])].filter(Boolean);
+  const rest = [...rows.keys()].filter(id => !podium.includes(id)).sort((a, b) => rows.get(b).w - rows.get(a).w || rows.get(b).d - rows.get(a).d);
+  return { rows, order: [...podium.filter(id => rows.has(id)), ...rest], podium, total: ms.length };
+}
+function recapCard(t) {
+  const R = tourRecap(t);
+  if (!R.total) return '';
+  const medal = i => (i < R.podium.length ? ['🥇', '🥈', '🥉', '🥉'][i] : String(i + 1));
+  return `<section class="card recap"><div class="card-h"><h3>📊 Итоги турнира</h3><small class="muted">${R.total} ${plural(R.total, 'матч', 'матча', 'матчей')}</small></div>
+    <p class="muted small">Рейтинг за турнир: сколько каждый набрал или потерял. Нажмите на игрока — увидите все его матчи, счёт и очки рейтинга у него и у соперника.</p>
+    <div class="rc-list">${R.order.map((id, i) => { const r = R.rows.get(id); return `<button type="button" class="rc-row ${i < R.podium.length ? 'top' : ''}" data-act="t-player" data-t="${t.id}" data-p="${id}"><span class="rc-pl">${medal(i)}</span>${ava(P(id), 'sm')}<b class="rc-nk">${esc(P(id).nickname)}</b><span class="rc-wl">${r.w}–${r.l}</span>${delta(r.d, 'rc-d')}<i>›</i></button>`; }).join('')}</div></section>`;
+}
+function openTourPlayer(tid, pid) {
+  const t = tById(tid); if (!t) return;
+  const R = tourRecap(t), r = R.rows.get(pid); if (!r) return;
+  const i = R.order.indexOf(pid);
+  const line = x => { const m = x.m, mine = pid === m.player1_id ? m.sets1 : m.sets2, his = pid === m.player1_id ? m.sets2 : m.sets1;
+    return `<div class="tp-m ${x.win ? 'win' : 'lose'}"><div class="tp-m-h"><small class="muted">${esc(stageLabel(t, m))} · ${fmtDT(m.played_at)}</small><span class="tp-res">${x.win ? 'победа' : 'поражение'}</span></div>
+      <div class="tp-m-b"><a href="#/player/${x.opp}" data-act="close" class="tp-opp">${ava(P(x.opp), 'xs')}<b>${esc(P(x.opp).nickname)}</b></a><b class="tp-sc">${mine}:${his}</b></div>
+      <div class="tp-m-d"><span>${esc(P(pid).nickname)} ${delta(x.d)}</span><span>${esc(P(x.opp).nickname)} ${delta(x.od)}</span></div></div>`; };
+  openModal(`<div class="stack"><div class="tp-head">${ava(P(pid), 'lg')}<div><h3>${esc(P(pid).nickname)}</h3><small class="muted">${esc(t.name)}${i >= 0 && i < R.podium.length ? ' · ' + ['🥇 1 место', '🥈 2 место', '🥉 3 место', '🥉 3 место'][i] : ''}</small></div></div>
+    <div class="tp-sum"><div><small>Матчей</small><b>${r.ms.length}</b></div><div><small>Побед</small><b>${r.w}–${r.l}</b></div><div><small>Рейтинг за турнир</small>${delta(r.d, 'big')}</div>${r.from != null && r.to != null ? `<div><small>Был → стал</small><b>${fmtR(r.from)} → ${fmtR(r.to)}</b></div>` : ''}</div>
+    <div class="tp-list">${r.ms.map(line).join('') || '<div class="empty small">Матчей в турнире не сыграно</div>'}</div></div>`);
+}
+// карточка итогов на главной: после завершения турнира все могут зайти и посмотреть, кто как сыграл
+function tourRecapHome() {
+  const fin = S.data.tournaments.filter(t => t.status === 'finished' && t.results?.gold && !t.is_test).map(t => {
+    const last = tMatches(t).reduce((a, m) => Math.max(a, ts(m)), 0);
+    return { t, at: Date.parse(t.results.at) || last || Date.parse(t.date) || 0 };
+  }).filter(x => Date.now() - x.at < 7 * DAY).sort((a, b) => b.at - a.at);
+  if (!fin.length) return '';
+  const { t } = fin[0];
+  const R = tourRecap(t), mine = R.rows.get(S.me.id);
+  const res = t.results, podium = [res.gold, res.silver, ...(res.bronze || [])].filter(Boolean);
+  return `<a href="#/tournament/${t.id}" class="card recap-home"><div class="card-h"><h3>🏆 Итоги турнира «${esc(t.name)}»</h3><span class="link">Смотреть →</span></div>
+    <div class="rh-pod">${podium.map((id, i) => `<span>${['🥇', '🥈', '🥉', '🥉'][i]} ${esc(P(id).nickname)}</span>`).join('')}</div>
+    ${mine && mine.ms.length ? `<p class="small">Ваш итог: ${mine.w}–${mine.l}, рейтинг за турнир ${delta(mine.d)}. Нажмите, чтобы увидеть все матчи.</p>` : '<p class="muted small">Нажмите, чтобы увидеть, кто как сыграл.</p>'}</a>`;
+}
+
 function tMatches(t) { return S.data.matches.filter(m => m.tournament_id === t.id && m.status !== 'rejected'); }
 
 function koBlock(t, slots, ms) {
@@ -1038,6 +1104,7 @@ function viewTournament(r) {
   </section>
   ${t.status === 'active' ? `<p class="t-how">${t.format === 'groups' && t.config.finalMode === 'circle' ? 'В группе каждый играет с каждым. Победители групп сразу в финал, вторые места играют между собой за оставшиеся путёвки, ' + (t.config.finalType === 'ko' ? 'финалисты — полуфиналы и финал.' : 'финалисты — каждый с каждым: больше побед — выше место.') : T_HOW[t.format] || ''}</p>` : ''}
   ${nextCard}
+  ${t.status === 'finished' ? recapCard(t) : ''}
   ${t.status === 'active' ? scheduleCard(t, ms) : ''}
   ${body}
   ${can ? `<section class="card admin-actions">
@@ -1111,7 +1178,7 @@ function openAnnounceForm(t = null) {
       <p class="hint dm-month" ${byMonth ? '' : 'hidden'}>Игроки увидят «${esc(monthName(month))} · дата уточняется». Точную дату добавите позже — «Изменить» на странице турнира.</p></div>
     <label>Место<input name="place" maxlength="60" value="${esc(t?.place || '')}" placeholder="Например: 3 этаж, у окна"></label>
     <div class="tf-sec"><small class="tf-lbl">Вид турнира</small><div class="tf-fmt">${[['ko', '🏆', 'Олимпийская', 'на вылет'], ['groups', '🗂', 'Группы', '+ плей-офф'], ['rr', '🔄', 'Круг', 'все со всеми']].map(([k, ic, v, d]) => `<label><input type="radio" name="format" value="${k}" ${(t?.format || 'ko') === k ? 'checked' : ''}><span><i>${ic}</i><b>${v}</b><small>${d}</small></span></label>`).join('')}</div></div>
-    <div class="two"><label>До скольких побед<select name="best_of">${[[3, 'до 2 побед'], [5, 'до 3 побед'], [7, 'до 4 побед']].map(([v, l]) => `<option value="${v}" ${(t?.best_of || 5) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    <div class="two"><label>До скольких побед<select name="best_of">${[[1, 'до 1 победы'], [3, 'до 2 побед'], [5, 'до 3 побед'], [7, 'до 4 побед']].map(([v, l]) => `<option value="${v}" ${(t?.best_of || 5) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       <label>Партия до<select name="points_to">${[11, 21].map(v => `<option ${(t?.points_to || 11) === v ? 'selected' : ''}>${v}</option>`).join('')}</select></label></div>
     <div class="tf-sec"><small class="tf-lbl">Призы</small>
       <div class="tf-seg2"><label><input type="radio" name="pmode" value="none" ${prizes ? '' : 'checked'}><span>Без призов</span></label><label><input type="radio" name="pmode" value="yes" ${prizes ? 'checked' : ''}><span>🎁 Есть призы</span></label></div>
@@ -3472,7 +3539,7 @@ function viewPlay(r) {
     <div class="tf-lbl">С кем играете?</div>
     <div class="pq-list">${list.map(p => `<button class="pq-p ${PLAY.opp === p.id ? 'on' : ''}" data-act="pq-opp" data-id="${p.id}">${ava(p, 'sm')}<b>${esc(p.nickname)}</b><small>${recent.includes(p.id) ? 'играли недавно' : fmtR(ratingOf(p.id))}</small></button>`).join('')}</div>
     <div class="tf-lbl">Играем до</div>
-    <div class="seg">${[[3, '2 побед'], [5, '3 побед'], [7, '4 побед']].map(([v, t]) => `<button data-act="pq-bo" data-v="${v}" class="${PLAY.bestOf === v ? 'on' : ''}">${t}</button>`).join('')}</div>
+    <div class="seg">${[[1, '1 победы'], [3, '2 побед'], [5, '3 побед'], [7, '4 побед']].map(([v, t]) => `<button data-act="pq-bo" data-v="${v}" class="${PLAY.bestOf === v ? 'on' : ''}">${t}</button>`).join('')}</div>
     <div class="pq-go"><button class="btn primary big full" data-act="pq-start" data-t="${n}" data-s="1" ${PLAY.opp ? '' : 'disabled'}>▶ Начать — вести счёт</button>
       <button class="btn full" data-act="pq-start" data-t="${n}" data-s="0" ${PLAY.opp ? '' : 'disabled'}>⏱ Начать — счёт в конце</button></div>`;
 }
@@ -4250,7 +4317,7 @@ function openTournamentForm(pre = null) {
       <div><small class="tf-lbl">Счёт</small><div class="tf-seg2"><label><input type="radio" name="scoring" value="points" checked><span>По очкам</span></label><label><input type="radio" name="scoring" value="final"><span>Только итог</span></label></div></div></div>
     <div id="tf-scorers"></div>
     <p class="hint">Пары по столам назначает система: закончилась игра — на свободный стол встаёт следующая пара. Роль секунданта можно передать в перерыве между партиями.</p></div>
-    <div class="two"><label>До скольких побед<select name="best_of">${[[3, 'до 2 побед'], [5, 'до 3 побед'], [7, 'до 4 побед']].map(([v, l]) => `<option value="${v}" ${(pre?.best_of || 5) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    <div class="two"><label>До скольких побед<select name="best_of">${[[1, 'до 1 победы'], [3, 'до 2 побед'], [5, 'до 3 побед'], [7, 'до 4 побед']].map(([v, l]) => `<option value="${v}" ${(pre?.best_of || 5) === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
     <label>Партия до<select name="points_to">${[11, 21].map(v => `<option ${(pre?.points_to || 11) === v ? 'selected' : ''}>${v}</option>`).join('')}</select></label></div>
     <label class="switch only-ko tf-switch"><input type="checkbox" name="thirdPlace" checked><i></i><span>Матч за 3-е место</span></label>
     <label class="switch only-tie tf-switch"><input type="checkbox" name="strictTie"><i></i><span>Всегда доигрывать ничью по победам (очная встреча не в счёт)</span></label>
@@ -4417,6 +4484,7 @@ const ACT = {
   'push-on': el => busy(el, async () => { await enablePush(); toast('Уведомления включены 🔔'); renderPushBox(); }),
   'push-on-pend': el => busy(el, async () => { await enablePush(); toast('Уведомления включены 🔔'); fillPendPush(); }),
   'photo-open': el => openPhoto(el),
+  't-player': el => openTourPlayer(el.dataset.t, el.dataset.p),
   'push-off': el => busy(el, async () => { await disablePush(); toast('Уведомления выключены'); renderPushBox(); }),
   'push-test': el => busy(el, async () => { await S.store.testPush(); toast('Отправлено — уведомление придёт через пару секунд'); }),
   logout: async () => { closeModal(); await disablePush().catch(() => {}); await S.store.signOut(); S.user = null; S.me = null; await reload(); location.hash = '#/login'; render(); },
@@ -4558,7 +4626,7 @@ const ACT = {
       if (!el.dataset.force) return toast('Ничья за призовые места — сначала дополнительные матчи', 'warn');
       if (!(await confirmDialog(`Ничья за ${pl.ties.map(k => `${k.from}–${k.to} место (${k.ids.map(id => P(id).nickname).join(', ')})`).join('; ')} не решена. Места между ними будут расставлены по партиям и очкам, а при равенстве — произвольно. Завершить всё равно?`, 'Завершить', true))) return;
     } else if (pl.incomplete && !(await confirmDialog('Не все матчи сыграны. Завершить по текущей таблице?'))) return;
-    const results = { gold: pl.gold || null, silver: pl.silver || null, bronze: pl.bronze || [] };
+    const results = { gold: pl.gold || null, silver: pl.silver || null, bronze: pl.bronze || [], at: new Date().toISOString() };
     await busy(el, async () => { await S.store.update('tournaments', t.id, { status: 'finished', results }); await refresh(); toast(`🏆 Турнир завершён! Победитель — ${P(pl.gold).nickname}`); });
   },
   'reopen-t': el => busy(el, async () => { await S.store.update('tournaments', el.dataset.t, { status: 'active', results: null }); await refresh(); }),
